@@ -11,7 +11,7 @@ import numpy as np
 
 from hftext.channel import add_awgn, bit_error_count, bit_error_rate
 from hftext.demodulator import demodulate_bits_2fsk
-from hftext.frame import FrameResult, build_frame, parse_frame
+from hftext.frame import FrameResult, build_transmission, parse_frame_from_stream
 from hftext.modulator import (
     DEFAULT_F0,
     DEFAULT_F1,
@@ -84,7 +84,7 @@ def run_sweep(
         raise ValueError("trials must be positive")
 
     payload = build_payload(message, callsign)
-    bits = build_frame(payload)
+    bits = build_transmission(payload)
     clean_audio = modulate_bits_2fsk(bits, sample_rate, symbol_duration, f0, f1)
 
     output_path = Path(output_dir)
@@ -110,7 +110,7 @@ def run_sweep(
                 save_wav(wav_path, audio, sample_rate)
 
             decoded_bits = demodulate_bits_2fsk(audio, sample_rate, symbol_duration, f0, f1)
-            frame_result = parse_frame(decoded_bits)
+            frame_result = parse_frame_from_stream(decoded_bits)
             results.append(
                 SweepResult(
                     label=label,

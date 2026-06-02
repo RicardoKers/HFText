@@ -48,7 +48,20 @@ Para cada símbolo:
 
 Áudio restante menor que uma janela completa de símbolo deve ser ignorado.
 
-Esta versão assume que o áudio começa exatamente no início do quadro. Detecção automática de início e sincronismo temporal ficam para etapa posterior.
+Esta versão assume que o áudio está alinhado à janela de símbolo do demodulador.
+
+Após a demodulação, o receptor procura o `SYNC` no fluxo de bits e descarta preâmbulo, silêncio demodulado ou outros bits anteriores ao quadro.
+
+O receptor Python também pode tentar múltiplos deslocamentos iniciais de amostra dentro de uma janela de símbolo. Para cada offset candidato:
+
+- demodular o fluxo de bits;
+- procurar `SYNC`;
+- validar CRC e payload;
+- aceitar o primeiro resultado válido.
+
+O passo padrão da busca é `samples_per_symbol / 20`, com mínimo de 1 amostra. A CLI permite ajustar esse passo com `--offset-step`.
+
+Sincronismo temporal fino contínuo, rastreamento de clock e recuperação em áudio sem alinhamento aproximado ficam para etapa posterior.
 
 ## Canal simulado
 

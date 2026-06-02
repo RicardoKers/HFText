@@ -32,6 +32,28 @@ def test_generate_and_decode_wav_round_trip(tmp_path):
     assert result.text == payload
 
 
+def test_generated_wav_decodes_with_leading_silence(tmp_path):
+    path = tmp_path / "tx.wav"
+    payload = generate_wav(
+        "Teste",
+        path,
+        callsign="pu5lrk",
+        sample_rate=8_000,
+        symbol_duration=0.01,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    samples, sample_rate = sf.read(path, dtype="float32")
+    silence = np.zeros(int(sample_rate * 0.083), dtype=np.float32)
+    sf.write(path, np.concatenate([silence, samples]), sample_rate)
+
+    result = decode_wav(path, symbol_duration=0.01, f0=1_000.0, f1=2_000.0)
+
+    assert result.crc_ok
+    assert result.payload_valid
+    assert result.text == payload
+
+
 def test_load_wav_mono_averages_stereo(tmp_path):
     path = tmp_path / "stereo.wav"
     stereo = np.array([[0.5, -0.5], [0.25, 0.75]], dtype=np.float32)

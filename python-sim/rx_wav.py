@@ -8,9 +8,9 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-from hftext.demodulator import demodulate_bits_2fsk
-from hftext.frame import FrameResult, parse_frame
+from hftext.frame import FrameResult
 from hftext.modulator import DEFAULT_F0, DEFAULT_F1, DEFAULT_SYMBOL_DURATION
+from hftext.receiver import receive_samples_2fsk
 
 
 def load_wav_mono(path: str | Path) -> tuple[np.ndarray, int]:
@@ -27,11 +27,20 @@ def decode_wav(
     symbol_duration: float = DEFAULT_SYMBOL_DURATION,
     f0: float = DEFAULT_F0,
     f1: float = DEFAULT_F1,
+    sync_search: bool = True,
+    offset_step: int | None = None,
 ) -> FrameResult:
-    """Read a WAV file and decode one exact HFText frame."""
+    """Read a WAV file, find SYNC, and decode one HFText frame."""
     samples, sample_rate = load_wav_mono(input_path)
-    bits = demodulate_bits_2fsk(samples, sample_rate, symbol_duration, f0, f1)
-    return parse_frame(bits)
+    return receive_samples_2fsk(
+        samples,
+        sample_rate,
+        symbol_duration,
+        f0,
+        f1,
+        sync_search=sync_search,
+        offset_step=offset_step,
+    ).frame_result
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -40,6 +49,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--symbol-duration", type=float, default=DEFAULT_SYMBOL_DURATION)
     parser.add_argument("--f0", type=float, default=DEFAULT_F0)
     parser.add_argument("--f1", type=float, default=DEFAULT_F1)
+    parser.add_argument("--no-sync-search", action="store_true")
+    parser.add_argument("--offset-step", type=int, default=None)
     return parser.parse_args(argv)
 
 
@@ -50,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
         symbol_duration=args.symbol_duration,
         f0=args.f0,
         f1=args.f1,
+        sync_search=not args.no_sync_search,
+        offset_step=args.offset_step,
     )
 
     if not result.frame_detected:
@@ -72,4 +85,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

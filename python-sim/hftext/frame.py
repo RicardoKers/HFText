@@ -17,6 +17,7 @@ from hftext.crc16 import crc16_ccitt_false
 
 SYNC_VALUE = 0x2DD4
 SYNC_BYTES = SYNC_VALUE.to_bytes(2, "big")
+PREAMBLE_BITS = [1, 0] * 32
 CRC_BYTES = 2
 HEADER_BYTES = 3
 
@@ -30,6 +31,7 @@ class FrameResult:
     length: int = 0
     payload_symbols: list[int] | None = None
     error: str | None = None
+    sync_index: int | None = None
 
 
 def bytes_to_bits(data: bytes) -> list[int]:
@@ -39,6 +41,9 @@ def bytes_to_bits(data: bytes) -> list[int]:
         for shift in range(BITS_PER_BYTE - 1, -1, -1):
             bits.append((byte >> shift) & 1)
     return bits
+
+
+SYNC_BITS = bytes_to_bits(SYNC_BYTES)
 
 
 def bits_to_bytes(bits: list[int]) -> bytes:
@@ -77,6 +82,15 @@ def build_frame_bytes(payload_text: str) -> bytes:
 def build_frame(payload_text: str) -> list[int]:
     """Build an HFText frame as MSB-first bits."""
     return bytes_to_bits(build_frame_bytes(payload_text))
+
+
+def build_transmission(payload_text: str, preamble_bits: list[int] | None = None) -> list[int]:
+    """Build TX bits with a preamble followed by the HFText frame."""
+    preamble = PREAMBLE_BITS if preamble_bits is None else preamble_bits
+    for bit in preamble:
+        if bit not in (0, 1):
+            raise ValueError(f"invalid preamble bit: {bit}")
+    return list(preamble) + build_frame(payload_text)
 
 
 def parse_frame_bytes(frame: bytes) -> FrameResult:
@@ -133,3 +147,85 @@ def parse_frame(bits: list[int]) -> FrameResult:
     """Parse an exact HFText frame from MSB-first bits."""
     return parse_frame_bytes(bits_to_bytes(bits))
 
+
+def find_sync(bits: list[int]) -> int | None:
+    """Return the bit index of SYNC in a received bit stream."""
+    if len(bits) < len(SYNC_BITS):
+        return None
+    for bit in bits:
+        if bit not in (0, 1):
+            raise ValueError(f"invalid bit: {bit}")
+
+    last_start = len(bits) - len(SYNC_BITS)
+    for index in range(last_start + 1):
+        if bits[index : index + len(SYNC_BITS)] == SYNC_BITS:
+            return index
+    return None
+
+
+def _bits_to_int(bits: list[int]) -> int:
+    value = 0
+    for bit in bits:
+        if bit not in (0, 1):
+            raise ValueError(f"invalid bit: {bit}")
+        value = (value << 1) | bit
+    return value
+
+
+def parse_frame_from_stream(bits: list[int]) -> FrameResult:
+    """Find SYNC in a bit stream and parse the first complete HFText frame."""
+    sync_index = find_sync(bits)
+    if sync_index is None:
+        return FrameResult(False, False, False, "", error="sync not found")
+
+    length_start = sync_index + len(SYNC_BITS)
+    length_end = length_start + BITS_PER_BYTE
+    if len(bits) < length_end:
+        return FrameResult(True, False, False, "", error="stream ended before length", sync_index=sync_index)
+
+    length = _bits_to_int(bits[length_start:length_end])
+    if length & 0x80:
+        return FrameResult(
+            True,
+            False,
+            False,
+            "",
+            length=length,
+            error="length bit 7 set",
+            sync_index=sync_index,
+        )
+    if length > MAX_PAYLOAD_SYMBOLS:
+        return FrameResult(
+            True,
+            False,
+            False,
+            "",
+            length=length,
+            error="length too large",
+            sync_index=sync_index,
+        )
+
+    frame_bit_count = (HEADER_BYTES + payload_byte_count(length) + CRC_BYTES) * BITS_PER_BYTE
+    frame_end = sync_index + frame_bit_count
+    if len(bits) < frame_end:
+        return FrameResult(
+            True,
+            False,
+            False,
+            "",
+            length=length,
+            error="stream ended before complete frame",
+            sync_index=sync_index,
+        )
+
+    result = parse_frame(bits[sync_index:frame_end])
+    return FrameResult(
+        result.frame_detected,
+        result.crc_ok,
+        result.payload_valid,
+        result.text,
+        length=result.length,
+        payload_symbols=result.payload_symbols,
+        error=result.error,
+        sync_index=sync_index,
+    )

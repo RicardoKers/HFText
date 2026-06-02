@@ -47,6 +47,8 @@ O alfabeto usa letras minúsculas; letras maiúsculas são codificadas como shif
 CRC16 é CRC-16/CCITT-FALSE calculado sobre PAYLOAD compactado em bytes.
 Símbolos de 6 bits são compactados em bytes MSB-first, com zero padding no último byte.
 SYNC e CRC16 são serializados em big-endian; o quadro completo vira bits MSB-first antes da modulação.
+TX usa preâmbulo alternado de 64 bits antes do quadro; RX procura SYNC no fluxo de bits e descarta bits anteriores.
+RX Python pode tentar múltiplos offsets iniciais de amostra dentro do símbolo para melhorar alinhamento temporal.
 Não incluir SYNC nem LENGTH no CRC.
 
 ## Implementação inicial

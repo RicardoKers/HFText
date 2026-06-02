@@ -22,6 +22,8 @@ python tx_wav.py --callsign pu5lrk "Teste" generated\teste.wav
 
 O transmissor insere o indicativo no início do payload, seguido por um espaço.
 
+O WAV gerado inclui um preâmbulo alternado antes do quadro. O preâmbulo ajuda o receptor a ignorar áudio/bits antes do `SYNC`.
+
 ## Decodificar WAV
 
 ```powershell
@@ -29,6 +31,12 @@ python rx_wav.py generated\teste.wav
 ```
 
 Se o CRC falhar, o receptor não imprime a mensagem como válida.
+
+O RX procura `SYNC` no fluxo de bits e, por padrão, tenta múltiplos offsets de símbolo. Para desabilitar a busca:
+
+```powershell
+python rx_wav.py --no-sync-search generated\teste.wav
+```
 
 ## Varredura de ruído
 

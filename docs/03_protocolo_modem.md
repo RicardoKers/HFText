@@ -81,6 +81,22 @@ SYNC | LENGTH | PAYLOAD | CRC16
 
 O preâmbulo de transmissão é necessário para preparar a detecção e habilitar corretamente o TX do rádio, mas não faz parte do quadro do protocolo v0.1. Ele será especificado e implementado em etapa posterior.
 
+Na simulação Python inicial, o transmissor deve antepor um preâmbulo simples ao quadro:
+
+```text
+10101010 ... 1010
+```
+
+Tamanho inicial:
+
+```text
+64 bits
+```
+
+O preâmbulo não entra no cálculo do CRC e não faz parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
+
+O receptor deve procurar `SYNC` no fluxo de bits recebido e descartar todos os bits anteriores ao `SYNC`.
+
 ## Campos
 
 ### SYNC

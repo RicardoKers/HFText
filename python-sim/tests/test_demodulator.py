@@ -45,6 +45,21 @@ def test_demodulate_bits_ignores_trailing_partial_symbol():
     assert decoded == bits
 
 
+def test_demodulate_bits_supports_start_offset():
+    bits = [1, 0, 1]
+    audio = modulate_bits_2fsk(bits, sample_rate=8_000, symbol_duration=0.01)
+    shifted = np.concatenate([np.zeros(13, dtype=np.float32), audio])
+
+    decoded = demodulate_bits_2fsk(
+        shifted,
+        sample_rate=8_000,
+        symbol_duration=0.01,
+        start_offset=13,
+    )
+
+    assert decoded == bits
+
+
 def test_demodulate_bits_empty_audio_returns_empty_bits():
     assert demodulate_bits_2fsk(np.array([], dtype=np.float32)) == []
 
@@ -60,6 +75,9 @@ def test_demodulate_bits_rejects_invalid_parameters():
 
     with pytest.raises(ValueError, match="frequencies"):
         demodulate_bits_2fsk(audio, f1=0)
+
+    with pytest.raises(ValueError, match="start_offset"):
+        demodulate_bits_2fsk(audio, start_offset=-1)
 
 
 def test_frame_bits_survive_modulate_demodulate_round_trip():

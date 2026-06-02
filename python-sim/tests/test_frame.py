@@ -3,13 +3,18 @@ import pytest
 from hftext.codec import pack_symbols_to_bytes
 from hftext.crc16 import crc16_ccitt_false
 from hftext.frame import (
+    PREAMBLE_BITS,
     SYNC_BYTES,
+    SYNC_BITS,
     bits_to_bytes,
     build_frame,
     build_frame_bytes,
+    build_transmission,
     bytes_to_bits,
+    find_sync,
     parse_frame,
     parse_frame_bytes,
+    parse_frame_from_stream,
     payload_byte_count,
 )
 
@@ -23,6 +28,42 @@ def test_build_and_parse_frame_round_trip_text():
     assert result.payload_valid
     assert result.text == "pu5lrk Teste"
     assert result.length == 13
+
+
+def test_build_transmission_prefixes_preamble_before_frame():
+    frame_bits = build_frame("abc")
+    tx_bits = build_transmission("abc")
+
+    assert tx_bits[: len(PREAMBLE_BITS)] == PREAMBLE_BITS
+    assert tx_bits[len(PREAMBLE_BITS) :] == frame_bits
+
+
+def test_parse_frame_from_stream_finds_sync_after_preamble_and_noise_bits():
+    stream = [0, 0, 0, 1] + build_transmission("pu5lrk Teste") + [1, 1, 1]
+    result = parse_frame_from_stream(stream)
+
+    assert result.frame_detected
+    assert result.crc_ok
+    assert result.payload_valid
+    assert result.text == "pu5lrk Teste"
+    assert result.sync_index == 4 + len(PREAMBLE_BITS)
+
+
+def test_find_sync_returns_none_when_sync_is_absent():
+    assert find_sync([1, 0, 1, 0, 1, 0]) is None
+
+
+def test_find_sync_rejects_invalid_bits():
+    with pytest.raises(ValueError, match="invalid bit"):
+        find_sync([0, 1, 2] + SYNC_BITS)
+
+
+def test_parse_frame_from_stream_reports_short_frame_after_sync():
+    result = parse_frame_from_stream(SYNC_BITS)
+
+    assert result.frame_detected
+    assert not result.crc_ok
+    assert result.error == "stream ended before length"
 
 
 def test_build_frame_bytes_uses_protocol_layout():

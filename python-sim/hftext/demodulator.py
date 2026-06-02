@@ -27,6 +27,7 @@ def demodulate_bits_2fsk(
     symbol_duration: float = DEFAULT_SYMBOL_DURATION,
     f0: float = DEFAULT_F0,
     f1: float = DEFAULT_F1,
+    start_offset: int = 0,
 ) -> list[int]:
     """Demodulate normalized mono 2-FSK audio into bits."""
     if sample_rate <= 0:
@@ -35,12 +36,18 @@ def demodulate_bits_2fsk(
         raise ValueError("symbol_duration must be positive")
     if f0 <= 0 or f1 <= 0:
         raise ValueError("frequencies must be positive")
+    if start_offset < 0:
+        raise ValueError("start_offset must be non-negative")
 
     samples_per_symbol = int(round(sample_rate * symbol_duration))
     if samples_per_symbol <= 0:
         raise ValueError("symbol duration is too short for sample_rate")
 
     audio = np.asarray(samples, dtype=np.float32)
+    if start_offset >= len(audio):
+        return []
+
+    audio = audio[start_offset:]
     symbol_count = len(audio) // samples_per_symbol
     bits = []
 
@@ -54,4 +61,3 @@ def demodulate_bits_2fsk(
         bits.append(1 if energy1 > energy0 else 0)
 
     return bits
-

@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from hftext.frame import build_frame
+from hftext.frame import build_transmission
 from hftext.modulator import (
     DEFAULT_F0,
     DEFAULT_F1,
@@ -32,9 +32,9 @@ def generate_wav(
     f0: float = DEFAULT_F0,
     f1: float = DEFAULT_F1,
 ) -> str:
-    """Build a frame, modulate it, save WAV, and return payload text."""
+    """Build TX bits, modulate them, save WAV, and return payload text."""
     payload = build_payload(message, callsign)
-    bits = build_frame(payload)
+    bits = build_transmission(payload)
     audio = modulate_bits_2fsk(bits, sample_rate, symbol_duration, f0, f1)
     save_wav(output_path, audio, sample_rate)
     return payload
@@ -70,4 +70,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
