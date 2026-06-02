@@ -76,3 +76,18 @@ usuário testa WAV externamente;
 aplicação carrega WAV;
 aplicação chama demodulateSamples;
 aplicação mostra texto decodificado.
+
+## Estado atual da Fase 4
+
+A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
+
+- campo de indicativo;
+- campo de mensagem;
+- botao `Gerar WAV`;
+- botao `Decodificar WAV`;
+- area de texto recebido;
+- log simples.
+
+O app usa `ModemController` apenas como ponte entre a interface, `hftext_core` e o utilitario de leitura/escrita WAV. Ele nao implementa logica DSP.
+
+O `pc-app/` e incluido pelo CMake raiz, mas e ignorado automaticamente quando `Qt6 Widgets` nao esta instalado no ambiente.

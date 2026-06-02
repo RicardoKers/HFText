@@ -12,6 +12,7 @@ python-sim/generated/
 
 # C/C++ build
 build/
+build*/
 core/build*/
 cmake-build-*/
 *.o

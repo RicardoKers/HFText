@@ -265,3 +265,11 @@ Espalhar erros no tempo.
 Tarefa 7.6 — Implementar FEC simples
 
 Implementar código convolucional ou outro FEC simples.
+
+## Estado atual do backlog
+
+As tarefas de simulacao Python, core C++ e CLI WAV possuem implementacao inicial.
+
+A tarefa 5.1 foi iniciada com `pc-app/`: janela Qt Widgets minima, campo de indicativo, campo de mensagem, botao `Gerar WAV`, botao `Decodificar WAV`, area de saida e log. O app chama `hftext_core` por meio de `ModemController` e usa o utilitario WAV do core.
+
+O alvo `hftext_pc` e construido somente quando Qt6 Widgets esta instalado; sem Qt, o CMake configura e testa o restante do projeto normalmente.

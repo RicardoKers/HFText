@@ -159,3 +159,9 @@ Tarefas:
 
 Resultado esperado:
 Comunicação de texto curta via rádio.
+
+## Estado atual
+
+Fases 1, 2 e 3 possuem implementacao inicial validada por testes automatizados.
+
+A Fase 4 foi iniciada com uma aplicacao PC offline em `pc-app/`, usando Qt Widgets, `hftext_core`, geracao de WAV e decodificacao de WAV. O alvo do app e ignorado pelo CMake quando Qt6 Widgets nao esta instalado.
