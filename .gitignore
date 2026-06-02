@@ -1,13 +1,12 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 .venv/
 venv/
-.pytest_cache/
 
 # Generated audio and logs
-python-sim/generated/*
-!python-sim/generated/.gitkeep
+python-sim/generated/
 *.wav
 *.log
 
@@ -38,11 +37,3 @@ android-app/app/build/
 # OS
 .DS_Store
 Thumbs.db
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
-venv/
-
-python-sim/generated/
-*.wav

@@ -63,6 +63,22 @@ Registrar:
 - SNR estimado;
 - duração da transmissão.
 
+Na simulação Python inicial, as métricas mínimas são:
+
+- potência média do sinal;
+- número de erros de bit;
+- BER;
+- estado do CRC;
+- validade do payload.
+
+Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes por nível de ruído e registrar:
+
+- taxa de sucesso de CRC;
+- taxa de payload válido;
+- BER média;
+- pior BER;
+- mínimo e máximo de erros de bit.
+
 ## Teste mínimo de aceitação da Fase 1
 
 Configuração:
@@ -103,6 +119,7 @@ mensagem = cq cq
 Condição:
 
 - ruído branco moderado;
+- SNR inicial de referência: 6 dB em teste determinístico;
 - sem clipping;
 - sem fading severo.
 

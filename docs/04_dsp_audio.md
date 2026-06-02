@@ -49,3 +49,22 @@ Para cada símbolo:
 Áudio restante menor que uma janela completa de símbolo deve ser ignorado.
 
 Esta versão assume que o áudio começa exatamente no início do quadro. Detecção automática de início e sincronismo temporal ficam para etapa posterior.
+
+## Canal simulado
+
+A validação inicial deve incluir ruído branco Gaussiano aditivo (AWGN) com SNR configurável.
+
+O SNR é definido por potência média:
+
+```text
+signal_power = mean(samples^2)
+noise_power = signal_power / 10^(snr_db / 10)
+```
+
+O canal simulado deve ser determinístico nos testes quando receber uma semente fixa de gerador aleatório.
+
+Também deve haver efeitos determinísticos simples para testes de:
+
+- atenuação por ganho linear;
+- offset DC;
+- clipping simétrico.
