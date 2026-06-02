@@ -50,6 +50,51 @@ def clip(samples: np.ndarray, limit: float = 1.0) -> np.ndarray:
     return np.clip(audio, -limit, limit).astype(np.float32)
 
 
+def apply_frequency_offset(samples: np.ndarray, sample_rate: int, offset_hz: float) -> np.ndarray:
+    """Shift real audio in frequency using an analytic signal."""
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+
+    audio = np.asarray(samples, dtype=np.float32)
+    if audio.size == 0 or offset_hz == 0.0:
+        return audio.copy()
+
+    from scipy.signal import hilbert
+
+    t = np.arange(audio.size, dtype=np.float64) / sample_rate
+    analytic = hilbert(audio.astype(np.float64))
+    shifted = np.real(analytic * np.exp(2j * np.pi * offset_hz * t))
+    return shifted.astype(np.float32)
+
+
+def apply_block_fading(
+    samples: np.ndarray,
+    block_size: int,
+    min_gain: float,
+    max_gain: float,
+    rng: np.random.Generator | None = None,
+) -> np.ndarray:
+    """Apply random constant gain per block."""
+    if block_size <= 0:
+        raise ValueError("block_size must be positive")
+    if min_gain < 0:
+        raise ValueError("min_gain must be non-negative")
+    if max_gain < min_gain:
+        raise ValueError("max_gain must be greater than or equal to min_gain")
+
+    audio = np.asarray(samples, dtype=np.float32)
+    if audio.size == 0:
+        return audio.copy()
+
+    generator = rng if rng is not None else np.random.default_rng()
+    output = audio.copy()
+    for start in range(0, audio.size, block_size):
+        end = min(start + block_size, audio.size)
+        gain = generator.uniform(min_gain, max_gain)
+        output[start:end] *= gain
+    return output.astype(np.float32)
+
+
 def bit_error_count(expected: list[int], received: list[int]) -> int:
     """Count bit errors, including missing or extra bits."""
     shared = min(len(expected), len(received))

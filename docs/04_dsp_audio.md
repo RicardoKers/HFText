@@ -80,4 +80,6 @@ Também deve haver efeitos determinísticos simples para testes de:
 
 - atenuação por ganho linear;
 - offset DC;
-- clipping simétrico.
+- clipping simétrico;
+- desvio de frequência por sinal analítico;
+- fading por blocos com ganho constante por bloco.

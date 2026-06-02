@@ -3,13 +3,15 @@ import numpy as np
 from hftext.channel import (
     add_awgn,
     add_dc_offset,
+    apply_block_fading,
+    apply_frequency_offset,
     attenuate,
     bit_error_count,
     bit_error_rate,
     clip,
     signal_power,
 )
-from hftext.demodulator import demodulate_bits_2fsk
+from hftext.demodulator import demodulate_bits_2fsk, tone_energy
 from hftext.frame import build_frame, parse_frame
 from hftext.modulator import modulate_bits_2fsk
 
@@ -83,6 +85,53 @@ def test_clip_rejects_non_positive_limit():
         raise AssertionError("expected ValueError")
 
 
+def test_apply_frequency_offset_shifts_tone_energy():
+    sample_rate = 8_000
+    t = np.arange(8_000, dtype=np.float64) / sample_rate
+    tone = np.sin(2.0 * np.pi * 1_000.0 * t).astype(np.float32)
+
+    shifted = apply_frequency_offset(tone, sample_rate, 100.0)
+
+    assert tone_energy(shifted, sample_rate, 1_100.0) > tone_energy(shifted, sample_rate, 1_000.0)
+
+
+def test_apply_frequency_offset_rejects_invalid_sample_rate():
+    try:
+        apply_frequency_offset(np.zeros(4, dtype=np.float32), 0, 10.0)
+    except ValueError as exc:
+        assert "sample_rate" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_apply_block_fading_is_deterministic_with_seeded_rng():
+    samples = np.ones(12, dtype=np.float32)
+
+    faded_a = apply_block_fading(samples, 4, 0.2, 0.8, rng=np.random.default_rng(123))
+    faded_b = apply_block_fading(samples, 4, 0.2, 0.8, rng=np.random.default_rng(123))
+
+    np.testing.assert_allclose(faded_a, faded_b)
+    assert not np.allclose(faded_a, samples)
+    assert np.all(faded_a >= 0.2)
+    assert np.all(faded_a <= 0.8)
+
+
+def test_apply_block_fading_rejects_invalid_parameters():
+    samples = np.ones(4, dtype=np.float32)
+
+    for kwargs, expected in [
+        ({"block_size": 0, "min_gain": 0.1, "max_gain": 1.0}, "block_size"),
+        ({"block_size": 2, "min_gain": -0.1, "max_gain": 1.0}, "min_gain"),
+        ({"block_size": 2, "min_gain": 1.0, "max_gain": 0.5}, "max_gain"),
+    ]:
+        try:
+            apply_block_fading(samples, **kwargs)
+        except ValueError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+
+
 def test_frame_survives_moderate_awgn_channel():
     bits = build_frame("pu5lrk cq cq")
     audio = modulate_bits_2fsk(
@@ -95,6 +144,56 @@ def test_frame_survives_moderate_awgn_channel():
     noisy = add_awgn(audio, snr_db=6.0, rng=np.random.default_rng(42))
     decoded_bits = demodulate_bits_2fsk(
         noisy,
+        sample_rate=8_000,
+        symbol_duration=0.02,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    result = parse_frame(decoded_bits)
+
+    assert bit_error_rate(bits, decoded_bits) == 0.0
+    assert result.crc_ok
+    assert result.payload_valid
+    assert result.text == "pu5lrk cq cq"
+
+
+def test_frame_survives_small_frequency_offset():
+    bits = build_frame("pu5lrk cq cq")
+    audio = modulate_bits_2fsk(
+        bits,
+        sample_rate=8_000,
+        symbol_duration=0.02,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    shifted = apply_frequency_offset(audio, sample_rate=8_000, offset_hz=20.0)
+    decoded_bits = demodulate_bits_2fsk(
+        shifted,
+        sample_rate=8_000,
+        symbol_duration=0.02,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    result = parse_frame(decoded_bits)
+
+    assert bit_error_rate(bits, decoded_bits) == 0.0
+    assert result.crc_ok
+    assert result.payload_valid
+    assert result.text == "pu5lrk cq cq"
+
+
+def test_frame_survives_light_block_fading():
+    bits = build_frame("pu5lrk cq cq")
+    audio = modulate_bits_2fsk(
+        bits,
+        sample_rate=8_000,
+        symbol_duration=0.02,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    faded = apply_block_fading(audio, 160, 0.25, 1.0, rng=np.random.default_rng(123))
+    decoded_bits = demodulate_bits_2fsk(
+        faded,
         sample_rate=8_000,
         symbol_duration=0.02,
         f0=1_000.0,

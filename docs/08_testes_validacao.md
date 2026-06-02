@@ -71,6 +71,15 @@ Na simulação Python inicial, as métricas mínimas são:
 - estado do CRC;
 - validade do payload.
 
+Os testes de canal iniciais devem cobrir recuperação em condições moderadas de:
+
+- AWGN;
+- atenuação;
+- offset DC;
+- clipping leve;
+- pequeno desvio de frequência;
+- fading leve por blocos.
+
 Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes por nível de ruído e registrar:
 
 - taxa de sucesso de CRC;
@@ -78,6 +87,8 @@ Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes p
 - BER média;
 - pior BER;
 - mínimo e máximo de erros de bit.
+
+Além da varredura por SNR, a simulação deve possuir uma varredura por cenários nomeados de canal, cobrindo efeitos isolados e combinação moderada de efeitos.
 
 ## Teste mínimo de aceitação da Fase 1
 

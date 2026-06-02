@@ -45,3 +45,11 @@ python noise_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Test
 ```
 
 O script salva exemplos WAV, `summary.csv` agregado e `trials.csv` por tentativa em `generated\noise_sweep\`, medindo BER, CRC e validade do payload para cada SNR.
+
+## Varredura de canal
+
+```powershell
+python channel_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Teste HFText"
+```
+
+O script executa cenários nomeados de canal, incluindo AWGN, atenuação, offset DC, clipping, desvio de frequência, fading por blocos e uma combinação moderada. Por padrão, ele salva apenas `summary.csv` e `trials.csv`; use `--save-wavs` para salvar exemplos WAV.
