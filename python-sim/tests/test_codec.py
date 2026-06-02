@@ -29,9 +29,9 @@ def test_supported_symbols_are_encoded():
     assert decode_symbols_to_text(encode_text_to_symbols(text)) == text
 
 
-def test_invalid_characters_are_replaced_with_space():
-    assert sanitize_text("a~b") == "a b"
-    assert decode_symbols_to_text(encode_text_to_symbols("a~b")) == "a b"
+def test_invalid_characters_are_replaced_with_question_mark():
+    assert sanitize_text("a~b") == "a?b"
+    assert decode_symbols_to_text(encode_text_to_symbols("a~b")) == "a?b"
 
 
 def test_all_printable_protocol_symbols_round_trip():

@@ -6,7 +6,7 @@
 namespace hftext {
 namespace {
 
-constexpr char kInvalidReplacement = ' ';
+constexpr char kInvalidReplacement = '?';
 constexpr char kAlphabet[] = " abcdefghijklmnopqrstuvwxyz0123456789.,?!/-+:;@#$%&*()_=<>\\|";
 constexpr std::size_t kAlphabetSize = sizeof(kAlphabet) - 1;
 

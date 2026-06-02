@@ -50,7 +50,7 @@ A primeira versão usa um alfabeto reduzido de 61 símbolos ativos, codificados 
 ```
 
 
-Caracteres não suportados devem ser substituídos por espaço.
+Caracteres não suportados devem ser substituídos por `?`, para deixar a substituição visível ao operador.
 
 ## Letras maiúsculas
 
@@ -150,7 +150,7 @@ Regras:
 
 - tamanho de 0 a 127 símbolos de 6 bits;
 - usa o alfabeto reduzido;
-- caracteres não suportados devem ser substituídos por espaço;
+- caracteres não suportados devem ser substituídos por `?`, para deixar a substituição visível ao operador;
 - se a mensagem codificada tiver mais de 127 símbolos, rejeitar.
 
 ### Indicativo

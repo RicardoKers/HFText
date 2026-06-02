@@ -165,3 +165,5 @@ Comunicação de texto curta via rádio.
 Fases 1, 2 e 3 possuem implementacao inicial validada por testes automatizados.
 
 A Fase 4 foi iniciada com uma aplicacao PC offline em `pc-app/`, usando Qt Widgets, `hftext_core`, geracao de WAV e decodificacao de WAV. O alvo do app e ignorado pelo CMake quando Qt6 Widgets nao esta instalado.
+
+A Fase 5 foi iniciada pelos fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV`, botao `Parar TX`, `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX` e indicador simples de nivel RX. A demodulacao em tempo real fica para etapas posteriores.

@@ -9,7 +9,7 @@ MAX_LENGTH = MAX_PAYLOAD_SYMBOLS
 SHIFT_SYMBOL = 60
 
 ALPHABET = " abcdefghijklmnopqrstuvwxyz0123456789.,?!/-+:;@#$%&*()_=<>\\|"
-INVALID_REPLACEMENT = " "
+INVALID_REPLACEMENT = "?"
 
 CHAR_TO_SYMBOL = {char: symbol for symbol, char in enumerate(ALPHABET)}
 SYMBOL_TO_CHAR = {symbol: char for symbol, char in enumerate(ALPHABET)}

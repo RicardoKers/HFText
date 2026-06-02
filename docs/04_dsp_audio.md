@@ -21,7 +21,10 @@ symbol_duration = 0.5 s
 f0 = 1200 Hz
 f1 = 1600 Hz
 amplitude = 0.8
+preamble_bits = 64
 ```
+
+Com `symbol_duration = 0.5 s`, cada bit ocupa meio segundo. Portanto, o preâmbulo padrão de 64 bits dura cerca de 32 segundos antes do `SYNC`. Esse valor é conservador para testes com rádio, mas pode ser reduzido em testes locais quando o caminho de áudio é conhecido e estável.
 
 O modulador deve gerar áudio mono em `float32`, normalizado entre `-1.0` e `+1.0`.
 

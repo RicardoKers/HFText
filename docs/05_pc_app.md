@@ -84,11 +84,32 @@ A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
 - campo de indicativo;
 - campo de mensagem;
 - botao `Gerar WAV`;
+- botao `Transmitir WAV`;
+- botao `Parar TX`;
+- botao `Receber`;
+- botao `Parar RX`;
 - botao `Decodificar WAV`;
-- configuracao de sample rate, duracao de simbolo, tom 0, tom 1 e amplitude;
+- configuracao de sample rate, duracao de simbolo, tom 0, tom 1, amplitude e preambulo;
+- selecao de dispositivo de saida de audio;
+- selecao de dispositivo de entrada de audio;
+- indicador simples de nivel RX;
 - area de texto recebido;
 - log simples.
 
 O app usa `ModemController` apenas como ponte entre a interface, `hftext_core` e o utilitario de leitura/escrita WAV. Ele nao implementa logica DSP.
 
 O `pc-app/` e incluido pelo CMake raiz, mas e ignorado automaticamente quando `Qt6 Widgets` nao esta instalado no ambiente.
+
+## Estado atual da Fase 5
+
+A reproducao de audio TX foi iniciada no `pc-app/` com `AudioOutput`.
+
+Nesta etapa, o botao `Transmitir WAV` reproduz explicitamente o ultimo WAV gerado no dispositivo de saida selecionado, ou permite escolher um WAV se nenhum arquivo tiver sido gerado na sessao. O botao `Parar TX` interrompe a reproducao.
+
+Ainda nao ha selecao avancada de formato de audio, demodulacao em tempo real ou controle automatico de ganho.
+
+A captura RX basica tambem foi iniciada com `AudioInput`.
+
+Nesta etapa, o botao `Receber` inicia a gravacao pelo dispositivo de entrada selecionado e o botao `Parar RX` salva o audio recebido em WAV. O indicador `Nivel RX` mostra o pico aproximado dos buffers recebidos.
+
+Ainda nao ha demodulacao em tempo real nem controle automatico de ganho.

@@ -270,6 +270,10 @@ Implementar código convolucional ou outro FEC simples.
 
 As tarefas de simulacao Python, core C++ e CLI WAV possuem implementacao inicial.
 
-A tarefa 5.1 foi iniciada com `pc-app/`: janela Qt Widgets minima, campo de indicativo, campo de mensagem, configuracao de sample rate, duracao de simbolo, tom 0, tom 1 e amplitude, botao `Gerar WAV`, botao `Decodificar WAV`, area de saida e log. O app chama `hftext_core` por meio de `ModemController` e usa o utilitario WAV do core.
+A tarefa 5.1 foi iniciada com `pc-app/`: janela Qt Widgets minima, campo de indicativo, campo de mensagem, configuracao de sample rate, duracao de simbolo, tom 0, tom 1, amplitude e preambulo, botao `Gerar WAV`, botao `Decodificar WAV`, area de saida e log. O app chama `hftext_core` por meio de `ModemController` e usa o utilitario WAV do core.
 
 O alvo `hftext_pc` e construido somente quando Qt6 Widgets esta instalado; sem Qt, o CMake configura e testa o restante do projeto normalmente.
+
+A tarefa 5.2 foi iniciada com reproducao explicita de WAV no app PC: `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV` e botao `Parar TX`.
+
+A tarefa 5.3 foi iniciada com captura explicita de WAV no app PC: `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX` e indicador simples de nivel RX. A demodulacao em tempo real ainda nao foi implementada.

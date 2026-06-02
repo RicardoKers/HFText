@@ -23,8 +23,8 @@ int main() {
     const std::string symbols = ".,?!/-+:;@#$%&*()_=<>\\|";
     assert(hftext::decodeSymbolsToText(hftext::encodeTextToSymbols(symbols)) == symbols);
 
-    assert(hftext::sanitizeText("a~b") == "a b");
-    assert(hftext::decodeSymbolsToText(hftext::encodeTextToSymbols("a~b")) == "a b");
+    assert(hftext::sanitizeText("a~b") == "a?b");
+    assert(hftext::decodeSymbolsToText(hftext::encodeTextToSymbols("a~b")) == "a?b");
 
     const std::string alphabet = " abcdefghijklmnopqrstuvwxyz0123456789.,?!/-+:;@#$%&*()_=<>\\|";
     assert(hftext::decodeSymbolsToText(hftext::encodeTextToSymbols(alphabet)) == alphabet);

@@ -127,7 +127,6 @@ O projeto não deve implementar criptografia ou ocultação de conteúdo.
 ## Requisitos de desempenho iniciais
 
 - Taxa bruta inicial: 1 a 10 bps.
-- Mensagem típica: até 80 símbolos.
 - Payload máximo: 127 símbolos codificados.
 - Faixa de áudio inicial: 1000 Hz a 2000 Hz.
 - Taxa de amostragem inicial: 48000 Hz.

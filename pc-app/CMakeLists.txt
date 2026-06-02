@@ -9,6 +9,10 @@ endif()
 set(CMAKE_AUTOMOC ON)
 
 add_executable(hftext_pc
+    AudioInput.cpp
+    AudioInput.h
+    AudioOutput.cpp
+    AudioOutput.h
     MainWindow.cpp
     MainWindow.h
     ModemController.cpp
@@ -17,6 +21,7 @@ add_executable(hftext_pc
 )
 
 target_compile_features(hftext_pc PRIVATE cxx_std_17)
+target_compile_definitions(hftext_pc PRIVATE NOMINMAX)
 
 target_link_libraries(hftext_pc
     PRIVATE
@@ -24,6 +29,10 @@ target_link_libraries(hftext_pc
         hftext_core
         hftext_wav_io
 )
+
+if(WIN32)
+    target_link_libraries(hftext_pc PRIVATE winmm)
+endif()
 
 if(MSVC)
     set_target_properties(hftext_pc PROPERTIES
