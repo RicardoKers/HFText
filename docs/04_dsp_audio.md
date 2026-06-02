@@ -1,0 +1,51 @@
+# DSP de áudio
+
+## Objetivo
+
+Definir os parâmetros iniciais de áudio usados na simulação Python do modem HFText.
+
+## Modulação inicial
+
+A versão inicial usa 2-FSK:
+
+```text
+bit 0 -> 1200 Hz
+bit 1 -> 1600 Hz
+```
+
+Parâmetros padrão:
+
+```text
+sample_rate = 48000 Hz
+symbol_duration = 0.5 s
+f0 = 1200 Hz
+f1 = 1600 Hz
+amplitude = 0.8
+```
+
+O modulador deve gerar áudio mono em `float32`, normalizado entre `-1.0` e `+1.0`.
+
+## Fase
+
+O modulador 2-FSK deve manter fase contínua entre símbolos para evitar cliques desnecessários no áudio gerado.
+
+## WAV
+
+Arquivos WAV gerados na simulação devem preservar o áudio mono normalizado.
+
+Scripts e artefatos gerados futuramente devem usar `python-sim/generated/` como diretório padrão.
+
+## Demodulação inicial
+
+A demodulação 2-FSK inicial usa detecção não coerente por correlação I/Q em cada janela de símbolo.
+
+Para cada símbolo:
+
+- calcular a energia em `f0`;
+- calcular a energia em `f1`;
+- decidir `0` se `energia(f0) >= energia(f1)`;
+- decidir `1` se `energia(f1) > energia(f0)`.
+
+Áudio restante menor que uma janela completa de símbolo deve ser ignorado.
+
+Esta versão assume que o áudio começa exatamente no início do quadro. Detecção automática de início e sincronismo temporal ficam para etapa posterior.

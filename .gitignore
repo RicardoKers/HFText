@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Generated audio and logs
+python-sim/generated/*
+!python-sim/generated/.gitkeep
+*.wav
+*.log
+
+# C/C++ build
+build/
+cmake-build-*/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Qt
+*.user
+
+# Android
+.gradle/
+local.properties
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+python-sim/generated/
+*.wav

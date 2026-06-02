@@ -1,0 +1,155 @@
+# Arquitetura do sistema
+
+## Visão geral
+
+O sistema deve ser dividido em quatro partes principais:
+
+1. Simulação Python.
+2. Núcleo DSP em C++.
+3. Aplicação PC.
+4. Aplicação Android.
+
+## Diagrama lógico
+
+```text
+Mensagem
+   ↓
+Codificador de texto
+   ↓
+Montador de quadro
+   ↓
+CRC / FEC / Interleaving
+   ↓
+Modulador FSK/MFSK
+   ↓
+Áudio PCM
+   ↓
+Rádio HF
+   ↓
+Áudio recebido
+   ↓
+Demodulador FSK/MFSK
+   ↓
+Deinterleaving / FEC / CRC
+   ↓
+Decodificador de texto
+   ↓
+Mensagem recebida
+
+Núcleo C++
+
+O núcleo C++ deve conter:
+
+core/
+├── include/
+│   ├── hftext_config.h
+│   ├── hftext_encoder.h
+│   ├── hftext_frame.h
+│   ├── hftext_crc16.h
+│   ├── hftext_modulator.h
+│   ├── hftext_demodulator.h
+│   └── hftext_result.h
+│
+├── src/
+│   ├── encoder.cpp
+│   ├── frame.cpp
+│   ├── crc16.cpp
+│   ├── modulator_fsk.cpp
+│   ├── demodulator_fsk.cpp
+│   └── goertzel.cpp
+│
+└── tests/
+Interfaces principais sugeridas
+struct ModemConfig {
+    int sampleRate = 48000;
+    float baseFrequencyHz = 1200.0f;
+    float toneSpacingHz = 200.0f;
+    float symbolDurationSec = 0.5f;
+    int toneCount = 2;
+};
+
+struct DecodeResult {
+    bool frameDetected = false;
+    bool crcOk = false;
+    std::string text;
+    float confidence = 0.0f;
+};
+
+std::vector<float> modulateText(
+    const std::string& text,
+    const ModemConfig& config
+);
+
+DecodeResult demodulateSamples(
+    const std::vector<float>& samples,
+    const ModemConfig& config
+);
+Simulação Python
+
+A simulação Python deve ser usada para experimentar rapidamente algoritmos.
+
+Ela pode duplicar algoritmos temporariamente, mas a versão definitiva deve migrar para C++.
+
+Aplicação PC
+
+A aplicação PC deve usar o núcleo C++ diretamente.
+
+Responsabilidades da aplicação PC:
+
+interface gráfica;
+seleção de dispositivos de áudio;
+captura e reprodução;
+visualização;
+logs.
+
+Não deve conter lógica DSP principal.
+
+Aplicação Android
+
+A aplicação Android deve usar:
+
+Kotlin para interface;
+AudioTrack para transmissão;
+AudioRecord para recepção;
+JNI para chamar o núcleo C++.
+Dependências permitidas
+Core C++
+
+Permitidas:
+
+STL;
+CMake;
+biblioteca de testes leve.
+
+Evitar:
+
+Qt;
+Android SDK;
+bibliotecas gráficas;
+dependências de áudio.
+PC
+
+Permitidas:
+
+Qt;
+PortAudio, RtAudio ou API equivalente;
+biblioteca para gráficos simples.
+Python
+
+Permitidas:
+
+NumPy;
+SciPy;
+Matplotlib;
+soundfile;
+sounddevice.
+Android
+
+Permitidas:
+
+Kotlin;
+Jetpack Compose;
+AudioTrack;
+AudioRecord;
+NDK;
+JNI.
