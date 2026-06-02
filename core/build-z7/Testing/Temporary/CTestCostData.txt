@@ -1,0 +1,6 @@
+hftext_core_types_test 6 0.00697217
+hftext_core_encoder_test 6 0.00467465
+hftext_core_crc16_test 4 0.00698615
+hftext_core_frame_test 2 0.0138382
+hftext_core_modulator_test 1 0.0326632
+---

@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/03_Projects/01_Actives/HFText/core/build-msvc/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Solution>
+	<Configurations>
+		<BuildType Name="Debug"/>
+		<BuildType Name="Release"/>
+		<BuildType Name="MinSizeRel"/>
+		<BuildType Name="RelWithDebInfo"/>
+		<Platform Name="x64"/>
+	</Configurations>
+	<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="4e36e741-be51-3a20-9abe-4b92aaed9b2d" DefaultStartup="true">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+		<BuildDependency Project="hftext_core_crc16_test.vcxproj"/>
+		<BuildDependency Project="hftext_core_demodulator_test.vcxproj"/>
+		<BuildDependency Project="hftext_core_encoder_test.vcxproj"/>
+		<BuildDependency Project="hftext_core_frame_test.vcxproj"/>
+		<BuildDependency Project="hftext_core_modulator_test.vcxproj"/>
+		<BuildDependency Project="hftext_core_types_test.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="RUN_TESTS.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="2b4e39b0-cbe6-30c7-addd-24bcb0059416">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="a2ba0d0d-d4a7-3629-96d1-c0111d61a29a"/>
+	<Project Path="hftext_core.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="4901b159-469e-3396-8aed-0d02faafa493">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="hftext_core_crc16_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="74b73c05-dd55-3c00-8c89-587c7a3f4b45">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+	</Project>
+	<Project Path="hftext_core_demodulator_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="0c29e7cd-f601-3740-afe5-420b9b56200f">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+	</Project>
+	<Project Path="hftext_core_encoder_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="dcfa760c-4594-32bd-ba78-a6b3f9ea2d03">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+	</Project>
+	<Project Path="hftext_core_frame_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="9e11dfce-eec1-3f49-8a45-1a9535ca7cd3">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+	</Project>
+	<Project Path="hftext_core_modulator_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="2e312445-19a9-3681-be1c-99431e139bf8">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+	</Project>
+	<Project Path="hftext_core_types_test.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="a9f15ec7-94bf-337c-b507-9b4852c41a18">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="hftext_core.vcxproj"/>
+	</Project>
+</Solution>

@@ -62,16 +62,22 @@ core/
 Interfaces principais sugeridas
 struct ModemConfig {
     int sampleRate = 48000;
-    float baseFrequencyHz = 1200.0f;
-    float toneSpacingHz = 200.0f;
     float symbolDurationSec = 0.5f;
-    int toneCount = 2;
+    float frequency0Hz = 1200.0f;
+    float frequency1Hz = 1600.0f;
+    float amplitude = 0.8f;
+    int preambleBits = 64;
+    bool syncSearch = true;
 };
 
 struct DecodeResult {
     bool frameDetected = false;
     bool crcOk = false;
+    bool payloadValid = false;
     std::string text;
+    std::string error;
+    int length = 0;
+    int syncIndex = -1;
     float confidence = 0.0f;
 };
 
