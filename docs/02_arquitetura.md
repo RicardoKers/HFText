@@ -90,6 +90,9 @@ DecodeResult demodulateSamples(
     const std::vector<float>& samples,
     const ModemConfig& config
 );
+
+Essas interfaces de alto nível devem ser a entrada preferencial para ferramentas CLI, aplicação PC e futura integração Android.
+As APIs internas de encoder, frame, modulador e demodulador continuam disponíveis para testes e validações de baixo nível.
 Simulação Python
 
 A simulação Python deve ser usada para experimentar rapidamente algoritmos.

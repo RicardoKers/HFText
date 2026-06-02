@@ -16,6 +16,10 @@ add_library(hftext_core STATIC
     src/modulator_fsk.cpp
 )
 
+add_library(hftext_wav_io STATIC
+    tools/wav_io.cpp
+)
+
 target_compile_features(hftext_core PUBLIC cxx_std_17)
 
 target_include_directories(hftext_core
@@ -23,8 +27,28 @@ target_include_directories(hftext_core
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+target_include_directories(hftext_wav_io
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools
+)
+
+target_compile_features(hftext_wav_io PUBLIC cxx_std_17)
+
+add_executable(hftext_tx_wav
+    tools/hftext_tx_wav.cpp
+)
+add_executable(hftext_rx_wav
+    tools/hftext_rx_wav.cpp
+)
+
+target_link_libraries(hftext_tx_wav PRIVATE hftext_core hftext_wav_io)
+target_link_libraries(hftext_rx_wav PRIVATE hftext_core hftext_wav_io)
+
 if(MSVC)
     set_target_properties(hftext_core PROPERTIES
+        MSVC_DEBUG_INFORMATION_FORMAT Embedded
+    )
+    set_target_properties(hftext_wav_io hftext_tx_wav hftext_rx_wav PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
 endif()
@@ -57,6 +81,12 @@ if(HFTEXT_CORE_BUILD_TESTS)
     add_executable(hftext_core_demodulator_test
         tests/test_demodulator.cpp
     )
+    add_executable(hftext_core_api_test
+        tests/test_core_api.cpp
+    )
+    add_executable(hftext_wav_io_test
+        tests/test_wav_io.cpp
+    )
 
     target_link_libraries(hftext_core_types_test PRIVATE hftext_core)
     target_link_libraries(hftext_core_encoder_test PRIVATE hftext_core)
@@ -64,6 +94,8 @@ if(HFTEXT_CORE_BUILD_TESTS)
     target_link_libraries(hftext_core_frame_test PRIVATE hftext_core)
     target_link_libraries(hftext_core_modulator_test PRIVATE hftext_core)
     target_link_libraries(hftext_core_demodulator_test PRIVATE hftext_core)
+    target_link_libraries(hftext_core_api_test PRIVATE hftext_core)
+    target_link_libraries(hftext_wav_io_test PRIVATE hftext_wav_io)
 
     if(MSVC)
         set_target_properties(
@@ -73,6 +105,8 @@ if(HFTEXT_CORE_BUILD_TESTS)
             hftext_core_frame_test
             hftext_core_modulator_test
             hftext_core_demodulator_test
+            hftext_core_api_test
+            hftext_wav_io_test
             PROPERTIES
                 MSVC_DEBUG_INFORMATION_FORMAT Embedded
         )
@@ -84,4 +118,32 @@ if(HFTEXT_CORE_BUILD_TESTS)
     add_test(NAME hftext_core_frame_test COMMAND hftext_core_frame_test)
     add_test(NAME hftext_core_modulator_test COMMAND hftext_core_modulator_test)
     add_test(NAME hftext_core_demodulator_test COMMAND hftext_core_demodulator_test)
+    add_test(NAME hftext_core_api_test COMMAND hftext_core_api_test)
+    add_test(NAME hftext_wav_io_test COMMAND hftext_wav_io_test)
+    add_test(
+        NAME hftext_cli_tx_wav_test
+        COMMAND hftext_tx_wav
+            --callsign pu5lrk
+            --sample-rate 8000
+            --symbol-duration 0.01
+            --f0 1000
+            --f1 2000
+            "Teste"
+            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip.wav"
+    )
+    add_test(
+        NAME hftext_cli_rx_wav_test
+        COMMAND hftext_rx_wav
+            --symbol-duration 0.01
+            --f0 1000
+            --f1 2000
+            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip.wav"
+    )
+    set_tests_properties(hftext_cli_tx_wav_test PROPERTIES
+        PASS_REGULAR_EXPRESSION "Payload: pu5lrk Teste"
+    )
+    set_tests_properties(hftext_cli_rx_wav_test PROPERTIES
+        DEPENDS hftext_cli_tx_wav_test
+        PASS_REGULAR_EXPRESSION "pu5lrk Teste"
+    )
 endif()

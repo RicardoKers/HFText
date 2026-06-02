@@ -22,3 +22,19 @@ cmake -S core -B core\build-msvc
 cmake --build core\build-msvc
 ctest --test-dir core\build-msvc -C Debug --output-on-failure
 ```
+
+## CLI WAV
+
+Gerar WAV:
+
+```powershell
+core\build-msvc\Debug\hftext_tx_wav.exe --callsign pu5lrk "Teste" python-sim\generated\cpp_tx.wav
+```
+
+Decodificar WAV:
+
+```powershell
+core\build-msvc\Debug\hftext_rx_wav.exe python-sim\generated\cpp_tx.wav
+```
+
+O CTest do core tambem executa um round-trip automatico `hftext_tx_wav` -> `hftext_rx_wav`.
