@@ -85,6 +85,7 @@ A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
 - campo de mensagem;
 - botao `Gerar WAV`;
 - botao `Decodificar WAV`;
+- configuracao de sample rate, duracao de simbolo, tom 0, tom 1 e amplitude;
 - area de texto recebido;
 - log simples.
 
