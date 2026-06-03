@@ -324,6 +324,8 @@ A varredura de interleaving tambem inclui por padrao uma linha de base com repet
 
 A varredura grava tambem `best_summary.csv`, destacando a melhor opcao por SNR com prioridade para sucesso de CRC, payload valido e menor BER.
 
+Resultado experimental inicial: com payload `pu5lrk Teste`, repeticao 3x, SNR -12 dB, fading por blocos de 4 simbolos e 50 sementes, a linha de base sem interleaving teve 0% de CRC valido, enquanto a geometria `12x46` atingiu 18% de CRC valido e a menor BER media do conjunto testado. Esse resultado nao altera o protocolo; apenas orienta proximas varreduras.
+
 Tarefa 7.6 — Implementar FEC simples
 
 Implementar código convolucional ou outro FEC simples.
