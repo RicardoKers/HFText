@@ -33,6 +33,32 @@ def test_receive_samples_recovers_frame_with_symbol_offset():
     assert result.offsets_tried >= 1
 
 
+def test_receive_confidence_uses_detected_frame_not_leading_silence():
+    bits = build_transmission("pu5lrk Teste")
+    audio = modulate_bits_2fsk(
+        bits,
+        sample_rate=8_000,
+        symbol_duration=0.01,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    leading_silence = np.zeros(80 * 40, dtype=np.float32)
+    shifted = np.concatenate([leading_silence, audio])
+
+    result = receive_samples_2fsk(
+        shifted,
+        sample_rate=8_000,
+        symbol_duration=0.01,
+        f0=1_000.0,
+        f1=2_000.0,
+        offset_step=1,
+    )
+
+    assert result.frame_result.crc_ok
+    assert result.frame_result.payload_valid
+    assert result.confidence > 0.9
+
+
 def test_receive_samples_without_sync_search_uses_zero_offset_only():
     bits = build_transmission("pu5lrk Teste")
     audio = modulate_bits_2fsk(bits, sample_rate=8_000, symbol_duration=0.01)

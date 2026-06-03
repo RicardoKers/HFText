@@ -1,11 +1,21 @@
 #include "ModemController.h"
 
 #include "hftext_core.h"
+#include "hftext_encoder.h"
+#include "hftext_frame.h"
 #include "wav_io.h"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+
+namespace {
+
+int packedPayloadBytes(int payloadSymbols) {
+    return (payloadSymbols * hftext::kBitsPerSymbol + hftext::kBitsPerByte - 1) / hftext::kBitsPerByte;
+}
+
+}  // namespace
 
 double ModemController::WavStats::durationSeconds() const {
     if (sampleRate <= 0) {
@@ -30,6 +40,28 @@ std::string ModemController::buildPayload(const std::string& callsign, const std
         return message;
     }
     return callsign + " " + message;
+}
+
+ModemController::TransmissionEstimate ModemController::estimateTransmission(
+    const std::string& callsign,
+    const std::string& message
+) const {
+    TransmissionEstimate estimate;
+    estimate.maxPayloadSymbols = hftext::kMaxPayloadSymbols;
+    if (message.empty()) {
+        return estimate;
+    }
+
+    estimate.messageEmpty = false;
+    estimate.payload = buildPayload(callsign, message);
+    estimate.payloadSymbols = hftext::encodedSymbolCount(estimate.payload);
+    estimate.payloadTooLong = estimate.payloadSymbols > hftext::kMaxPayloadSymbols;
+    estimate.frameBits = (hftext::kHeaderBytes + packedPayloadBytes(estimate.payloadSymbols) + hftext::kCrcBytes)
+        * hftext::kBitsPerByte;
+    estimate.transmissionBits = config_.preambleBits + estimate.frameBits;
+    estimate.durationSeconds = static_cast<double>(estimate.transmissionBits)
+        * static_cast<double>(config_.symbolDurationSec);
+    return estimate;
 }
 
 void ModemController::generateWav(

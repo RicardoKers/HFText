@@ -58,6 +58,8 @@ def test_run_channel_sweep_writes_summary(tmp_path):
     assert Path(tmp_path / "awgn_12db.wav").exists()
     assert results[0].frame_result.crc_ok
     assert results[0].frame_result.text == "pu5lrk Teste"
+    assert results[0].confidence > 0.9
+    assert "avg_confidence" in (tmp_path / "summary.csv").read_text(encoding="utf-8")
 
 
 def test_main_prints_channel_summary(tmp_path, capsys):
@@ -84,4 +86,5 @@ def test_main_prints_channel_summary(tmp_path, capsys):
 
     assert code == 0
     assert "label,trials,crc_success_rate" in output
+    assert "avg_confidence" in output
     assert (tmp_path / "summary.csv").exists()

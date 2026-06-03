@@ -218,6 +218,10 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
                 }
                 level_ = peak;
 
+                header.dwBytesRecorded = 0;
+                header.dwFlags &= ~WHDR_DONE;
+                checkMmResult(waveInAddBuffer(handle, &header, sizeof(WAVEHDR)), "falha ao reciclar buffer RX");
+
                 SamplesCallback callback;
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
@@ -226,10 +230,6 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
                 if (callback) {
                     callback(chunk);
                 }
-
-                header.dwBytesRecorded = 0;
-                header.dwFlags &= ~WHDR_DONE;
-                checkMmResult(waveInAddBuffer(handle, &header, sizeof(WAVEHDR)), "falha ao reciclar buffer RX");
             }
             Sleep(20);
         }

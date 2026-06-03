@@ -33,6 +33,23 @@ int main() {
     auto decoded = hftext::demodulateBits2Fsk(audio, 8000, 0.05F, 1000.0F, 2000.0F);
     assert(decoded == bits);
 
+    const auto decisions = hftext::demodulateBitDecisions2Fsk(audio, 8000, 0.05F, 1000.0F, 2000.0F);
+    assert(decisions.size() == bits.size());
+    for (std::size_t index = 0; index < decisions.size(); ++index) {
+        assert(decisions[index].bit == bits[index]);
+        assert(decisions[index].confidence > 0.9F);
+    }
+    const auto silentDecisions = hftext::demodulateBitDecisions2Fsk(
+        std::vector<float>(audio.size(), 0.0F),
+        8000,
+        0.05F,
+        1000.0F,
+        2000.0F
+    );
+    for (const auto& decision : silentDecisions) {
+        assert(decision.confidence == 0.0F);
+    }
+
     audio = hftext::modulateBits2Fsk({0, 1}, 8000, 0.05F, 1200.0F, 1600.0F, 0.8F);
     audio.insert(audio.end(), 10, 0.0F);
     decoded = hftext::demodulateBits2Fsk(audio, 8000, 0.05F, 1200.0F, 1600.0F);

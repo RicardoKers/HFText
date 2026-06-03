@@ -44,6 +44,9 @@ Valores válidos de LENGTH: 0 a 127.
 PAYLOAD tem no máximo 127 símbolos de 6 bits.
 O indicativo não é campo separado; quando configurado, o transmissor o insere automaticamente no início do PAYLOAD, seguido por um espaço.
 O alfabeto usa letras minúsculas; letras maiúsculas são codificadas como shift + letra minúscula.
+Símbolo 61 = acute, 62 = tilde, 63 = ç.
+Vogais acentuadas usam modificador + vogal; vogais acentuadas maiúsculas usam modificador + shift + vogal.
+O símbolo ç é direto; Ç usa shift + ç.
 Caracteres não suportados devem ser substituídos por ?.
 CRC16 é CRC-16/CCITT-FALSE calculado sobre PAYLOAD compactado em bytes.
 Símbolos de 6 bits são compactados em bytes MSB-first, com zero padding no último byte.

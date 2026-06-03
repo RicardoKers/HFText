@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 
+#include "hftext_encoder.h"
+
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -13,6 +15,8 @@
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
+#include <QTabWidget>
+#include <QTextCursor>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -20,11 +24,40 @@
 #include <algorithm>
 #include <exception>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 
+void validateTonesBelowNyquist(const hftext::ModemConfig& config) {
+    const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
+    if (config.frequency0Hz >= nyquistHz || config.frequency1Hz >= nyquistHz) {
+        throw std::invalid_argument("tons devem ficar abaixo de metade do sample rate");
+    }
+}
+
 std::string toStdString(const QString& text) {
     return text.toUtf8().toStdString();
+}
+
+QString sanitizePresentationText(const QString& text) {
+    QString output;
+    output.reserve(text.size());
+
+    for (const QChar ch : text) {
+        if (ch.unicode() <= 0x7F && hftext::isSupportedPresentationChar(static_cast<char>(ch.unicode()))) {
+            output.append(ch);
+        } else if (QStringLiteral("áÁéÉíÍóÓúÚãÃõÕçÇ").contains(ch)) {
+            output.append(ch);
+        } else {
+            output.append('?');
+        }
+    }
+
+    return output;
+}
+
+QString formatConfidence(float confidence) {
+    return QString::number(std::clamp(confidence, 0.0F, 1.0F) * 100.0F, 'f', 1) + "%";
 }
 
 }  // namespace
@@ -36,22 +69,40 @@ MainWindow::MainWindow(QWidget* parent)
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);
 
-    auto* form = new QFormLayout();
+    auto* tabs = new QTabWidget(this);
+    auto* operationPage = new QWidget(this);
+    auto* operationLayout = new QVBoxLayout(operationPage);
+    auto* operationForm = new QFormLayout();
+    auto* configPage = new QWidget(this);
+    auto* configLayout = new QVBoxLayout(configPage);
+    auto* configForm = new QFormLayout();
+
     callsignEdit_ = new QLineEdit(this);
     callsignEdit_->setText("pu5lrk");
-    form->addRow("Indicativo", callsignEdit_);
+    operationForm->addRow("Indicativo", callsignEdit_);
 
     messageEdit_ = new QPlainTextEdit(this);
     messageEdit_->setPlaceholderText("Mensagem");
     messageEdit_->setMinimumHeight(90);
-    form->addRow("Mensagem", messageEdit_);
+    operationForm->addRow("Mensagem", messageEdit_);
+
+    txEstimateLabel_ = new QLabel(this);
+    txEstimateLabel_->setWordWrap(true);
+    operationForm->addRow("Estimativa TX", txEstimateLabel_);
 
     sampleRateSpin_ = new QSpinBox(this);
     sampleRateSpin_->setRange(8000, 192000);
     sampleRateSpin_->setSingleStep(1000);
     sampleRateSpin_->setSuffix(" Hz");
     sampleRateSpin_->setValue(controller_.config().sampleRate);
-    form->addRow("Sample rate", sampleRateSpin_);
+    configForm->addRow("Sample rate TX/WAV", sampleRateSpin_);
+
+    rxSampleRateSpin_ = new QSpinBox(this);
+    rxSampleRateSpin_->setRange(8000, 192000);
+    rxSampleRateSpin_->setSingleStep(1000);
+    rxSampleRateSpin_->setSuffix(" Hz");
+    rxSampleRateSpin_->setValue(48000);
+    configForm->addRow("Sample rate RX", rxSampleRateSpin_);
 
     symbolDurationSpin_ = new QDoubleSpinBox(this);
     symbolDurationSpin_->setRange(0.005, 5.0);
@@ -59,7 +110,7 @@ MainWindow::MainWindow(QWidget* parent)
     symbolDurationSpin_->setDecimals(3);
     symbolDurationSpin_->setSuffix(" s");
     symbolDurationSpin_->setValue(controller_.config().symbolDurationSec);
-    form->addRow("Duracao do simbolo", symbolDurationSpin_);
+    configForm->addRow("Duracao do simbolo", symbolDurationSpin_);
 
     frequency0Spin_ = new QDoubleSpinBox(this);
     frequency0Spin_->setRange(20.0, 20000.0);
@@ -67,7 +118,7 @@ MainWindow::MainWindow(QWidget* parent)
     frequency0Spin_->setDecimals(1);
     frequency0Spin_->setSuffix(" Hz");
     frequency0Spin_->setValue(controller_.config().frequency0Hz);
-    form->addRow("Tom 0", frequency0Spin_);
+    configForm->addRow("Tom 0", frequency0Spin_);
 
     frequency1Spin_ = new QDoubleSpinBox(this);
     frequency1Spin_->setRange(20.0, 20000.0);
@@ -75,37 +126,61 @@ MainWindow::MainWindow(QWidget* parent)
     frequency1Spin_->setDecimals(1);
     frequency1Spin_->setSuffix(" Hz");
     frequency1Spin_->setValue(controller_.config().frequency1Hz);
-    form->addRow("Tom 1", frequency1Spin_);
+    configForm->addRow("Tom 1", frequency1Spin_);
 
     amplitudeSpin_ = new QDoubleSpinBox(this);
     amplitudeSpin_->setRange(0.0, 1.0);
     amplitudeSpin_->setSingleStep(0.05);
     amplitudeSpin_->setDecimals(2);
     amplitudeSpin_->setValue(controller_.config().amplitude);
-    form->addRow("Amplitude", amplitudeSpin_);
+    configForm->addRow("Amplitude", amplitudeSpin_);
 
     preambleBitsSpin_ = new QSpinBox(this);
     preambleBitsSpin_->setRange(0, 256);
     preambleBitsSpin_->setSingleStep(8);
     preambleBitsSpin_->setSuffix(" bits");
     preambleBitsSpin_->setValue(controller_.config().preambleBits);
-    form->addRow("Preambulo", preambleBitsSpin_);
+    configForm->addRow("Preambulo", preambleBitsSpin_);
 
     outputDeviceCombo_ = new QComboBox(this);
-    form->addRow("Saida de audio", outputDeviceCombo_);
+    configForm->addRow("Saida de audio", outputDeviceCombo_);
     populateOutputDevices();
 
     inputDeviceCombo_ = new QComboBox(this);
-    form->addRow("Entrada de audio", inputDeviceCombo_);
+    configForm->addRow("Entrada de audio", inputDeviceCombo_);
     populateInputDevices();
 
     rxLevelBar_ = new QProgressBar(this);
     rxLevelBar_->setRange(0, 100);
     rxLevelBar_->setValue(0);
     rxLevelBar_->setTextVisible(false);
-    form->addRow("Nivel RX", rxLevelBar_);
+    operationForm->addRow("Nivel RX", rxLevelBar_);
 
-    root->addLayout(form);
+    txProgressBar_ = new QProgressBar(this);
+    txProgressBar_->setRange(0, 1000);
+    txProgressBar_->setValue(0);
+    txProgressBar_->setFormat("%p%");
+    operationForm->addRow("Progresso TX", txProgressBar_);
+
+    rxQualityBar_ = new QProgressBar(this);
+    rxQualityBar_->setRange(0, 1000);
+    rxQualityBar_->setValue(0);
+    rxQualityBar_->setFormat("%p%");
+    operationForm->addRow("Qualidade RX", rxQualityBar_);
+
+    operationLayout->addLayout(operationForm);
+    configLayout->addLayout(configForm);
+
+    configLayout->addWidget(new QLabel("Log", this));
+    logEdit_ = new QPlainTextEdit(this);
+    logEdit_->setReadOnly(true);
+    logEdit_->setMinimumHeight(180);
+    configLayout->addWidget(logEdit_);
+    configLayout->addStretch(1);
+
+    operationLayout->addWidget(new QLabel("Waterfall RX", this));
+    waterfallWidget_ = new WaterfallWidget(this);
+    operationLayout->addWidget(waterfallWidget_);
 
     auto* buttons = new QHBoxLayout();
     generateButton_ = new QPushButton("Gerar WAV", this);
@@ -121,19 +196,23 @@ MainWindow::MainWindow(QWidget* parent)
     buttons->addWidget(stopReceiveButton_);
     buttons->addWidget(decodeButton_);
     buttons->addStretch(1);
-    root->addLayout(buttons);
+    operationLayout->addLayout(buttons);
 
-    root->addWidget(new QLabel("Texto recebido", this));
+    auto* receivedHeader = new QHBoxLayout();
+    receivedHeader->addWidget(new QLabel("Texto recebido", this));
+    receivedHeader->addStretch(1);
+    clearReceivedButton_ = new QPushButton("Limpar RX", this);
+    receivedHeader->addWidget(clearReceivedButton_);
+    operationLayout->addLayout(receivedHeader);
+
     receivedEdit_ = new QPlainTextEdit(this);
     receivedEdit_->setReadOnly(true);
     receivedEdit_->setMinimumHeight(80);
-    root->addWidget(receivedEdit_);
+    operationLayout->addWidget(receivedEdit_);
 
-    root->addWidget(new QLabel("Log", this));
-    logEdit_ = new QPlainTextEdit(this);
-    logEdit_->setReadOnly(true);
-    logEdit_->setMinimumHeight(100);
-    root->addWidget(logEdit_);
+    tabs->addTab(operationPage, "Operacao");
+    tabs->addTab(configPage, "Configuracao");
+    root->addWidget(tabs);
 
     setCentralWidget(central);
     resize(720, 520);
@@ -144,10 +223,20 @@ MainWindow::MainWindow(QWidget* parent)
     connect(startReceiveButton_, &QPushButton::clicked, this, &MainWindow::startReceive);
     connect(stopReceiveButton_, &QPushButton::clicked, this, &MainWindow::stopReceive);
     connect(decodeButton_, &QPushButton::clicked, this, &MainWindow::decodeWav);
+    connect(clearReceivedButton_, &QPushButton::clicked, this, &MainWindow::clearReceivedText);
+    connect(callsignEdit_, &QLineEdit::textChanged, this, &MainWindow::updateTxEstimate);
+    connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
+    connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
+    connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
 
     rxLevelTimer_ = new QTimer(this);
     rxLevelTimer_->setInterval(100);
     connect(rxLevelTimer_, &QTimer::timeout, this, &MainWindow::updateRxLevel);
+
+    txProgressTimer_ = new QTimer(this);
+    txProgressTimer_->setInterval(100);
+    connect(txProgressTimer_, &QTimer::timeout, this, &MainWindow::updateTxProgress);
+    updateTxEstimate();
 }
 
 MainWindow::~MainWindow() {
@@ -208,6 +297,7 @@ void MainWindow::decodeWav() {
         appendLog(
             "RX offset: " + QString::number(result.startOffset)
             + " amostras, tentativas: " + QString::number(result.offsetsTried)
+            + ", confianca: " + formatConfidence(result.confidence)
         );
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
@@ -233,6 +323,8 @@ void MainWindow::transmitWav() {
         const unsigned int deviceId = outputDeviceCombo_->currentData().toUInt();
         audioOutput_.playWavAsync(toStdString(wavPath), deviceId);
         lastWavPath_ = wavPath;
+        txProgressBar_->setValue(0);
+        txProgressTimer_->start();
         appendLog("TX iniciado: " + wavPath);
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
@@ -242,6 +334,8 @@ void MainWindow::transmitWav() {
 
 void MainWindow::stopTransmit() {
     audioOutput_.stop();
+    txProgressTimer_->stop();
+    txProgressBar_->setValue(0);
     appendLog("TX interrompido.");
 }
 
@@ -257,27 +351,27 @@ void MainWindow::startReceive() {
     }
 
     try {
-        const auto config = readConfig();
-        streamingReceiver_.setConfig(config);
-        audioInput_.setSamplesCallback([this](const std::vector<float>& samples) {
-            const auto results = streamingReceiver_.pushSamples(samples);
-            for (const auto& result : results) {
-                QMetaObject::invokeMethod(this, [this, result]() {
-                    showDecodeResult(result);
-                    appendLog(
-                        "RX streaming: " + QString::fromStdString(result.text)
-                        + " (offset " + QString::number(result.startOffset)
-                        + ", tentativas " + QString::number(result.offsetsTried)
-                        + ")"
-                    );
-                });
-            }
+        const auto rxConfig = readRxConfig();
+        waterfallWidget_->clear();
+        rxQualityBar_->setValue(0);
+        audioInput_.setSamplesCallback([this, sampleRate = rxConfig.sampleRate](const std::vector<float>& samples) {
+            auto chunk = samples;
+            QMetaObject::invokeMethod(
+                this,
+                [this, chunk = std::move(chunk), sampleRate]() {
+                    waterfallWidget_->addSamples(chunk, sampleRate);
+                },
+                Qt::QueuedConnection
+            );
         });
         const unsigned int deviceId = inputDeviceCombo_->currentData().toUInt();
-        audioInput_.start(deviceId, config.sampleRate);
+        audioInput_.start(deviceId, rxConfig.sampleRate);
         lastRxWavPath_ = outputPath;
         rxLevelTimer_->start();
-        appendLog("RX iniciado: " + outputPath);
+        appendLog(
+            "RX iniciado: " + outputPath
+            + " (captura " + QString::number(rxConfig.sampleRate) + " Hz)"
+        );
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Erro ao iniciar RX: " + QString::fromUtf8(exc.what()));
@@ -291,7 +385,7 @@ void MainWindow::stopReceive() {
     }
 
     try {
-        controller_.setConfig(readConfig());
+        controller_.setConfig(readRxConfig());
         const auto stats = audioInput_.stopAndSave(toStdString(lastRxWavPath_));
         audioInput_.setSamplesCallback({});
         rxLevelTimer_->stop();
@@ -305,7 +399,8 @@ void MainWindow::stopReceive() {
         appendLog("RX salvo: " + lastRxWavPath_);
         appendLog(
             "RX duracao: " + QString::number(stats.durationSeconds(), 'f', 2)
-            + " s, pico: " + QString::number(stats.peak * 100.0F, 'f', 1)
+            + " s, sample rate: " + QString::number(stats.sampleRate)
+            + " Hz, pico: " + QString::number(stats.peak * 100.0F, 'f', 1)
             + "%, clipping aprox.: " + QString::number(static_cast<qulonglong>(stats.clippedSamples))
             + " samples"
         );
@@ -314,6 +409,7 @@ void MainWindow::stopReceive() {
         appendLog(
             "RX offset: " + QString::number(result.startOffset)
             + " amostras, tentativas: " + QString::number(result.offsetsTried)
+            + ", confianca: " + formatConfidence(result.confidence)
         );
         if (result.crcOk && result.payloadValid) {
             appendLog("RX decodificado automaticamente com CRC valido.");
@@ -328,9 +424,82 @@ void MainWindow::stopReceive() {
     }
 }
 
+void MainWindow::clearReceivedText() {
+    receivedEdit_->clear();
+}
+
 void MainWindow::updateRxLevel() {
     const int level = static_cast<int>(std::clamp(audioInput_.level(), 0.0F, 1.0F) * 100.0F);
     rxLevelBar_->setValue(level);
+}
+
+void MainWindow::updateTxProgress() {
+    const double duration = audioOutput_.durationSeconds();
+    if (duration <= 0.0) {
+        txProgressBar_->setValue(0);
+        return;
+    }
+
+    const double position = audioOutput_.positionSeconds();
+    const int value = static_cast<int>(std::clamp(position / duration, 0.0, 1.0) * 1000.0);
+    txProgressBar_->setValue(value);
+
+    if (!audioOutput_.isPlaying() && position >= duration) {
+        txProgressTimer_->stop();
+        txProgressBar_->setValue(1000);
+        appendLog("TX concluido.");
+    }
+}
+
+void MainWindow::sanitizeTxMessage() {
+    const QString current = messageEdit_->toPlainText();
+    const QString sanitized = sanitizePresentationText(current);
+    if (sanitized != current) {
+        QTextCursor cursor = messageEdit_->textCursor();
+        const int position = cursor.position();
+        messageEdit_->blockSignals(true);
+        messageEdit_->setPlainText(sanitized);
+        cursor = messageEdit_->textCursor();
+        cursor.setPosition((std::min)(position, static_cast<int>(sanitized.size())));
+        messageEdit_->setTextCursor(cursor);
+        messageEdit_->blockSignals(false);
+    }
+    updateTxEstimate();
+}
+
+void MainWindow::updateTxEstimate() {
+    try {
+        controller_.setConfig(readConfig());
+        const auto estimate = controller_.estimateTransmission(
+            toStdString(callsignEdit_->text().trimmed()),
+            toStdString(messageEdit_->toPlainText())
+        );
+
+        if (estimate.messageEmpty) {
+            txEstimateLabel_->setStyleSheet({});
+            txEstimateLabel_->setText(
+                QString("0/%1 simbolos | TX: --").arg(estimate.maxPayloadSymbols)
+            );
+            return;
+        }
+
+        QString text = QString("%1/%2 simbolos | %3 bits | TX: %4 s")
+            .arg(estimate.payloadSymbols)
+            .arg(estimate.maxPayloadSymbols)
+            .arg(estimate.transmissionBits)
+            .arg(estimate.durationSeconds, 0, 'f', 2);
+
+        if (estimate.payloadTooLong) {
+            text += " | excede o limite";
+            txEstimateLabel_->setStyleSheet("color: #b00020;");
+        } else {
+            txEstimateLabel_->setStyleSheet({});
+        }
+        txEstimateLabel_->setText(text);
+    } catch (const std::exception& exc) {
+        txEstimateLabel_->setStyleSheet("color: #b00020;");
+        txEstimateLabel_->setText(QString::fromUtf8(exc.what()));
+    }
 }
 
 void MainWindow::appendLog(const QString& text) {
@@ -373,28 +542,33 @@ hftext::ModemConfig MainWindow::readConfig() const {
     config.frequency1Hz = static_cast<float>(frequency1Spin_->value());
     config.amplitude = static_cast<float>(amplitudeSpin_->value());
     config.preambleBits = preambleBitsSpin_->value();
-    const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
-    if (config.frequency0Hz >= nyquistHz || config.frequency1Hz >= nyquistHz) {
-        throw std::invalid_argument("tons devem ficar abaixo de metade do sample rate");
-    }
+    validateTonesBelowNyquist(config);
     if (config.frequency0Hz == config.frequency1Hz) {
         throw std::invalid_argument("tom 0 e tom 1 devem ser diferentes");
     }
     return config;
 }
 
+hftext::ModemConfig MainWindow::readRxConfig() const {
+    hftext::ModemConfig config = readConfig();
+    config.sampleRate = rxSampleRateSpin_->value();
+    validateTonesBelowNyquist(config);
+    return config;
+}
+
 void MainWindow::showDecodeResult(const hftext::DecodeResult& result) {
+    rxQualityBar_->setValue(static_cast<int>(std::clamp(result.confidence, 0.0F, 1.0F) * 1000.0F));
     if (!result.frameDetected) {
-        receivedEdit_->setPlainText(QStringLiteral("Quadro nao detectado: ") + QString::fromStdString(result.error));
+        receivedEdit_->appendPlainText(QStringLiteral("Quadro nao detectado: ") + QString::fromStdString(result.error));
         return;
     }
     if (!result.crcOk) {
-        receivedEdit_->setPlainText("Quadro detectado, mas CRC invalido.");
+        receivedEdit_->appendPlainText("Quadro detectado, mas CRC invalido.");
         return;
     }
     if (!result.payloadValid) {
-        receivedEdit_->setPlainText("Quadro detectado, CRC valido, mas payload invalido.");
+        receivedEdit_->appendPlainText("Quadro detectado, CRC valido, mas payload invalido.");
         return;
     }
-    receivedEdit_->setPlainText(QString::fromStdString(result.text));
+    receivedEdit_->appendPlainText(QString::fromStdString(result.text));
 }

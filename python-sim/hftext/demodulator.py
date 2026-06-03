@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from hftext.modulator import (
@@ -10,6 +12,12 @@ from hftext.modulator import (
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SYMBOL_DURATION,
 )
+
+
+@dataclass(frozen=True)
+class BitDecision:
+    bit: int
+    confidence: float
 
 
 def tone_energy(samples: np.ndarray, sample_rate: int, frequency: float) -> float:
@@ -21,15 +29,15 @@ def tone_energy(samples: np.ndarray, sample_rate: int, frequency: float) -> floa
     return i * i + q * q
 
 
-def demodulate_bits_2fsk(
+def demodulate_bit_decisions_2fsk(
     samples: np.ndarray,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     symbol_duration: float = DEFAULT_SYMBOL_DURATION,
     f0: float = DEFAULT_F0,
     f1: float = DEFAULT_F1,
     start_offset: int = 0,
-) -> list[int]:
-    """Demodulate normalized mono 2-FSK audio into bits."""
+) -> list[BitDecision]:
+    """Demodulate normalized mono 2-FSK audio into bit decisions."""
     if sample_rate <= 0:
         raise ValueError("sample_rate must be positive")
     if symbol_duration <= 0:
@@ -49,7 +57,7 @@ def demodulate_bits_2fsk(
 
     audio = audio[start_offset:]
     symbol_count = len(audio) // samples_per_symbol
-    bits = []
+    decisions = []
 
     for symbol_index in range(symbol_count):
         start = symbol_index * samples_per_symbol
@@ -58,6 +66,30 @@ def demodulate_bits_2fsk(
 
         energy0 = tone_energy(window, sample_rate, f0)
         energy1 = tone_energy(window, sample_rate, f1)
-        bits.append(1 if energy1 > energy0 else 0)
+        total_energy = energy0 + energy1
+        confidence = 0.0 if total_energy <= 0.0 else abs(energy1 - energy0) / total_energy
+        decisions.append(BitDecision(1 if energy1 > energy0 else 0, float(min(1.0, confidence))))
 
-    return bits
+    return decisions
+
+
+def demodulate_bits_2fsk(
+    samples: np.ndarray,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    symbol_duration: float = DEFAULT_SYMBOL_DURATION,
+    f0: float = DEFAULT_F0,
+    f1: float = DEFAULT_F1,
+    start_offset: int = 0,
+) -> list[int]:
+    """Demodulate normalized mono 2-FSK audio into bits."""
+    return [
+        decision.bit
+        for decision in demodulate_bit_decisions_2fsk(
+            samples,
+            sample_rate,
+            symbol_duration,
+            f0,
+            f1,
+            start_offset,
+        )
+    ]

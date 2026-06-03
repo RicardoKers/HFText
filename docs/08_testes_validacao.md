@@ -10,6 +10,8 @@ Definir como validar o funcionamento do modem e das aplicações.
 
 - texto simples deve gerar símbolos corretos;
 - letras maiúsculas devem usar símbolo shift e voltar como maiúsculas na decodificação;
+- vogais acentuadas em português devem usar modificadores `acute` ou `tilde` e voltar como texto acentuado;
+- `ç` e `Ç` devem ser recuperados corretamente;
 - caracteres inválidos devem ser tratados;
 - decodificação deve recuperar texto original.
 
@@ -61,6 +63,7 @@ Registrar:
 - BER;
 - sucesso/falha de CRC;
 - SNR estimado;
+- confianca media estimada pelo demodulador;
 - duração da transmissão.
 
 Na simulação Python inicial, as métricas mínimas são:
@@ -86,6 +89,8 @@ Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes p
 - taxa de payload válido;
 - BER média;
 - pior BER;
+- confianca media;
+- menor confianca;
 - mínimo e máximo de erros de bit.
 
 Além da varredura por SNR, a simulação deve possuir uma varredura por cenários nomeados de canal, cobrindo efeitos isolados e combinação moderada de efeitos.
@@ -182,11 +187,33 @@ No app PC, o fluxo inicial de validacao com audio real e:
 - parar RX para salvar o WAV capturado;
 - registrar duracao, pico de audio e amostras proximas de clipping;
 - tentar decodificar automaticamente o WAV salvo;
-- registrar offset inicial aceito e quantidade de offsets testados;
+- registrar offset inicial aceito, quantidade de offsets testados e confianca media estimada;
 - aceitar o texto recebido apenas se o CRC estiver valido.
 
 Ao abrir um WAV manualmente no app PC, a validacao tambem deve registrar duracao, sample rate, pico de audio e amostras proximas de clipping antes da decodificacao.
 
-Durante uma captura RX ativa, o app tambem deve tentar decodificacao por fluxo com `StreamingReceiver`. Se um quadro valido for encontrado antes de parar RX, o log deve registrar `RX streaming` e a area de texto recebido deve mostrar a mensagem recuperada.
+Durante uma captura RX ativa, o app deve priorizar apenas a gravacao dos buffers de audio. A decodificacao automatica ocorre depois de `Parar RX`, usando o WAV salvo. A decodificacao em fluxo com `StreamingReceiver` fica para uma etapa posterior com fila/thread propria, para nao atrasar a captura.
+
+Ao testar captura por placa de som, conferir no log do app:
+
+- `RX iniciado` deve informar a taxa de captura RX;
+- `RX duracao` deve informar o mesmo sample rate salvo no WAV;
+- a duracao exibida deve bater com o tempo real de gravacao.
+
+Se o WAV recebido parecer comprimido ou esticado, a primeira verificacao e comparar o sample rate RX configurado com o sample rate mostrado no log e no arquivo WAV salvo. Em Windows, usar 48000 Hz para RX e o ponto de partida recomendado.
+
+## Testes futuros de interface PC
+
+As proximas melhorias do app PC devem incluir validacoes manuais simples:
+
+- ao digitar mensagem TX com letras maiusculas, o contador deve incluir os simbolos `shift`;
+- ao digitar vogais acentuadas, o contador deve incluir os modificadores `acute` ou `tilde`;
+- ao digitar `ç`, o contador deve tratar como um simbolo, e `Ç` como `shift` + `ç`;
+- ao digitar caracteres invalidos, o campo TX deve mostrar `?` antes de gerar WAV;
+- ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
+- durante `Transmitir WAV`, a barra de progresso deve avancar ate o fim do arquivo ou parar corretamente ao clicar `Parar TX`;
+- a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX.
+
+Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao do WAV capturado deve continuar coerente com o tempo real de gravacao.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. Ele serve como alerta operacional para reduzir ganho ou volume quando necessario.

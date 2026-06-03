@@ -1,5 +1,6 @@
 #include "hftext_demodulator.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -64,7 +65,7 @@ double toneEnergy(const std::vector<float>& samples, int sampleRate, float frequ
     return toneEnergyWindow(samples, 0, samples.size(), sampleRate, frequencyHz);
 }
 
-std::vector<std::uint8_t> demodulateBits2Fsk(
+std::vector<BitDecision> demodulateBitDecisions2Fsk(
     const std::vector<float>& samples,
     int sampleRate,
     float symbolDurationSec,
@@ -81,17 +82,63 @@ std::vector<std::uint8_t> demodulateBits2Fsk(
 
     const auto usableSamples = samples.size() - static_cast<std::size_t>(startOffset);
     const auto symbolCount = usableSamples / static_cast<std::size_t>(symbolSamples);
-    std::vector<std::uint8_t> bits;
-    bits.reserve(symbolCount);
+    std::vector<BitDecision> decisions;
+    decisions.reserve(symbolCount);
 
     for (std::size_t symbolIndex = 0; symbolIndex < symbolCount; ++symbolIndex) {
         const auto start = static_cast<std::size_t>(startOffset) + symbolIndex * static_cast<std::size_t>(symbolSamples);
         const auto count = static_cast<std::size_t>(symbolSamples);
         const double energy0 = toneEnergyWindow(samples, start, count, sampleRate, frequency0Hz);
         const double energy1 = toneEnergyWindow(samples, start, count, sampleRate, frequency1Hz);
-        bits.push_back(static_cast<std::uint8_t>(energy1 > energy0 ? 1 : 0));
+        const double totalEnergy = energy0 + energy1;
+        const double confidence = totalEnergy <= 0.0 ? 0.0 : std::abs(energy1 - energy0) / totalEnergy;
+        decisions.push_back(
+            BitDecision{
+                static_cast<std::uint8_t>(energy1 > energy0 ? 1 : 0),
+                static_cast<float>(std::clamp(confidence, 0.0, 1.0))
+            }
+        );
     }
 
+    return decisions;
+}
+
+std::vector<BitDecision> demodulateBitDecisions2Fsk(
+    const std::vector<float>& samples,
+    const ModemConfig& config,
+    int startOffset
+) {
+    return demodulateBitDecisions2Fsk(
+        samples,
+        config.sampleRate,
+        config.symbolDurationSec,
+        config.frequency0Hz,
+        config.frequency1Hz,
+        startOffset
+    );
+}
+
+std::vector<std::uint8_t> demodulateBits2Fsk(
+    const std::vector<float>& samples,
+    int sampleRate,
+    float symbolDurationSec,
+    float frequency0Hz,
+    float frequency1Hz,
+    int startOffset
+) {
+    const auto decisions = demodulateBitDecisions2Fsk(
+        samples,
+        sampleRate,
+        symbolDurationSec,
+        frequency0Hz,
+        frequency1Hz,
+        startOffset
+    );
+    std::vector<std::uint8_t> bits;
+    bits.reserve(decisions.size());
+    for (const auto& decision : decisions) {
+        bits.push_back(decision.bit);
+    }
     return bits;
 }
 

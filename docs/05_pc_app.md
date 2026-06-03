@@ -29,6 +29,10 @@ A primeira versão da aplicação PC deve conter:
 - salvar WAV transmitido;
 - carregar WAV recebido;
 - decodificar WAV offline;
+- mostrar contagem de simbolos do payload TX durante a digitacao;
+- mostrar duracao estimada da transmissao antes de gerar ou transmitir;
+- mostrar progresso durante a transmissao;
+- substituir caracteres invalidos por `?` diretamente no campo de mensagem TX, antes da transmissao;
 - mostrar espectro básico;
 - mostrar waterfall futuramente;
 - salvar log de recepção.
@@ -89,12 +93,26 @@ A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
 - botao `Receber`;
 - botao `Parar RX`;
 - botao `Decodificar WAV`;
-- configuracao de sample rate, duracao de simbolo, tom 0, tom 1, amplitude e preambulo;
+- botao `Limpar RX` para limpar apenas o historico visual de texto recebido;
+- configuracao de sample rate TX/WAV, sample rate RX, duracao de simbolo, tom 0, tom 1, amplitude e preambulo;
+- estimativa TX ao vivo com simbolos de payload, bits totais e duracao aproximada;
+- sanitizacao visual da mensagem TX, preservando os acentos suportados do portugues e substituindo caracteres invalidos por `?` durante a digitacao;
+- barra de progresso durante a reproducao TX;
 - selecao de dispositivo de saida de audio;
 - selecao de dispositivo de entrada de audio;
 - indicador simples de nivel RX;
+- indicador simples de qualidade RX baseado na confianca media do demodulador;
+- waterfall RX simples para observacao visual do audio recebido;
 - area de texto recebido;
 - log simples.
+
+A interface agora separa operacao e configuracao em abas:
+
+- `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso, qualidade RX, waterfall, botoes e texto recebido;
+- `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio e log.
+
+A area `Texto recebido` funciona como historico: novas mensagens ou resultados de decodificacao sao adicionados abaixo dos anteriores.
+O botao `Limpar RX` limpa esse historico visual sem apagar WAVs, log ou configuracoes.
 
 O app usa `ModemController` apenas como ponte entre a interface, `hftext_core` e o utilitario de leitura/escrita WAV. Ele nao implementa logica DSP.
 
@@ -112,10 +130,22 @@ A captura RX basica tambem foi iniciada com `AudioInput`.
 
 Nesta etapa, o botao `Receber` inicia a gravacao pelo dispositivo de entrada selecionado e o botao `Parar RX` salva o audio recebido em WAV. O indicador `Nivel RX` mostra o pico aproximado dos buffers recebidos.
 
-Ao parar RX, o app registra no log a duracao capturada, o pico de audio e uma contagem aproximada de amostras proximas de clipping. Em seguida, tenta decodificar automaticamente o WAV salvo e mostra o resultado na area de texto recebido.
+Ao parar RX, o app registra no log a duracao capturada, o pico de audio, uma contagem aproximada de amostras proximas de clipping, o offset aceito, a quantidade de tentativas e a confianca media estimada pelo demodulador. Em seguida, tenta decodificar automaticamente o WAV salvo e mostra o resultado na area de texto recebido.
 
 Ao usar `Decodificar WAV` manualmente, o app tambem registra duracao, sample rate, pico e clipping aproximado do arquivo aberto antes de tentar recuperar o quadro.
 
-Durante a captura RX, o app tambem envia blocos de audio para `StreamingReceiver`. Quando um quadro valido e recuperado antes de parar a gravacao, o texto aparece na area recebida e o evento e registrado no log como `RX streaming`.
+O sample rate de TX/WAV e o sample rate de captura RX sao configuracoes separadas. A captura RX usa 48000 Hz por padrao, que e a taxa mais comum em dispositivos de audio no Windows. O WAV salvo pela recepcao deve usar no cabecalho a mesma taxa usada na captura, e o receptor em fluxo tambem deve decodificar usando essa taxa. Isso evita arquivos RX com duracao aparente comprimida ou esticada por divergencia entre a taxa real de captura e a taxa gravada no WAV.
+
+O app ainda nao roda decodificacao em fluxo durante a captura. A thread de audio deve gravar e reciclar buffers com prioridade, e a decodificacao automatica acontece depois que `Parar RX` salva o WAV. O `StreamingReceiver` permanece no core como base testada para uma etapa posterior, mas sua integracao no app precisa de uma fila/thread dedicada para nao bloquear a captura.
 
 Ainda nao ha controle automatico de ganho nem rastreamento continuo fino de clock.
+
+## Melhorias planejadas de operacao
+
+As proximas melhorias de interface devem ajudar o operador a prever e acompanhar a transmissao:
+
+- manter a estimativa TX ao vivo sincronizada com indicativo, mensagem, preambulo e duracao de simbolo;
+- estender a sanitizacao visual futuramente para outros campos de texto transmitidos, como indicativo, se necessario;
+- manter a barra de progresso TX sincronizada com pausas/interrupcoes futuras quando houver controle mais avancado de audio.
+
+A primeira waterfall RX foi adicionada ao app. Ela e apenas visual, usa blocos capturados de audio para mostrar energia aproximada entre 300 Hz e 3 kHz, possui escala horizontal de frequencia em passos de 300 Hz, nao altera a decodificacao e roda no thread da UI para nao bloquear a reciclagem dos buffers de captura.

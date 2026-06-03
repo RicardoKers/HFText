@@ -17,6 +17,8 @@ add_executable(hftext_pc
     MainWindow.h
     ModemController.cpp
     ModemController.h
+    WaterfallWidget.cpp
+    WaterfallWidget.h
     main.cpp
 )
 

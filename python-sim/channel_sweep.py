@@ -18,7 +18,7 @@ from hftext.channel import (
     bit_error_rate,
     clip,
 )
-from hftext.demodulator import demodulate_bits_2fsk
+from hftext.demodulator import demodulate_bit_decisions_2fsk
 from hftext.frame import build_transmission, parse_frame_from_stream
 from hftext.modulator import (
     DEFAULT_F0,
@@ -28,7 +28,7 @@ from hftext.modulator import (
     modulate_bits_2fsk,
     save_wav,
 )
-from noise_sweep import SweepResult, aggregate_results, write_summary, write_trials
+from noise_sweep import SweepResult, aggregate_results, mean_confidence, write_summary, write_trials
 from tx_wav import build_payload
 
 
@@ -139,7 +139,8 @@ def run_channel_sweep(
             if save_wavs and trial == 0:
                 save_wav(wav_path, audio, sample_rate)
 
-            decoded_bits = demodulate_bits_2fsk(audio, sample_rate, symbol_duration, f0, f1)
+            decisions = demodulate_bit_decisions_2fsk(audio, sample_rate, symbol_duration, f0, f1)
+            decoded_bits = [decision.bit for decision in decisions]
             frame_result = parse_frame_from_stream(decoded_bits)
             results.append(
                 SweepResult(
@@ -150,6 +151,7 @@ def run_channel_sweep(
                     wav_path=wav_path if save_wavs and trial == 0 else Path(""),
                     bit_errors=bit_error_count(bits, decoded_bits),
                     ber=bit_error_rate(bits, decoded_bits),
+                    confidence=mean_confidence(decisions),
                     frame_result=frame_result,
                 )
             )
@@ -161,12 +163,13 @@ def run_channel_sweep(
 
 def print_summary(results: list[SweepResult]) -> None:
     """Print aggregate scenario results."""
-    print("label,trials,crc_success_rate,payload_success_rate,avg_ber,max_ber,min_errors,max_errors")
+    print("label,trials,crc_success_rate,payload_success_rate,avg_ber,max_ber,avg_confidence,min_confidence,min_errors,max_errors")
     for aggregate in aggregate_results(results):
         print(
             f"{aggregate.label},{aggregate.trials},"
             f"{aggregate.crc_success_rate:.3f},{aggregate.payload_success_rate:.3f},"
             f"{aggregate.avg_ber:.6f},{aggregate.max_ber:.6f},"
+            f"{aggregate.avg_confidence:.6f},{aggregate.min_confidence:.6f},"
             f"{aggregate.min_bit_errors},{aggregate.max_bit_errors}"
         )
 

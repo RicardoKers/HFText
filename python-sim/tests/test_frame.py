@@ -49,6 +49,21 @@ def test_parse_frame_from_stream_finds_sync_after_preamble_and_noise_bits():
     assert result.sync_index == 4 + len(PREAMBLE_BITS)
 
 
+def test_parse_frame_from_stream_skips_false_sync_until_valid_crc():
+    false_frame = bytearray(build_frame_bytes("ruido"))
+    false_frame[-1] ^= 0x01
+    false_bits = bytes_to_bits(bytes(false_frame))
+    stream = false_bits + [1, 0, 1] + build_transmission("pu5lrk ok")
+
+    result = parse_frame_from_stream(stream)
+
+    assert result.frame_detected
+    assert result.crc_ok
+    assert result.payload_valid
+    assert result.text == "pu5lrk ok"
+    assert result.sync_index == len(false_bits) + 3 + len(PREAMBLE_BITS)
+
+
 def test_find_sync_returns_none_when_sync_is_absent():
     assert find_sync([1, 0, 1, 0, 1, 0]) is None
 
@@ -128,18 +143,13 @@ def test_parse_rejects_bad_crc_without_presenting_text():
     assert result.error == "crc mismatch"
 
 
-def test_parse_rejects_reserved_payload_symbol_without_presenting_text():
-    payload = pack_symbols_to_bytes([61])
-    crc = crc16_ccitt_false(payload).to_bytes(2, "big")
-    frame = SYNC_BYTES + bytes([1]) + payload + crc
-
-    result = parse_frame_bytes(frame)
+def test_parse_accepts_portuguese_modifier_symbols():
+    result = parse_frame(build_frame("olá atenção"))
 
     assert result.frame_detected
     assert result.crc_ok
-    assert not result.payload_valid
-    assert result.text == ""
-    assert "invalid symbol" in result.error
+    assert result.payload_valid
+    assert result.text == "olá atenção"
 
 
 def test_bits_and_bytes_round_trip_msb_first():

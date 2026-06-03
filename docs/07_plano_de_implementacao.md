@@ -114,6 +114,10 @@ Tarefas:
 Resultado esperado:
 Melhor desempenho em ruído e fading.
 
+Primeira melhoria aplicada nesta fase: a busca de `SYNC` no fluxo demodulado passou a testar multiplos candidatos. Assim, um falso `SYNC` causado por ruido antes do quadro real nao impede a recuperacao de um quadro posterior com CRC valido.
+
+Outra melhoria iniciada: o demodulador passou a calcular uma confianca media baseada na separacao relativa entre as energias dos tons 0 e 1. A confianca e diagnostica e nao altera a regra de aceitacao por CRC.
+
 ## Fase 7 — Aplicação Android TX
 
 Objetivo:
@@ -168,4 +172,26 @@ A Fase 4 foi iniciada com uma aplicacao PC offline em `pc-app/`, usando Qt Widge
 
 A Fase 5 foi iniciada pelos fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV`, botao `Parar TX`, `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX`, indicador simples de nivel RX, metricas basicas da captura e decodificacao automatica do WAV salvo ao parar RX. A demodulacao em tempo real fica para etapas posteriores.
 
-A preparacao para RX continuo foi iniciada no core com `StreamingReceiver`, testado com audio gerado pelo core e entregue em blocos. O `AudioInput` do app tambem ja envia blocos capturados para esse receptor durante RX, mantendo o salvamento WAV ao parar como caminho de validacao.
+A preparacao para RX continuo foi iniciada no core com `StreamingReceiver`, testado com audio gerado pelo core e entregue em blocos. A integracao direta desse receptor no app foi adiada porque executar a decodificacao offline dentro do caminho de captura pode atrasar a reciclagem dos buffers de audio e encurtar o WAV gravado. Por enquanto, o app prioriza capturar o WAV completo e decodificar automaticamente ao parar RX.
+
+As proximas melhorias recomendadas para a Fase 5 sao incrementais e focadas em operacao:
+
+- contador de simbolos do payload TX durante a digitacao, contando `shift` como simbolo;
+- estimativa de duracao total da transmissao com os parametros atuais;
+- sanitizacao visual da mensagem TX, substituindo caracteres invalidos por `?` antes da transmissao;
+- barra de progresso durante a reproducao TX;
+- waterfall RX simples, apenas visual, depois que a captura estiver estavel.
+
+O contador de simbolos e a estimativa de duracao foram implementados no app PC como primeira melhoria operacional. Eles consideram o indicativo inserido automaticamente no payload, o limite de 127 simbolos, o preambulo configurado e a duracao de simbolo atual.
+
+A sanitizacao visual da mensagem TX tambem foi iniciada: caracteres fora do alfabeto HFText Basic sao substituidos por `?` diretamente no campo de mensagem durante a digitacao.
+
+O alfabeto v0.1 foi expandido para portugues usando os tres simbolos restantes: `acute`, `tilde` e `ç`. Vogais acentuadas passam a consumir dois simbolos, vogais acentuadas maiusculas consomem tres simbolos, `ç` consome um simbolo e `Ç` consome dois.
+
+A barra de progresso TX foi adicionada ao app PC. Ela acompanha a posicao aproximada do WAV em reproducao e volta ao inicio quando o operador interrompe a transmissao.
+
+A primeira waterfall RX tambem foi adicionada ao app PC como visualizacao leve. Ela mostra energia aproximada no tempo e na frequencia durante a captura, sem participar da decodificacao nem executar no caminho critico de reciclagem dos buffers de audio.
+
+A interface do app PC foi reorganizada em abas para reduzir poluicao visual: `Operacao` concentra o fluxo normal de TX/RX, enquanto `Configuracao` concentra parametros do modem, dispositivos de audio e log. A area de texto recebido acumula novas mensagens em formato de historico.
+
+Como o texto recebido agora e um historico, a interface tambem possui `Limpar RX` para limpar somente a area de mensagens recebidas, preservando log, WAVs e configuracoes.

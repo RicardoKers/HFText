@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from hftext.demodulator import demodulate_bits_2fsk
-from hftext.frame import FrameResult, parse_frame_from_stream
+from hftext.demodulator import demodulate_bit_decisions_2fsk
+from hftext.frame import BITS_PER_BYTE, CRC_BYTES, HEADER_BYTES, FrameResult, parse_frame_from_stream, payload_byte_count
 from hftext.modulator import (
     DEFAULT_F0,
     DEFAULT_F1,
@@ -22,6 +22,7 @@ class ReceiveResult:
     bits: list[int]
     start_offset: int
     offsets_tried: int
+    confidence: float = 0.0
 
 
 def default_offset_step(sample_rate: int, symbol_duration: float) -> int:
@@ -30,6 +31,22 @@ def default_offset_step(sample_rate: int, symbol_duration: float) -> int:
     if samples_per_symbol <= 0:
         raise ValueError("symbol duration is too short for sample_rate")
     return max(1, samples_per_symbol // 20)
+
+
+def _mean_confidence(decisions: list, start: int = 0, count: int | None = None) -> float:
+    if not decisions:
+        return 0.0
+    end = len(decisions) if count is None else min(len(decisions), start + count)
+    if start < 0 or start >= end:
+        return 0.0
+    return sum(decision.confidence for decision in decisions[start:end]) / (end - start)
+
+
+def _confidence_for_result(result: FrameResult, decisions: list) -> float:
+    if result.frame_detected and result.sync_index is not None:
+        frame_bits = (HEADER_BYTES + payload_byte_count(result.length) + CRC_BYTES) * BITS_PER_BYTE
+        return _mean_confidence(decisions, result.sync_index, frame_bits)
+    return _mean_confidence(decisions)
 
 
 def receive_samples_2fsk(
@@ -54,15 +71,18 @@ def receive_samples_2fsk(
         raise ValueError("symbol duration is too short for sample_rate")
 
     if not sync_search:
-        bits = demodulate_bits_2fsk(samples, sample_rate, symbol_duration, f0, f1)
-        return ReceiveResult(parse_frame_from_stream(bits), bits, 0, 1)
+        decisions = demodulate_bit_decisions_2fsk(samples, sample_rate, symbol_duration, f0, f1)
+        bits = [decision.bit for decision in decisions]
+        result = parse_frame_from_stream(bits)
+        return ReceiveResult(result, bits, 0, 1, _confidence_for_result(result, decisions))
 
     step = default_offset_step(sample_rate, symbol_duration) if offset_step is None else offset_step
     fallback: ReceiveResult | None = None
+    best_valid: ReceiveResult | None = None
     offsets_tried = 0
 
     for start_offset in range(0, samples_per_symbol, step):
-        bits = demodulate_bits_2fsk(
+        decisions = demodulate_bit_decisions_2fsk(
             samples,
             sample_rate,
             symbol_duration,
@@ -70,19 +90,31 @@ def receive_samples_2fsk(
             f1,
             start_offset=start_offset,
         )
+        bits = [decision.bit for decision in decisions]
         result = parse_frame_from_stream(bits)
         offsets_tried += 1
 
-        candidate = ReceiveResult(result, bits, start_offset, offsets_tried)
+        candidate = ReceiveResult(result, bits, start_offset, offsets_tried, _confidence_for_result(result, decisions))
         if fallback is None or (result.frame_detected and not fallback.frame_result.frame_detected):
             fallback = candidate
         if result.crc_ok and result.payload_valid:
-            return candidate
+            if best_valid is None or candidate.confidence > best_valid.confidence:
+                best_valid = candidate
 
     assert fallback is not None
+    if best_valid is not None:
+        return ReceiveResult(
+            best_valid.frame_result,
+            best_valid.bits,
+            best_valid.start_offset,
+            offsets_tried,
+            best_valid.confidence,
+        )
+
     return ReceiveResult(
         fallback.frame_result,
         fallback.bits,
         fallback.start_offset,
         offsets_tried,
+        fallback.confidence,
     )

@@ -18,10 +18,22 @@ public:
         double durationSeconds() const;
     };
 
+    struct TransmissionEstimate {
+        bool messageEmpty = true;
+        bool payloadTooLong = false;
+        int payloadSymbols = 0;
+        int maxPayloadSymbols = 0;
+        int frameBits = 0;
+        int transmissionBits = 0;
+        double durationSeconds = 0.0;
+        std::string payload;
+    };
+
     void setConfig(const hftext::ModemConfig& config);
     const hftext::ModemConfig& config() const;
 
     std::string buildPayload(const std::string& callsign, const std::string& message) const;
+    TransmissionEstimate estimateTransmission(const std::string& callsign, const std::string& message) const;
     void generateWav(const std::string& callsign, const std::string& message, const std::string& outputPath) const;
     WavStats analyzeWav(const std::string& inputPath) const;
     hftext::DecodeResult decodeWav(const std::string& inputPath) const;

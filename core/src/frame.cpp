@@ -258,31 +258,7 @@ DecodeResult parseFrame(const std::vector<std::uint8_t>& bits) {
     return parseFrameBytes(bitsToBytes(bits));
 }
 
-int findSync(const std::vector<std::uint8_t>& bits) {
-    const auto sync = syncBits();
-    if (bits.size() < sync.size()) {
-        return -1;
-    }
-
-    for (std::uint8_t bit : bits) {
-        validateBit(bit);
-    }
-
-    const std::size_t lastStart = bits.size() - sync.size();
-    for (std::size_t index = 0; index <= lastStart; ++index) {
-        if (std::equal(sync.begin(), sync.end(), bits.begin() + static_cast<std::ptrdiff_t>(index))) {
-            return static_cast<int>(index);
-        }
-    }
-    return -1;
-}
-
-DecodeResult parseFrameFromStream(const std::vector<std::uint8_t>& bits) {
-    const int syncIndex = findSync(bits);
-    if (syncIndex < 0) {
-        return makeResult(false, false, false, "", 0, {}, "sync not found");
-    }
-
+DecodeResult parseFrameAtSync(const std::vector<std::uint8_t>& bits, int syncIndex) {
     const std::size_t lengthStart = static_cast<std::size_t>(syncIndex) + syncBits().size();
     const std::size_t lengthEnd = lengthStart + kBitsPerByte;
     if (bits.size() < lengthEnd) {
@@ -311,6 +287,60 @@ DecodeResult parseFrameFromStream(const std::vector<std::uint8_t>& bits) {
     auto result = parseFrame(frameBits);
     result.syncIndex = syncIndex;
     return result;
+}
+
+int findSync(const std::vector<std::uint8_t>& bits) {
+    const auto sync = syncBits();
+    if (bits.size() < sync.size()) {
+        return -1;
+    }
+
+    for (std::uint8_t bit : bits) {
+        validateBit(bit);
+    }
+
+    const std::size_t lastStart = bits.size() - sync.size();
+    for (std::size_t index = 0; index <= lastStart; ++index) {
+        if (std::equal(sync.begin(), sync.end(), bits.begin() + static_cast<std::ptrdiff_t>(index))) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+DecodeResult parseFrameFromStream(const std::vector<std::uint8_t>& bits) {
+    const auto sync = syncBits();
+    if (bits.size() < sync.size()) {
+        return makeResult(false, false, false, "", 0, {}, "sync not found");
+    }
+
+    for (std::uint8_t bit : bits) {
+        validateBit(bit);
+    }
+
+    DecodeResult firstCandidate;
+    bool hasCandidate = false;
+    const std::size_t lastStart = bits.size() - sync.size();
+    for (std::size_t index = 0; index <= lastStart; ++index) {
+        if (!std::equal(sync.begin(), sync.end(), bits.begin() + static_cast<std::ptrdiff_t>(index))) {
+            continue;
+        }
+
+        auto result = parseFrameAtSync(bits, static_cast<int>(index));
+        if (!hasCandidate) {
+            firstCandidate = result;
+            hasCandidate = true;
+        }
+        if (result.crcOk && result.payloadValid) {
+            return result;
+        }
+    }
+
+    if (hasCandidate) {
+        return firstCandidate;
+    }
+
+    return makeResult(false, false, false, "", 0, {}, "sync not found");
 }
 
 }  // namespace hftext

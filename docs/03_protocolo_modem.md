@@ -10,7 +10,7 @@ Nome: HFText Basic v0.1
 
 ## Alfabeto inicial
 
-A primeira versão usa um alfabeto reduzido de 61 símbolos ativos, codificados em 6 bits:
+A primeira versão usa um alfabeto reduzido de 64 símbolos ativos, codificados em 6 bits:
 
 ```text
 0  = espaço
@@ -46,11 +46,23 @@ A primeira versão usa um alfabeto reduzido de 61 símbolos ativos, codificados 
 58 = \
 59 = |
 60 = shift
-61-63 = reservado
+61 = acute
+62 = tilde
+63 = ç
 ```
 
 
 Caracteres não suportados devem ser substituídos por `?`, para deixar a substituição visível ao operador.
+
+Os símbolos `acute` e `tilde` são modificadores de apresentação. Eles não representam caracteres isolados: indicam que a próxima vogal deve ser apresentada com acento.
+
+Regras:
+
+- `acute` pode modificar `a`, `e`, `i`, `o` e `u`, produzindo `á`, `é`, `í`, `ó` e `ú`;
+- `tilde` pode modificar `a` e `o`, produzindo `ã` e `õ`;
+- `ç` usa o símbolo 63 diretamente;
+- `acute` ou `tilde` digitados como caracteres soltos não devem ser gerados pelo transmissor; se aparecerem no texto de entrada como caracteres isolados, devem ser substituídos por `?`;
+- se um modificador recebido aparecer antes de um alvo inválido, o receptor deve apresentar `?` antes do alvo para tornar a anomalia visível.
 
 ## Letras maiúsculas
 
@@ -72,6 +84,17 @@ Na recepção, `shift` converte apenas a próxima letra `a-z` para maiúscula na
 Se `shift` aparecer antes de um símbolo que não seja letra, o receptor deve ignorar o `shift` e apresentar o símbolo seguinte normalmente.
 
 Se `shift` aparecer no fim da mensagem, o receptor deve ignorá-lo.
+
+Para letras acentuadas maiúsculas, o modificador de acento deve preceder o `shift`:
+
+```text
+á -> [acute, a]
+Á -> [acute, shift, a]
+ã -> [tilde, a]
+Ã -> [tilde, shift, a]
+ç -> [ç]
+Ç -> [shift, ç]
+```
 
 ## Estrutura de quadro
 
@@ -140,7 +163,9 @@ Regras:
 - valores válidos: 0 a 127;
 - representa a quantidade de símbolos de 6 bits no `PAYLOAD`;
 - letras maiúsculas contam como 2 símbolos, pois usam `shift` + letra;
-- símbolos reservados não devem ser gerados pelo transmissor na versão v0.1.
+- vogais com `acute` ou `tilde` contam como 2 símbolos;
+- vogais acentuadas maiúsculas contam como 3 símbolos, pois usam modificador + `shift` + letra;
+- `ç` conta como 1 símbolo e `Ç` conta como 2 símbolos.
 
 ### PAYLOAD
 
@@ -262,3 +287,17 @@ Depois de validado, adicionar:
 - ACK;
 - timestamp opcional;
 - tipo de mensagem.
+
+### Repeticao experimental futura
+
+A repeticao nao faz parte do HFText Basic v0.1.
+
+Quando for implementada, deve ser tratada como modo explicito de uma versao futura do protocolo, para evitar que receptores v0.1 interpretem um fluxo repetido de forma ambigua.
+
+Direcao inicial recomendada:
+
+- repetir bits ou simbolos antes da modulacao;
+- no RX, usar voto majoritario por grupo;
+- manter CRC sobre o payload logico original, nao sobre as copias repetidas;
+- registrar no quadro ou na configuracao negociada qual fator de repeticao esta ativo;
+- validar primeiro em Python com varreduras de SNR e fading antes de portar para C++.

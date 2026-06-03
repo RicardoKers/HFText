@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <stdexcept>
 
 namespace hftext {
@@ -28,14 +29,60 @@ int defaultOffsetStep(const ModemConfig& config) {
     return std::max(1, samplesPerSymbol(config) / 20);
 }
 
+std::vector<std::uint8_t> bitsFromDecisions(const std::vector<BitDecision>& decisions) {
+    std::vector<std::uint8_t> bits;
+    bits.reserve(decisions.size());
+    for (const auto& decision : decisions) {
+        bits.push_back(decision.bit);
+    }
+    return bits;
+}
+
+float meanConfidence(const std::vector<BitDecision>& decisions, std::size_t start, std::size_t count) {
+    if (decisions.empty() || start >= decisions.size() || count == 0) {
+        return 0.0F;
+    }
+
+    const std::size_t end = std::min(decisions.size(), start + count);
+    if (start >= end) {
+        return 0.0F;
+    }
+
+    double sum = 0.0;
+    for (std::size_t index = start; index < end; ++index) {
+        sum += decisions[index].confidence;
+    }
+    return static_cast<float>(sum / static_cast<double>(end - start));
+}
+
+float confidenceForResult(const DecodeResult& result, const std::vector<BitDecision>& decisions) {
+    if (decisions.empty()) {
+        return 0.0F;
+    }
+
+    if (result.frameDetected && result.syncIndex >= 0) {
+        try {
+            const auto frameBits = static_cast<std::size_t>(kHeaderBytes + payloadByteCount(result.length) + kCrcBytes)
+                * kBitsPerByte;
+            return meanConfidence(decisions, static_cast<std::size_t>(result.syncIndex), frameBits);
+        } catch (const std::invalid_argument&) {
+            return meanConfidence(decisions, 0, decisions.size());
+        }
+    }
+
+    return meanConfidence(decisions, 0, decisions.size());
+}
+
 DecodeResult demodulateAndParse(
     const std::vector<float>& samples,
     const ModemConfig& config,
     int startOffset
 ) {
-    const auto bits = demodulateBits2Fsk(samples, config, startOffset);
+    const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
+    const auto bits = bitsFromDecisions(decisions);
     auto result = parseFrameFromStream(bits);
     result.startOffset = startOffset;
+    result.confidence = confidenceForResult(result, decisions);
     return result;
 }
 
@@ -63,10 +110,12 @@ std::vector<float> modulateText(const std::string& text, const ModemConfig& conf
 
 DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemConfig& config) {
     if (!config.syncSearch) {
-        const auto bits = demodulateBits2Fsk(samples, config);
+        const auto decisions = demodulateBitDecisions2Fsk(samples, config);
+        const auto bits = bitsFromDecisions(decisions);
         auto result = parseFrame(bits);
         result.startOffset = 0;
         result.offsetsTried = 1;
+        result.confidence = confidenceForResult(result, decisions);
         return result;
     }
 
@@ -74,6 +123,8 @@ DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemCon
     const int step = defaultOffsetStep(config);
     DecodeResult fallback;
     bool hasFallback = false;
+    DecodeResult bestValid;
+    bool hasBestValid = false;
     int offsetsTried = 0;
 
     for (int startOffset = 0; startOffset < symbolSamples; startOffset += step) {
@@ -86,8 +137,16 @@ DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemCon
             hasFallback = true;
         }
         if (result.crcOk && result.payloadValid) {
-            return result;
+            if (!hasBestValid || result.confidence > bestValid.confidence) {
+                bestValid = result;
+                hasBestValid = true;
+            }
         }
+    }
+
+    if (hasBestValid) {
+        bestValid.offsetsTried = offsetsTried;
+        return bestValid;
     }
 
     if (hasFallback) {

@@ -24,6 +24,8 @@ bool contains(const std::string& text, const std::string& needle) {
 }  // namespace
 
 int main() {
+    const std::string olaAtencao = std::string("ol") + "\xC3\xA1 aten" + "\xC3\xA7" + "\xC3\xA3" + "o";
+
     auto result = hftext::parseFrame(hftext::buildFrame("pu5lrk Teste"));
     assertValidText(result, "pu5lrk Teste", 13);
 
@@ -40,6 +42,17 @@ int main() {
     result = hftext::parseFrameFromStream(stream);
     assertValidText(result, "pu5lrk Teste", 13);
     assert(result.syncIndex == static_cast<int>(4 + preamble.size()));
+
+    auto falseFrame = hftext::buildFrameBytes("ruido");
+    falseFrame.back() ^= 0x01;
+    const auto falseBits = hftext::bytesToBits(falseFrame);
+    stream = falseBits;
+    stream.insert(stream.end(), {1, 0, 1});
+    const auto validTransmission = hftext::buildTransmission("pu5lrk ok");
+    stream.insert(stream.end(), validTransmission.begin(), validTransmission.end());
+    result = hftext::parseFrameFromStream(stream);
+    assertValidText(result, "pu5lrk ok", 9);
+    assert(result.syncIndex == static_cast<int>(falseBits.size() + 3 + preamble.size()));
 
     assert(hftext::findSync({1, 0, 1, 0, 1, 0}) == -1);
 
@@ -100,19 +113,8 @@ int main() {
     assert(result.text.empty());
     assert(result.error == "crc mismatch");
 
-    const auto reservedPayload = hftext::packSymbolsToBytes({61});
-    auto reservedFrame = hftext::syncBytes();
-    reservedFrame.push_back(1);
-    reservedFrame.insert(reservedFrame.end(), reservedPayload.begin(), reservedPayload.end());
-    const auto reservedCrc = hftext::crc16CcittFalse(reservedPayload);
-    reservedFrame.push_back(static_cast<std::uint8_t>((reservedCrc >> 8) & 0xFF));
-    reservedFrame.push_back(static_cast<std::uint8_t>(reservedCrc & 0xFF));
-    result = hftext::parseFrameBytes(reservedFrame);
-    assert(result.frameDetected);
-    assert(result.crcOk);
-    assert(!result.payloadValid);
-    assert(result.text.empty());
-    assert(contains(result.error, "invalid symbol"));
+    result = hftext::parseFrame(hftext::buildFrame(olaAtencao));
+    assertValidText(result, olaAtencao, 13);
 
     const std::vector<std::uint8_t> syncBytes = {0x2D, 0xD4};
     const auto convertedSyncBits = hftext::bytesToBits(syncBytes);

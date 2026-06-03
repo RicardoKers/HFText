@@ -1,7 +1,7 @@
 import numpy as np
 import soundfile as sf
 
-from rx_wav import decode_wav, load_wav_mono, main as rx_main
+from rx_wav import decode_wav, load_wav_mono, main as rx_main, receive_wav
 from tx_wav import build_payload, generate_wav, main as tx_main
 
 
@@ -30,6 +30,10 @@ def test_generate_and_decode_wav_round_trip(tmp_path):
     assert result.crc_ok
     assert result.payload_valid
     assert result.text == payload
+
+    receive_result = receive_wav(path, symbol_duration=0.01, f0=1_000.0, f1=2_000.0)
+    assert receive_result.frame_result.text == payload
+    assert receive_result.confidence > 0.9
 
 
 def test_generated_wav_decodes_with_leading_silence(tmp_path):
@@ -101,3 +105,36 @@ def test_tx_and_rx_main_functions_round_trip(tmp_path, capsys):
     assert rx_code == 0
     assert "Payload: pu5lrk Teste" in output
     assert output.rstrip().endswith("pu5lrk Teste")
+
+
+def test_rx_main_verbose_prints_receive_diagnostics(tmp_path, capsys):
+    path = tmp_path / "cli.wav"
+    generate_wav(
+        "Teste",
+        path,
+        callsign="pu5lrk",
+        sample_rate=8_000,
+        symbol_duration=0.01,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+
+    code = rx_main(
+        [
+            "--verbose",
+            "--symbol-duration",
+            "0.01",
+            "--f0",
+            "1000",
+            "--f1",
+            "2000",
+            str(path),
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "pu5lrk Teste" in output
+    assert "Start offset:" in output
+    assert "Offsets tried:" in output
+    assert "Confidence:" in output

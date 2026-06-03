@@ -172,12 +172,7 @@ def _bits_to_int(bits: list[int]) -> int:
     return value
 
 
-def parse_frame_from_stream(bits: list[int]) -> FrameResult:
-    """Find SYNC in a bit stream and parse the first complete HFText frame."""
-    sync_index = find_sync(bits)
-    if sync_index is None:
-        return FrameResult(False, False, False, "", error="sync not found")
-
+def _parse_frame_at_sync(bits: list[int], sync_index: int) -> FrameResult:
     length_start = sync_index + len(SYNC_BITS)
     length_end = length_start + BITS_PER_BYTE
     if len(bits) < length_end:
@@ -229,3 +224,29 @@ def parse_frame_from_stream(bits: list[int]) -> FrameResult:
         error=result.error,
         sync_index=sync_index,
     )
+
+
+def parse_frame_from_stream(bits: list[int]) -> FrameResult:
+    """Find SYNC candidates and return the first valid HFText frame."""
+    if len(bits) < len(SYNC_BITS):
+        return FrameResult(False, False, False, "", error="sync not found")
+    for bit in bits:
+        if bit not in (0, 1):
+            raise ValueError(f"invalid bit: {bit}")
+
+    first_candidate: FrameResult | None = None
+    last_start = len(bits) - len(SYNC_BITS)
+    for sync_index in range(last_start + 1):
+        if bits[sync_index : sync_index + len(SYNC_BITS)] != SYNC_BITS:
+            continue
+
+        result = _parse_frame_at_sync(bits, sync_index)
+        if first_candidate is None:
+            first_candidate = result
+        if result.crc_ok and result.payload_valid:
+            return result
+
+    if first_candidate is not None:
+        return first_candidate
+
+    return FrameResult(False, False, False, "", error="sync not found")

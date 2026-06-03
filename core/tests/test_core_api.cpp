@@ -21,7 +21,8 @@ int main() {
     assert(result.text == "pu5lrk Teste");
     assert(result.syncIndex == config.preambleBits);
     assert(result.startOffset == 0);
-    assert(result.offsetsTried == 1);
+    assert(result.offsetsTried >= 1);
+    assert(result.confidence > 0.9F);
 
     const int halfSymbolSamples = static_cast<int>(config.sampleRate * config.symbolDurationSec / 2.0F);
     std::vector<float> delayedAudio(static_cast<std::size_t>(halfSymbolSamples), 0.0F);
@@ -48,6 +49,7 @@ int main() {
     assert(frameOnlyResult.payloadValid);
     assert(frameOnlyResult.text == "abc");
     assert(frameOnlyResult.syncIndex == 0);
+    assert(frameOnlyResult.confidence > 0.9F);
 
     config.preambleBits = -1;
     bool rejected = false;

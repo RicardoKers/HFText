@@ -12,6 +12,7 @@ Critérios de aceitação:
 - aceitar números;
 - aceitar espaço;
 - aceitar pontuação básica;
+- aceitar `á`, `é`, `í`, `ó`, `ú`, `ã`, `õ` e `ç`, incluindo versões maiúsculas por meio de modificadores e `shift`;
 - limitar o tamanho máximo da mensagem a 127 símbolos codificados do alfabeto reduzido.
 
 ### RF002 — Codificação de texto em bits

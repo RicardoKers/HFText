@@ -49,11 +49,21 @@ Para cada símbolo:
 - decidir `0` se `energia(f0) >= energia(f1)`;
 - decidir `1` se `energia(f1) > energia(f0)`.
 
+O demodulador tambem calcula uma confianca simples por simbolo:
+
+```text
+confianca = abs(energia(f1) - energia(f0)) / (energia(f1) + energia(f0))
+```
+
+Quando as duas energias sao zero, a confianca e zero. O resultado final de recepcao pode informar a media dessa confianca nos bits do quadro detectado. Essa metrica e apenas diagnostica: nao substitui a validacao por CRC.
+
 Áudio restante menor que uma janela completa de símbolo deve ser ignorado.
 
 Esta versão assume que o áudio está alinhado à janela de símbolo do demodulador.
 
 Após a demodulação, o receptor procura o `SYNC` no fluxo de bits e descarta preâmbulo, silêncio demodulado ou outros bits anteriores ao quadro.
+
+Se um `SYNC` candidato aparecer em ruido antes do quadro real, o receptor deve continuar procurando outros candidatos ate encontrar um quadro completo com CRC e payload validos. Caso nenhum candidato seja valido, o primeiro erro encontrado pode ser usado como diagnostico.
 
 O receptor Python também pode tentar múltiplos deslocamentos iniciais de amostra dentro de uma janela de símbolo. Para cada offset candidato:
 
@@ -102,3 +112,17 @@ Também deve haver efeitos determinísticos simples para testes de:
 - clipping simétrico;
 - desvio de frequência por sinal analítico;
 - fading por blocos com ganho constante por bloco.
+
+## Repeticao futura
+
+A repeticao simples deve ser avaliada primeiro como experimento de DSP/simulacao, sem alterar o protocolo v0.1.
+
+O experimento recomendado e aplicar repeticao por bit ou simbolo antes da modulacao e recuperar por voto majoritario depois da demodulacao. A metrica de confianca pode ser usada como apoio ao diagnostico, mas a aceitacao da mensagem deve continuar dependendo de CRC valido.
+
+A simulacao Python possui helpers experimentais para repetir bits e recuperar por voto majoritario. Eles ainda nao fazem parte dos scripts TX/RX normais nem do core C++.
+
+## Interleaving futuro
+
+O interleaving deve ser avaliado primeiro em Python como experimento independente. A primeira forma experimental usa blocos retangulares completos: escreve bits por linhas e transmite por colunas, espalhando rajadas de erro no tempo. O deinterleaving faz o inverso antes do voto majoritario ou da validacao por CRC.
+
+Assim como a repeticao, esse recurso ainda nao faz parte do HFText Basic v0.1 nem dos scripts TX/RX normais.

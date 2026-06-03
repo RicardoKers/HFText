@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from hftext.channel import add_awgn, bit_error_count, bit_error_rate
-from hftext.demodulator import demodulate_bits_2fsk
+from hftext.demodulator import BitDecision, demodulate_bit_decisions_2fsk
 from hftext.frame import FrameResult, build_transmission, parse_frame_from_stream
 from hftext.modulator import (
     DEFAULT_F0,
@@ -32,6 +32,7 @@ class SweepResult:
     wav_path: Path
     bit_errors: int
     ber: float
+    confidence: float
     frame_result: FrameResult
 
 
@@ -44,6 +45,8 @@ class AggregateResult:
     payload_successes: int
     avg_ber: float
     max_ber: float
+    avg_confidence: float
+    min_confidence: float
     min_bit_errors: int
     max_bit_errors: int
 
@@ -63,6 +66,13 @@ def snr_label(snr_db: float | None) -> str:
     sign = "p" if snr_db >= 0 else "m"
     value = str(abs(snr_db)).replace(".", "p")
     return f"snr_{sign}{value}db"
+
+
+def mean_confidence(decisions: list[BitDecision]) -> float:
+    """Return the average symbol confidence for a demodulated trial."""
+    if not decisions:
+        return 0.0
+    return sum(decision.confidence for decision in decisions) / len(decisions)
 
 
 def run_sweep(
@@ -109,7 +119,8 @@ def run_sweep(
             if save_wavs and (trial == 0 or snr_db is None):
                 save_wav(wav_path, audio, sample_rate)
 
-            decoded_bits = demodulate_bits_2fsk(audio, sample_rate, symbol_duration, f0, f1)
+            decisions = demodulate_bit_decisions_2fsk(audio, sample_rate, symbol_duration, f0, f1)
+            decoded_bits = [decision.bit for decision in decisions]
             frame_result = parse_frame_from_stream(decoded_bits)
             results.append(
                 SweepResult(
@@ -120,6 +131,7 @@ def run_sweep(
                     wav_path=wav_path if save_wavs and (trial == 0 or snr_db is None) else Path(""),
                     bit_errors=bit_error_count(bits, decoded_bits),
                     ber=bit_error_rate(bits, decoded_bits),
+                    confidence=mean_confidence(decisions),
                     frame_result=frame_result,
                 )
             )
@@ -137,6 +149,7 @@ def aggregate_results(results: list[SweepResult]) -> list[AggregateResult]:
         group = [result for result in results if result.label == label]
         bit_errors = [result.bit_errors for result in group]
         bers = [result.ber for result in group]
+        confidences = [result.confidence for result in group]
         aggregates.append(
             AggregateResult(
                 label=label,
@@ -146,6 +159,8 @@ def aggregate_results(results: list[SweepResult]) -> list[AggregateResult]:
                 payload_successes=sum(1 for result in group if result.frame_result.payload_valid),
                 avg_ber=sum(bers) / len(bers),
                 max_ber=max(bers),
+                avg_confidence=sum(confidences) / len(confidences),
+                min_confidence=min(confidences),
                 min_bit_errors=min(bit_errors),
                 max_bit_errors=max(bit_errors),
             )
@@ -166,6 +181,7 @@ def write_trials(path: str | Path, results: list[SweepResult]) -> None:
                 "wav_path",
                 "bit_errors",
                 "ber",
+                "confidence",
                 "frame_detected",
                 "crc_ok",
                 "payload_valid",
@@ -183,6 +199,7 @@ def write_trials(path: str | Path, results: list[SweepResult]) -> None:
                     result.wav_path,
                     result.bit_errors,
                     f"{result.ber:.6f}",
+                    f"{result.confidence:.6f}",
                     result.frame_result.frame_detected,
                     result.frame_result.crc_ok,
                     result.frame_result.payload_valid,
@@ -207,6 +224,8 @@ def write_summary(path: str | Path, results: list[AggregateResult]) -> None:
                 "payload_success_rate",
                 "avg_ber",
                 "max_ber",
+                "avg_confidence",
+                "min_confidence",
                 "min_bit_errors",
                 "max_bit_errors",
             ]
@@ -223,6 +242,8 @@ def write_summary(path: str | Path, results: list[AggregateResult]) -> None:
                     f"{result.payload_success_rate:.6f}",
                     f"{result.avg_ber:.6f}",
                     f"{result.max_ber:.6f}",
+                    f"{result.avg_confidence:.6f}",
+                    f"{result.min_confidence:.6f}",
                     result.min_bit_errors,
                     result.max_bit_errors,
                 ]
@@ -231,13 +252,14 @@ def write_summary(path: str | Path, results: list[AggregateResult]) -> None:
 
 def print_summary(results: list[SweepResult]) -> None:
     """Print a compact human-readable sweep table."""
-    print("label,snr_db,trials,crc_success_rate,payload_success_rate,avg_ber,max_ber,min_errors,max_errors")
+    print("label,snr_db,trials,crc_success_rate,payload_success_rate,avg_ber,max_ber,avg_confidence,min_confidence,min_errors,max_errors")
     for result in aggregate_results(results):
         snr = "clean" if result.snr_db is None else f"{result.snr_db:g}"
         print(
             f"{result.label},{snr},{result.trials},"
             f"{result.crc_success_rate:.3f},{result.payload_success_rate:.3f},"
             f"{result.avg_ber:.6f},{result.max_ber:.6f},"
+            f"{result.avg_confidence:.6f},{result.min_confidence:.6f},"
             f"{result.min_bit_errors},{result.max_bit_errors}"
         )
 

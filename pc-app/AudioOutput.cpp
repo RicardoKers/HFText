@@ -3,6 +3,7 @@
 #include "wav_io.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -72,6 +73,9 @@ void AudioOutput::playWavAsync(const std::string& path, unsigned int deviceId) {
     }
 
     stop();
+    durationSeconds_ = 0.0;
+    positionSeconds_ = 0.0;
+    playing_ = false;
     thread_ = std::thread(&AudioOutput::playThread, this, path, deviceId);
 }
 
@@ -88,6 +92,20 @@ void AudioOutput::stop() {
     if (thread_.joinable()) {
         thread_.join();
     }
+    playing_ = false;
+    positionSeconds_ = 0.0;
+}
+
+bool AudioOutput::isPlaying() const {
+    return playing_.load();
+}
+
+double AudioOutput::durationSeconds() const {
+    return durationSeconds_.load();
+}
+
+double AudioOutput::positionSeconds() const {
+    return positionSeconds_.load();
 }
 
 void AudioOutput::playThread(std::string path, unsigned int deviceId) {
@@ -102,6 +120,8 @@ void AudioOutput::playThread(std::string path, unsigned int deviceId) {
         if (wav.sampleRate <= 0 || wav.samples.empty()) {
             throw std::runtime_error("WAV sem audio valido");
         }
+        durationSeconds_ = static_cast<double>(wav.samples.size()) / static_cast<double>(wav.sampleRate);
+        positionSeconds_ = 0.0;
 
         std::vector<std::int16_t> pcm;
         pcm.reserve(wav.samples.size());
@@ -138,10 +158,16 @@ void AudioOutput::playThread(std::string path, unsigned int deviceId) {
         checkMmResult(waveOutPrepareHeader(handle, &header, sizeof(header)), "falha ao preparar buffer de audio");
         headerPrepared = true;
         checkMmResult(waveOutWrite(handle, &header, sizeof(header)), "falha ao iniciar audio");
+        playing_ = true;
+        const auto startedAt = std::chrono::steady_clock::now();
 
         while ((header.dwFlags & WHDR_DONE) == 0) {
             WaitForSingleObject(event, 100);
+            const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - startedAt).count();
+            positionSeconds_ = std::clamp(elapsed, 0.0, durationSeconds_.load());
         }
+        positionSeconds_ = durationSeconds_.load();
+        playing_ = false;
 
         waveOutUnprepareHeader(handle, &header, sizeof(header));
         headerPrepared = false;
@@ -153,6 +179,8 @@ void AudioOutput::playThread(std::string path, unsigned int deviceId) {
         std::lock_guard<std::mutex> lock(mutex_);
         currentHandle_ = nullptr;
     } catch (...) {
+        playing_ = false;
+        positionSeconds_ = 0.0;
         if (handle != nullptr) {
             waveOutReset(handle);
             if (headerPrepared) {

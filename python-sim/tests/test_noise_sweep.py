@@ -35,6 +35,9 @@ def test_run_sweep_writes_wavs_and_summary(tmp_path):
     assert (tmp_path / "trials.csv").exists()
     assert results[0].frame_result.crc_ok
     assert results[0].frame_result.text == "pu5lrk Teste"
+    assert results[0].confidence > 0.9
+    assert "confidence" in (tmp_path / "trials.csv").read_text(encoding="utf-8")
+    assert "avg_confidence" in (tmp_path / "summary.csv").read_text(encoding="utf-8")
 
 
 def test_aggregate_results_groups_trials_by_snr(tmp_path):
@@ -58,6 +61,8 @@ def test_aggregate_results_groups_trials_by_snr(tmp_path):
     assert aggregate[0].label == "snr_p12p0db"
     assert aggregate[0].trials == 3
     assert aggregate[0].crc_success_rate == 1.0
+    assert aggregate[0].avg_confidence > 0.0
+    assert aggregate[0].min_confidence > 0.0
 
 
 def test_main_prints_summary_and_returns_success(tmp_path, capsys):
@@ -86,6 +91,7 @@ def test_main_prints_summary_and_returns_success(tmp_path, capsys):
 
     assert code == 0
     assert "label,snr_db,trials" in output
+    assert "avg_confidence" in output
     assert Path(tmp_path / "clean.wav").exists()
     assert Path(tmp_path / "summary.csv").exists()
     assert Path(tmp_path / "trials.csv").exists()

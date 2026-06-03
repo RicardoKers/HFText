@@ -3,12 +3,12 @@
 #include "AudioInput.h"
 #include "AudioOutput.h"
 #include "ModemController.h"
-
-#include "hftext_streaming_receiver.h"
+#include "WaterfallWidget.h"
 
 #include <QMainWindow>
 
 class QLineEdit;
+class QLabel;
 class QPlainTextEdit;
 class QPushButton;
 class QComboBox;
@@ -31,24 +31,29 @@ private slots:
     void stopTransmit();
     void startReceive();
     void stopReceive();
+    void clearReceivedText();
     void updateRxLevel();
+    void updateTxProgress();
+    void sanitizeTxMessage();
+    void updateTxEstimate();
 
 private:
     void appendLog(const QString& text);
     void populateInputDevices();
     void populateOutputDevices();
     hftext::ModemConfig readConfig() const;
+    hftext::ModemConfig readRxConfig() const;
     void showDecodeResult(const hftext::DecodeResult& result);
 
     AudioInput audioInput_;
     AudioOutput audioOutput_;
     ModemController controller_;
-    hftext::StreamingReceiver streamingReceiver_;
     QString lastWavPath_;
     QString lastRxWavPath_;
     QLineEdit* callsignEdit_ = nullptr;
     QPlainTextEdit* messageEdit_ = nullptr;
     QSpinBox* sampleRateSpin_ = nullptr;
+    QSpinBox* rxSampleRateSpin_ = nullptr;
     QDoubleSpinBox* symbolDurationSpin_ = nullptr;
     QDoubleSpinBox* frequency0Spin_ = nullptr;
     QDoubleSpinBox* frequency1Spin_ = nullptr;
@@ -56,7 +61,11 @@ private:
     QSpinBox* preambleBitsSpin_ = nullptr;
     QComboBox* inputDeviceCombo_ = nullptr;
     QComboBox* outputDeviceCombo_ = nullptr;
+    QLabel* txEstimateLabel_ = nullptr;
+    QProgressBar* txProgressBar_ = nullptr;
     QProgressBar* rxLevelBar_ = nullptr;
+    QProgressBar* rxQualityBar_ = nullptr;
+    WaterfallWidget* waterfallWidget_ = nullptr;
     QPlainTextEdit* receivedEdit_ = nullptr;
     QPlainTextEdit* logEdit_ = nullptr;
     QPushButton* generateButton_ = nullptr;
@@ -65,5 +74,7 @@ private:
     QPushButton* stopTransmitButton_ = nullptr;
     QPushButton* startReceiveButton_ = nullptr;
     QPushButton* stopReceiveButton_ = nullptr;
+    QPushButton* clearReceivedButton_ = nullptr;
     QTimer* rxLevelTimer_ = nullptr;
+    QTimer* txProgressTimer_ = nullptr;
 };

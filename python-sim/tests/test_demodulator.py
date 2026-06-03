@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from hftext.demodulator import demodulate_bits_2fsk, tone_energy
+from hftext.demodulator import demodulate_bit_decisions_2fsk, demodulate_bits_2fsk, tone_energy
 from hftext.frame import build_frame, parse_frame
 from hftext.modulator import modulate_bits_2fsk
 
@@ -33,6 +33,23 @@ def test_demodulate_bits_recovers_clean_modulated_bits():
     )
 
     assert decoded == bits
+
+
+def test_demodulate_bit_decisions_report_confidence():
+    audio = modulate_bits_2fsk([0, 1], sample_rate=8_000, symbol_duration=0.05, f0=1_000.0, f1=2_000.0)
+
+    decisions = demodulate_bit_decisions_2fsk(
+        audio,
+        sample_rate=8_000,
+        symbol_duration=0.05,
+        f0=1_000.0,
+        f1=2_000.0,
+    )
+    silent = demodulate_bit_decisions_2fsk(np.zeros_like(audio), sample_rate=8_000, symbol_duration=0.05)
+
+    assert [decision.bit for decision in decisions] == [0, 1]
+    assert all(decision.confidence > 0.9 for decision in decisions)
+    assert all(decision.confidence == 0.0 for decision in silent)
 
 
 def test_demodulate_bits_ignores_trailing_partial_symbol():

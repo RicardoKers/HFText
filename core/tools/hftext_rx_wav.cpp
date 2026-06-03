@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
             std::cout << "Offsets tried: " << result.offsetsTried << "\n";
             std::cout << "Sync index: " << result.syncIndex << " bits\n";
             std::cout << "Length: " << result.length << " symbols\n";
+            std::cout << "Confidence: " << result.confidence * 100.0F << "%\n";
         };
 
         if (!result.frameDetected) {
