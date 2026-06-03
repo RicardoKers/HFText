@@ -43,9 +43,16 @@ float pcm16ToFloat(std::int16_t sample) {
 
 }  // namespace
 
+double AudioInput::CaptureStats::durationSeconds() const {
+    if (sampleRate <= 0) {
+        return 0.0;
+    }
+    return static_cast<double>(sampleCount) / static_cast<double>(sampleRate);
+}
+
 AudioInput::~AudioInput() {
     try {
-        stopAndSave({});
+        (void)stopAndSave({});
     } catch (...) {
     }
 }
@@ -68,17 +75,24 @@ std::vector<AudioInput::DeviceInfo> AudioInput::devices() const {
 #endif
 }
 
+void AudioInput::setSamplesCallback(SamplesCallback callback) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    samplesCallback_ = std::move(callback);
+}
+
 void AudioInput::start(unsigned int deviceId, int sampleRate) {
     if (sampleRate <= 0) {
         throw std::invalid_argument("sample rate invalido");
     }
-    stopAndSave({});
+    (void)stopAndSave({});
 
     {
         std::lock_guard<std::mutex> lock(mutex_);
         samples_.clear();
         lastError_.clear();
         sampleRate_ = sampleRate;
+        peak_ = 0.0F;
+        clippedSamples_ = 0;
     }
     level_ = 0.0F;
     stopRequested_ = false;
@@ -86,7 +100,7 @@ void AudioInput::start(unsigned int deviceId, int sampleRate) {
     thread_ = std::thread(&AudioInput::recordThread, this, deviceId, sampleRate);
 }
 
-void AudioInput::stopAndSave(const std::string& path) {
+AudioInput::CaptureStats AudioInput::stopAndSave(const std::string& path) {
     stopRequested_ = true;
 #ifdef _WIN32
     {
@@ -113,6 +127,14 @@ void AudioInput::stopAndSave(const std::string& path) {
         }
         hftext::tools::writeMonoPcm16Wav(path, samples, savedSampleRate);
     }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    return CaptureStats{
+        sampleRate_,
+        samples_.size(),
+        peak_,
+        clippedSamples_,
+    };
 }
 
 bool AudioInput::isRecording() const {
@@ -175,19 +197,35 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
                 const auto* raw = reinterpret_cast<const std::int16_t*>(header.lpData);
                 const std::size_t sampleCount = header.dwBytesRecorded / sizeof(std::int16_t);
                 float peak = 0.0F;
+                std::size_t clippedSamples = 0;
                 std::vector<float> chunk;
                 chunk.reserve(sampleCount);
                 for (std::size_t sample = 0; sample < sampleCount; ++sample) {
                     const float value = pcm16ToFloat(raw[sample]);
-                    peak = (std::max)(peak, std::abs(value));
+                    const float absValue = std::abs(value);
+                    peak = (std::max)(peak, absValue);
+                    if (absValue >= 0.98F) {
+                        ++clippedSamples;
+                    }
                     chunk.push_back(value);
                 }
 
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     samples_.insert(samples_.end(), chunk.begin(), chunk.end());
+                    peak_ = (std::max)(peak_, peak);
+                    clippedSamples_ += clippedSamples;
                 }
                 level_ = peak;
+
+                SamplesCallback callback;
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    callback = samplesCallback_;
+                }
+                if (callback) {
+                    callback(chunk);
+                }
 
                 header.dwBytesRecorded = 0;
                 header.dwFlags &= ~WHDR_DONE;

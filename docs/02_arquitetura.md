@@ -78,6 +78,8 @@ struct DecodeResult {
     std::string error;
     int length = 0;
     int syncIndex = -1;
+    int startOffset = 0;
+    int offsetsTried = 1;
     float confidence = 0.0f;
 };
 
@@ -91,7 +93,16 @@ DecodeResult demodulateSamples(
     const ModemConfig& config
 );
 
+class StreamingReceiver {
+public:
+    explicit StreamingReceiver(const ModemConfig& config);
+    void reset();
+    std::vector<DecodeResult> pushSamples(const std::vector<float>& samples);
+};
+
 Essas interfaces de alto nível devem ser a entrada preferencial para ferramentas CLI, aplicação PC e futura integração Android.
+Quando `syncSearch` está habilitado, `demodulateSamples` pode tentar múltiplos offsets iniciais de amostra dentro de um símbolo antes de escolher o primeiro quadro com CRC e payload válidos.
+`StreamingReceiver` é a base para recepção contínua: ele acumula blocos curtos de amostras, tenta recuperar quadros completos e emite resultados válidos sem depender de um WAV fechado.
 As APIs internas de encoder, frame, modulador e demodulador continuam disponíveis para testes e validações de baixo nível.
 Simulação Python
 

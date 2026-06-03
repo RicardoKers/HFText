@@ -112,4 +112,10 @@ A captura RX basica tambem foi iniciada com `AudioInput`.
 
 Nesta etapa, o botao `Receber` inicia a gravacao pelo dispositivo de entrada selecionado e o botao `Parar RX` salva o audio recebido em WAV. O indicador `Nivel RX` mostra o pico aproximado dos buffers recebidos.
 
-Ainda nao ha demodulacao em tempo real nem controle automatico de ganho.
+Ao parar RX, o app registra no log a duracao capturada, o pico de audio e uma contagem aproximada de amostras proximas de clipping. Em seguida, tenta decodificar automaticamente o WAV salvo e mostra o resultado na area de texto recebido.
+
+Ao usar `Decodificar WAV` manualmente, o app tambem registra duracao, sample rate, pico e clipping aproximado do arquivo aberto antes de tentar recuperar o quadro.
+
+Durante a captura RX, o app tambem envia blocos de audio para `StreamingReceiver`. Quando um quadro valido e recuperado antes de parar a gravacao, o texto aparece na area recebida e o evento e registrado no log como `RX streaming`.
+
+Ainda nao ha controle automatico de ganho nem rastreamento continuo fino de clock.

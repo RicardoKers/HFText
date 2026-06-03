@@ -62,9 +62,25 @@ O receptor Python também pode tentar múltiplos deslocamentos iniciais de amost
 - validar CRC e payload;
 - aceitar o primeiro resultado válido.
 
-O passo padrão da busca é `samples_per_symbol / 20`, com mínimo de 1 amostra. A CLI permite ajustar esse passo com `--offset-step`.
+O passo padrão da busca é `samples_per_symbol / 20`, com mínimo de 1 amostra. A CLI Python permite ajustar esse passo com `--offset-step`.
+
+O núcleo C++ também usa busca de offset inicial quando `syncSearch` está habilitado, usando o mesmo passo padrão de `samples_per_symbol / 20`. O resultado de decodificação informa o offset aceito e quantos offsets foram testados. A CLI C++ `hftext_rx_wav` pode exibir esses dados com `--verbose`.
 
 Sincronismo temporal fino contínuo, rastreamento de clock e recuperação em áudio sem alinhamento aproximado ficam para etapa posterior.
+
+## Recepcao em fluxo
+
+Para escuta continua, o receptor nao deve depender de um WAV infinito. O app deve capturar blocos pequenos de audio e envia-los a um receptor persistente no core.
+
+O primeiro passo no C++ e `StreamingReceiver`, que:
+
+- recebe blocos de amostras por `pushSamples`;
+- acumula temporariamente as amostras em buffer interno;
+- tenta decodificar quadros completos com o receptor offline existente;
+- emite `DecodeResult` quando CRC e payload sao validos;
+- descarta amostras consumidas apos um quadro recuperado.
+
+Esta primeira versao ainda nao implementa rastreamento continuo de clock nem demodulacao incremental por simbolo; ela cria uma ponte segura entre o modo WAV offline e a futura recepcao em tempo real.
 
 ## Canal simulado
 

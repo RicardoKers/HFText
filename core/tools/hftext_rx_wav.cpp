@@ -17,7 +17,8 @@ void printUsage(const char* program) {
         << "  --symbol-duration <s>       padrao: 0.5\n"
         << "  --f0 <Hz>                   padrao: 1200\n"
         << "  --f1 <Hz>                   padrao: 1600\n"
-        << "  --no-sync-search            interpreta o fluxo desde o primeiro bit\n";
+        << "  --no-sync-search            interpreta o fluxo desde o primeiro bit\n"
+        << "  --verbose                   imprime diagnostico de sincronismo\n";
 }
 
 }  // namespace
@@ -25,6 +26,7 @@ void printUsage(const char* program) {
 int main(int argc, char** argv) {
     hftext::ModemConfig config;
     std::string inputPath;
+    bool verbose = false;
 
     try {
         for (int index = 1; index < argc; ++index) {
@@ -48,6 +50,8 @@ int main(int argc, char** argv) {
                 config.frequency1Hz = std::stof(requireValue(arg));
             } else if (arg == "--no-sync-search") {
                 config.syncSearch = false;
+            } else if (arg == "--verbose" || arg == "-v") {
+                verbose = true;
             } else if (inputPath.empty()) {
                 inputPath = arg;
             } else {
@@ -63,9 +67,20 @@ int main(int argc, char** argv) {
         const auto wav = hftext::tools::readPcm16Wav(inputPath);
         config.sampleRate = wav.sampleRate;
         const auto result = hftext::demodulateSamples(wav.samples, config);
+        auto printDiagnostics = [&]() {
+            if (!verbose) {
+                return;
+            }
+            std::cout << "Sample rate: " << config.sampleRate << " Hz\n";
+            std::cout << "Start offset: " << result.startOffset << " samples\n";
+            std::cout << "Offsets tried: " << result.offsetsTried << "\n";
+            std::cout << "Sync index: " << result.syncIndex << " bits\n";
+            std::cout << "Length: " << result.length << " symbols\n";
+        };
 
         if (!result.frameDetected) {
             std::cout << "Quadro nao detectado: " << result.error << "\n";
+            printDiagnostics();
             return 1;
         }
         if (!result.crcOk) {
@@ -73,6 +88,7 @@ int main(int argc, char** argv) {
             if (!result.error.empty()) {
                 std::cout << "Erro: " << result.error << "\n";
             }
+            printDiagnostics();
             return 2;
         }
         if (!result.payloadValid) {
@@ -80,10 +96,12 @@ int main(int argc, char** argv) {
             if (!result.error.empty()) {
                 std::cout << "Erro: " << result.error << "\n";
             }
+            printDiagnostics();
             return 3;
         }
 
         std::cout << result.text << "\n";
+        printDiagnostics();
         return 0;
     } catch (const std::exception& exc) {
         std::cerr << "Erro: " << exc.what() << "\n";

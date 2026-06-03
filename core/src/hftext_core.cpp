@@ -5,12 +5,41 @@
 #include "hftext_modulator.h"
 #include "hftext_result.h"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace hftext {
 
 static_assert(ModemConfig{}.sampleRate == 48000, "unexpected default sample rate");
 static_assert(ModemConfig{}.preambleBits == 64, "unexpected default preamble length");
+
+namespace {
+
+int samplesPerSymbol(const ModemConfig& config) {
+    const auto samples = static_cast<int>(std::lround(static_cast<double>(config.sampleRate) * config.symbolDurationSec));
+    if (samples <= 0) {
+        throw std::invalid_argument("symbol duration is too short for sample_rate");
+    }
+    return samples;
+}
+
+int defaultOffsetStep(const ModemConfig& config) {
+    return std::max(1, samplesPerSymbol(config) / 20);
+}
+
+DecodeResult demodulateAndParse(
+    const std::vector<float>& samples,
+    const ModemConfig& config,
+    int startOffset
+) {
+    const auto bits = demodulateBits2Fsk(samples, config, startOffset);
+    auto result = parseFrameFromStream(bits);
+    result.startOffset = startOffset;
+    return result;
+}
+
+}  // namespace
 
 std::vector<float> modulateText(const std::string& text, const ModemConfig& config) {
     if (config.preambleBits < 0) {
@@ -33,8 +62,43 @@ std::vector<float> modulateText(const std::string& text, const ModemConfig& conf
 }
 
 DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemConfig& config) {
-    const auto bits = demodulateBits2Fsk(samples, config);
-    return config.syncSearch ? parseFrameFromStream(bits) : parseFrame(bits);
+    if (!config.syncSearch) {
+        const auto bits = demodulateBits2Fsk(samples, config);
+        auto result = parseFrame(bits);
+        result.startOffset = 0;
+        result.offsetsTried = 1;
+        return result;
+    }
+
+    const int symbolSamples = samplesPerSymbol(config);
+    const int step = defaultOffsetStep(config);
+    DecodeResult fallback;
+    bool hasFallback = false;
+    int offsetsTried = 0;
+
+    for (int startOffset = 0; startOffset < symbolSamples; startOffset += step) {
+        auto result = demodulateAndParse(samples, config, startOffset);
+        ++offsetsTried;
+        result.offsetsTried = offsetsTried;
+
+        if (!hasFallback || (result.frameDetected && !fallback.frameDetected)) {
+            fallback = result;
+            hasFallback = true;
+        }
+        if (result.crcOk && result.payloadValid) {
+            return result;
+        }
+    }
+
+    if (hasFallback) {
+        fallback.offsetsTried = offsetsTried;
+        return fallback;
+    }
+
+    DecodeResult result;
+    result.offsetsTried = offsetsTried;
+    result.error = "sync not found";
+    return result;
 }
 
 }  // namespace hftext

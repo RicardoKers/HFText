@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
@@ -149,6 +150,12 @@ MainWindow::MainWindow(QWidget* parent)
     connect(rxLevelTimer_, &QTimer::timeout, this, &MainWindow::updateRxLevel);
 }
 
+MainWindow::~MainWindow() {
+    audioInput_.setSamplesCallback({});
+    (void)audioInput_.stopAndSave({});
+    audioOutput_.stop();
+}
+
 void MainWindow::generateWav() {
     const QString outputPath = QFileDialog::getSaveFileName(
         this,
@@ -187,9 +194,21 @@ void MainWindow::decodeWav() {
 
     try {
         controller_.setConfig(readConfig());
+        const auto stats = controller_.analyzeWav(toStdString(inputPath));
+        appendLog(
+            "WAV duracao: " + QString::number(stats.durationSeconds(), 'f', 2)
+            + " s, sample rate: " + QString::number(stats.sampleRate)
+            + " Hz, pico: " + QString::number(stats.peak * 100.0F, 'f', 1)
+            + "%, clipping aprox.: " + QString::number(static_cast<qulonglong>(stats.clippedSamples))
+            + " samples"
+        );
         const auto result = controller_.decodeWav(toStdString(inputPath));
         showDecodeResult(result);
         appendLog("WAV decodificado: " + inputPath);
+        appendLog(
+            "RX offset: " + QString::number(result.startOffset)
+            + " amostras, tentativas: " + QString::number(result.offsetsTried)
+        );
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Erro ao decodificar WAV: " + QString::fromUtf8(exc.what()));
@@ -239,6 +258,21 @@ void MainWindow::startReceive() {
 
     try {
         const auto config = readConfig();
+        streamingReceiver_.setConfig(config);
+        audioInput_.setSamplesCallback([this](const std::vector<float>& samples) {
+            const auto results = streamingReceiver_.pushSamples(samples);
+            for (const auto& result : results) {
+                QMetaObject::invokeMethod(this, [this, result]() {
+                    showDecodeResult(result);
+                    appendLog(
+                        "RX streaming: " + QString::fromStdString(result.text)
+                        + " (offset " + QString::number(result.startOffset)
+                        + ", tentativas " + QString::number(result.offsetsTried)
+                        + ")"
+                    );
+                });
+            }
+        });
         const unsigned int deviceId = inputDeviceCombo_->currentData().toUInt();
         audioInput_.start(deviceId, config.sampleRate);
         lastRxWavPath_ = outputPath;
@@ -257,7 +291,9 @@ void MainWindow::stopReceive() {
     }
 
     try {
-        audioInput_.stopAndSave(toStdString(lastRxWavPath_));
+        controller_.setConfig(readConfig());
+        const auto stats = audioInput_.stopAndSave(toStdString(lastRxWavPath_));
+        audioInput_.setSamplesCallback({});
         rxLevelTimer_->stop();
         rxLevelBar_->setValue(0);
         const std::string error = audioInput_.lastError();
@@ -267,6 +303,25 @@ void MainWindow::stopReceive() {
             return;
         }
         appendLog("RX salvo: " + lastRxWavPath_);
+        appendLog(
+            "RX duracao: " + QString::number(stats.durationSeconds(), 'f', 2)
+            + " s, pico: " + QString::number(stats.peak * 100.0F, 'f', 1)
+            + "%, clipping aprox.: " + QString::number(static_cast<qulonglong>(stats.clippedSamples))
+            + " samples"
+        );
+        const auto result = controller_.decodeWav(toStdString(lastRxWavPath_));
+        showDecodeResult(result);
+        appendLog(
+            "RX offset: " + QString::number(result.startOffset)
+            + " amostras, tentativas: " + QString::number(result.offsetsTried)
+        );
+        if (result.crcOk && result.payloadValid) {
+            appendLog("RX decodificado automaticamente com CRC valido.");
+        } else if (result.frameDetected) {
+            appendLog("RX decodificado automaticamente, mas sem payload valido.");
+        } else {
+            appendLog("RX salvo, mas quadro nao detectado automaticamente.");
+        }
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Erro ao parar RX: " + QString::fromUtf8(exc.what()));

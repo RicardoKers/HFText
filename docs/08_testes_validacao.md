@@ -171,3 +171,22 @@ Cada recepção deve salvar opcionalmente:
 - resultado do CRC;
 - texto recebido;
 - confiança estimada.
+
+## Validacao no app PC
+
+No app PC, o fluxo inicial de validacao com audio real e:
+
+- gerar um WAV TX com a configuracao desejada;
+- transmitir explicitamente o WAV pelo dispositivo de saida selecionado;
+- iniciar RX pelo dispositivo de entrada selecionado;
+- parar RX para salvar o WAV capturado;
+- registrar duracao, pico de audio e amostras proximas de clipping;
+- tentar decodificar automaticamente o WAV salvo;
+- registrar offset inicial aceito e quantidade de offsets testados;
+- aceitar o texto recebido apenas se o CRC estiver valido.
+
+Ao abrir um WAV manualmente no app PC, a validacao tambem deve registrar duracao, sample rate, pico de audio e amostras proximas de clipping antes da decodificacao.
+
+Durante uma captura RX ativa, o app tambem deve tentar decodificacao por fluxo com `StreamingReceiver`. Se um quadro valido for encontrado antes de parar RX, o log deve registrar `RX streaming` e a area de texto recebido deve mostrar a mensagem recuperada.
+
+O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. Ele serve como alerta operacional para reduzir ganho ou volume quando necessario.

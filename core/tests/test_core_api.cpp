@@ -20,6 +20,20 @@ int main() {
     assert(result.payloadValid);
     assert(result.text == "pu5lrk Teste");
     assert(result.syncIndex == config.preambleBits);
+    assert(result.startOffset == 0);
+    assert(result.offsetsTried == 1);
+
+    const int halfSymbolSamples = static_cast<int>(config.sampleRate * config.symbolDurationSec / 2.0F);
+    std::vector<float> delayedAudio(static_cast<std::size_t>(halfSymbolSamples), 0.0F);
+    delayedAudio.insert(delayedAudio.end(), audio.begin(), audio.end());
+    const auto delayedResult = hftext::demodulateSamples(delayedAudio, config);
+    assert(delayedResult.frameDetected);
+    assert(delayedResult.crcOk);
+    assert(delayedResult.payloadValid);
+    assert(delayedResult.text == "pu5lrk Teste");
+    assert(delayedResult.startOffset >= 0);
+    assert(delayedResult.startOffset < static_cast<int>(config.sampleRate * config.symbolDurationSec));
+    assert(delayedResult.offsetsTried >= 1);
 
     config.syncSearch = false;
     const auto noSyncSearch = hftext::demodulateSamples(audio, config);

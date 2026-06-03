@@ -37,4 +37,10 @@ Decodificar WAV:
 core\build-msvc\Debug\hftext_rx_wav.exe python-sim\generated\cpp_tx.wav
 ```
 
+Decodificar WAV com diagnostico de sincronismo:
+
+```powershell
+core\build-msvc\Debug\hftext_rx_wav.exe --verbose python-sim\generated\cpp_tx.wav
+```
+
 O CTest do core tambem executa um round-trip automatico `hftext_tx_wav` -> `hftext_rx_wav`.

@@ -4,6 +4,8 @@
 #include "AudioOutput.h"
 #include "ModemController.h"
 
+#include "hftext_streaming_receiver.h"
+
 #include <QMainWindow>
 
 class QLineEdit;
@@ -20,6 +22,7 @@ class MainWindow : public QMainWindow {
 
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
 
 private slots:
     void generateWav();
@@ -40,6 +43,7 @@ private:
     AudioInput audioInput_;
     AudioOutput audioOutput_;
     ModemController controller_;
+    hftext::StreamingReceiver streamingReceiver_;
     QString lastWavPath_;
     QString lastRxWavPath_;
     QLineEdit* callsignEdit_ = nullptr;
