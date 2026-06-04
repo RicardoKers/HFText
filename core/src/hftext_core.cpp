@@ -1,6 +1,7 @@
 #include "hftext_config.h"
 #include "hftext_core.h"
 #include "hftext_demodulator.h"
+#include "hftext_encoder.h"
 #include "hftext_frame.h"
 #include "hftext_modulator.h"
 #include "hftext_robust.h"
@@ -39,6 +40,25 @@ std::vector<std::uint8_t> bitsFromDecisions(const std::vector<BitDecision>& deci
     return bits;
 }
 
+bool preambleMatches(const std::vector<std::uint8_t>& bits, int preambleBitCount) {
+    if (preambleBitCount <= 0) {
+        return true;
+    }
+    if (bits.size() < static_cast<std::size_t>(preambleBitCount)) {
+        return false;
+    }
+
+    int mismatches = 0;
+    for (int index = 0; index < preambleBitCount; ++index) {
+        const auto expected = static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0);
+        if (bits[static_cast<std::size_t>(index)] != expected) {
+            ++mismatches;
+        }
+    }
+
+    return mismatches <= std::max(2, preambleBitCount / 8);
+}
+
 float meanConfidence(const std::vector<BitDecision>& decisions, std::size_t start, std::size_t count) {
     if (decisions.empty() || start >= decisions.size() || count == 0) {
         return 0.0F;
@@ -54,37 +74,6 @@ float meanConfidence(const std::vector<BitDecision>& decisions, std::size_t star
         sum += decisions[index].confidence;
     }
     return static_cast<float>(sum / static_cast<double>(end - start));
-}
-
-float confidenceForResult(const DecodeResult& result, const std::vector<BitDecision>& decisions) {
-    if (decisions.empty()) {
-        return 0.0F;
-    }
-
-    if (result.frameDetected && result.syncIndex >= 0) {
-        try {
-            const auto frameBits = static_cast<std::size_t>(kHeaderBytes + payloadByteCount(result.length) + kCrcBytes)
-                * kBitsPerByte;
-            return meanConfidence(decisions, static_cast<std::size_t>(result.syncIndex), frameBits);
-        } catch (const std::invalid_argument&) {
-            return meanConfidence(decisions, 0, decisions.size());
-        }
-    }
-
-    return meanConfidence(decisions, 0, decisions.size());
-}
-
-DecodeResult demodulateAndParse(
-    const std::vector<float>& samples,
-    const ModemConfig& config,
-    int startOffset
-) {
-    const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
-    const auto bits = bitsFromDecisions(decisions);
-    auto result = parseFrameFromStream(bits);
-    result.startOffset = startOffset;
-    result.confidence = confidenceForResult(result, decisions);
-    return result;
 }
 
 std::vector<std::uint8_t> preambleBitsFromConfig(const ModemConfig& config) {
@@ -104,29 +93,88 @@ std::vector<std::uint8_t> preambleBitsFromConfig(const ModemConfig& config) {
     return preamble;
 }
 
-DecodeResult demodulateAndParseRobust(
+int logicalFrameBitCountForPayloadLength(int payloadLength) {
+    return (kHeaderBytes + payloadByteCount(payloadLength) + kCrcBytes) * kBitsPerByte;
+}
+
+std::size_t encodedBitCountForLogicalFrameBits(int logicalFrameBitCount) {
+    constexpr int kConvTailBits = 2;
+    constexpr int kConvOutputBitsPerInputBit = 2;
+    return static_cast<std::size_t>(logicalFrameBitCount + kConvTailBits) * kConvOutputBitsPerInputBit;
+}
+
+DecodeResult parseRobustFrameAtExpectedOffset(const std::vector<std::uint8_t>& bits, int bitOffset) {
+    if (bitOffset < 0 || static_cast<std::size_t>(bitOffset) >= bits.size()) {
+        DecodeResult result;
+        result.error = "robust frame not found";
+        return result;
+    }
+
+    const auto start = static_cast<std::size_t>(bitOffset);
+    DecodeResult firstCandidate;
+    bool hasCandidate = false;
+    for (int payloadLength = 0; payloadLength <= kMaxPayloadSymbols; ++payloadLength) {
+        const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
+        const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);
+        if (start + encodedBitCount > bits.size()) {
+            continue;
+        }
+
+        const std::vector<std::uint8_t> candidateBits(
+            bits.begin() + static_cast<std::ptrdiff_t>(start),
+            bits.begin() + static_cast<std::ptrdiff_t>(start + encodedBitCount)
+        );
+        auto robustResult = parseRobustFrameBits(candidateBits, logicalFrameBitCount);
+        robustResult.frame.syncIndex = bitOffset;
+        if (!hasCandidate) {
+            firstCandidate = robustResult.frame;
+            hasCandidate = true;
+        }
+        if (
+            robustResult.frame.crcOk
+            && robustResult.frame.payloadValid
+            && robustResult.frame.length == payloadLength
+        ) {
+            return robustResult.frame;
+        }
+    }
+
+    if (hasCandidate) {
+        firstCandidate.frameDetected = false;
+        firstCandidate.crcOk = false;
+        firstCandidate.payloadValid = false;
+        firstCandidate.text.clear();
+        firstCandidate.error = "robust frame not found";
+        firstCandidate.syncIndex = -1;
+        return firstCandidate;
+    }
+
+    DecodeResult result;
+    result.error = "robust frame not found";
+    return result;
+}
+
+DecodeResult demodulateAndParse(
     const std::vector<float>& samples,
     const ModemConfig& config,
     int startOffset
 ) {
     const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
     const auto bits = bitsFromDecisions(decisions);
-    auto robustResult = parseRobustFrameFromStream(bits);
-    robustResult.frame.startOffset = startOffset;
-    robustResult.frame.confidence = meanConfidence(decisions, 0, decisions.size());
-    return robustResult.frame;
+    DecodeResult result;
+    if (preambleMatches(bits, config.preambleBits)) {
+        result = parseRobustFrameAtExpectedOffset(bits, config.preambleBits);
+    } else {
+        result.error = "robust frame not found";
+    }
+    result.startOffset = startOffset;
+    result.confidence = meanConfidence(decisions, 0, decisions.size());
+    return result;
 }
 
 }  // namespace
 
 std::vector<float> modulateText(const std::string& text, const ModemConfig& config) {
-    const auto preamble = preambleBitsFromConfig(config);
-    const auto bits = buildTransmission(text, preamble);
-
-    return modulateBits2Fsk(bits, config);
-}
-
-std::vector<float> modulateTextRobust(const std::string& text, const ModemConfig& config) {
     const auto preamble = preambleBitsFromConfig(config);
     const auto bits = buildRobustTransmission(text, preamble);
 
@@ -135,12 +183,8 @@ std::vector<float> modulateTextRobust(const std::string& text, const ModemConfig
 
 DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemConfig& config) {
     if (!config.syncSearch) {
-        const auto decisions = demodulateBitDecisions2Fsk(samples, config);
-        const auto bits = bitsFromDecisions(decisions);
-        auto result = parseFrame(bits);
-        result.startOffset = 0;
+        auto result = demodulateAndParse(samples, config, 0);
         result.offsetsTried = 1;
-        result.confidence = confidenceForResult(result, decisions);
         return result;
     }
 
@@ -172,44 +216,6 @@ DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemCon
     if (hasBestValid) {
         bestValid.offsetsTried = offsetsTried;
         return bestValid;
-    }
-
-    if (hasFallback) {
-        fallback.offsetsTried = offsetsTried;
-        return fallback;
-    }
-
-    DecodeResult result;
-    result.offsetsTried = offsetsTried;
-    result.error = "sync not found";
-    return result;
-}
-
-DecodeResult demodulateSamplesRobust(const std::vector<float>& samples, const ModemConfig& config) {
-    if (!config.syncSearch) {
-        auto result = demodulateAndParseRobust(samples, config, 0);
-        result.offsetsTried = 1;
-        return result;
-    }
-
-    const int symbolSamples = samplesPerSymbol(config);
-    const int step = defaultOffsetStep(config);
-    DecodeResult fallback;
-    bool hasFallback = false;
-    int offsetsTried = 0;
-
-    for (int startOffset = 0; startOffset < symbolSamples; startOffset += step) {
-        auto result = demodulateAndParseRobust(samples, config, startOffset);
-        ++offsetsTried;
-        result.offsetsTried = offsetsTried;
-
-        if (result.crcOk && result.payloadValid) {
-            return result;
-        }
-        if (!hasFallback || (result.frameDetected && !fallback.frameDetected)) {
-            fallback = result;
-            hasFallback = true;
-        }
     }
 
     if (hasFallback) {

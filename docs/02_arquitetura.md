@@ -101,6 +101,7 @@ public:
 };
 
 Essas interfaces de alto nível devem ser a entrada preferencial para ferramentas CLI, aplicação PC e futura integração Android.
+`modulateText` e `demodulateSamples` usam sempre o modo robusto atual: frame logico v0.1, `conv_k3`, interleaving deterministico e 2-FSK. O frame logico simples continua disponivel internamente para testes e para a camada de robustez, mas nao e modo operacional desligavel.
 Quando `syncSearch` está habilitado, `demodulateSamples` pode tentar múltiplos offsets iniciais de amostra dentro de um símbolo antes de escolher o primeiro quadro com CRC e payload válidos.
 `StreamingReceiver` é a base para recepção contínua: ele acumula blocos curtos de amostras, tenta recuperar quadros completos e emite resultados válidos sem depender de um WAV fechado.
 As APIs internas de encoder, frame, modulador e demodulador continuam disponíveis para testes e validações de baixo nível.

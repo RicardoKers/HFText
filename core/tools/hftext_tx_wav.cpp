@@ -20,8 +20,7 @@ void printUsage(const char* program) {
         << "  --symbol-duration <s>       padrao: 0.5\n"
         << "  --f0 <Hz>                   padrao: 1200\n"
         << "  --f1 <Hz>                   padrao: 1600\n"
-        << "  --amplitude <0..1>          padrao: 0.8\n"
-        << "  --robust                    usa modo robusto experimental\n";
+        << "  --amplitude <0..1>          padrao: 0.8\n";
 }
 
 std::string buildPayload(const std::string& message, const std::string& callsign) {
@@ -38,7 +37,6 @@ int main(int argc, char** argv) {
     std::string callsign;
     std::string message;
     std::string outputPath;
-    bool robust = false;
 
     try {
         for (int index = 1; index < argc; ++index) {
@@ -66,8 +64,6 @@ int main(int argc, char** argv) {
                 config.frequency1Hz = std::stof(requireValue(arg));
             } else if (arg == "--amplitude") {
                 config.amplitude = std::stof(requireValue(arg));
-            } else if (arg == "--robust") {
-                robust = true;
             } else if (message.empty()) {
                 message = arg;
             } else if (outputPath.empty()) {
@@ -83,13 +79,11 @@ int main(int argc, char** argv) {
         }
 
         const std::string payload = buildPayload(message, callsign);
-        const auto audio = robust
-            ? hftext::modulateTextRobust(payload, config)
-            : hftext::modulateText(payload, config);
+        const auto audio = hftext::modulateText(payload, config);
         hftext::tools::writeMonoPcm16Wav(outputPath, audio, config.sampleRate);
 
         std::cout << "WAV gerado: " << outputPath << "\n";
-        std::cout << "Modo: " << (robust ? "robust" : "basic") << "\n";
+        std::cout << "Modo: robust\n";
         std::cout << "Payload: " << payload << "\n";
         return 0;
     } catch (const std::exception& exc) {

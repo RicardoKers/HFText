@@ -154,40 +154,11 @@ if(HFTEXT_CORE_BUILD_TESTS)
             --f1 2000
             "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip.wav"
     )
-    add_test(
-        NAME hftext_cli_tx_wav_robust_test
-        COMMAND hftext_tx_wav
-            --robust
-            --callsign pu5lrk
-            --sample-rate 8000
-            --symbol-duration 0.01
-            --f0 1000
-            --f1 2000
-            "Teste"
-            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip_robust.wav"
-    )
-    add_test(
-        NAME hftext_cli_rx_wav_robust_test
-        COMMAND hftext_rx_wav
-            --robust
-            --verbose
-            --symbol-duration 0.01
-            --f0 1000
-            --f1 2000
-            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip_robust.wav"
-    )
     set_tests_properties(hftext_cli_tx_wav_test PROPERTIES
-        PASS_REGULAR_EXPRESSION "Payload: pu5lrk Teste"
+        PASS_REGULAR_EXPRESSION "Modo: robust"
     )
     set_tests_properties(hftext_cli_rx_wav_test PROPERTIES
         DEPENDS hftext_cli_tx_wav_test
-        PASS_REGULAR_EXPRESSION "pu5lrk Teste"
-    )
-    set_tests_properties(hftext_cli_tx_wav_robust_test PROPERTIES
-        PASS_REGULAR_EXPRESSION "Modo: robust"
-    )
-    set_tests_properties(hftext_cli_rx_wav_robust_test PROPERTIES
-        DEPENDS hftext_cli_tx_wav_robust_test
         PASS_REGULAR_EXPRESSION "pu5lrk Teste"
     )
 endif()

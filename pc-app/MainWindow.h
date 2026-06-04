@@ -11,7 +11,6 @@ class QLineEdit;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
-class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QProgressBar;
@@ -60,7 +59,6 @@ private:
     QDoubleSpinBox* frequency1Spin_ = nullptr;
     QDoubleSpinBox* amplitudeSpin_ = nullptr;
     QSpinBox* preambleBitsSpin_ = nullptr;
-    QCheckBox* robustModeCheck_ = nullptr;
     QComboBox* inputDeviceCombo_ = nullptr;
     QComboBox* outputDeviceCombo_ = nullptr;
     QLabel* txEstimateLabel_ = nullptr;

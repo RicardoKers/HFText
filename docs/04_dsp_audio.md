@@ -125,4 +125,4 @@ A simulacao Python possui helpers experimentais para repetir bits e recuperar po
 
 O interleaving deve ser avaliado primeiro em Python como experimento independente. A primeira forma experimental usa blocos retangulares completos: escreve bits por linhas e transmite por colunas, espalhando rajadas de erro no tempo. O deinterleaving faz o inverso antes do voto majoritario ou da validacao por CRC.
 
-Assim como a repeticao, esse recurso ainda nao faz parte do HFText Basic v0.1 nem dos scripts TX/RX normais.
+O interleaving com `conv_k3` agora faz parte do modo robusto unico do HFText v0.1. Repeticao continua sendo apenas experimento futuro.

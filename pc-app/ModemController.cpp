@@ -46,14 +46,6 @@ const hftext::ModemConfig& ModemController::config() const {
     return config_;
 }
 
-void ModemController::setRobustMode(bool enabled) {
-    robustMode_ = enabled;
-}
-
-bool ModemController::robustMode() const {
-    return robustMode_;
-}
-
 std::string ModemController::buildPayload(const std::string& callsign, const std::string& message) const {
     if (message.empty()) {
         throw std::invalid_argument("mensagem vazia");
@@ -80,11 +72,12 @@ ModemController::TransmissionEstimate ModemController::estimateTransmission(
     estimate.payloadTooLong = estimate.payloadSymbols > hftext::kMaxPayloadSymbols;
     estimate.frameBits = (hftext::kHeaderBytes + packedPayloadBytes(estimate.payloadSymbols) + hftext::kCrcBytes)
         * hftext::kBitsPerByte;
-    estimate.transmissionBits = config_.preambleBits + estimate.frameBits;
-    if (robustMode_ && !estimate.payloadTooLong) {
+    if (!estimate.payloadTooLong) {
         const auto bits = hftext::buildRobustTransmission(estimate.payload, preambleBits(config_.preambleBits));
         estimate.transmissionBits = static_cast<int>(bits.size());
         estimate.frameBits = estimate.transmissionBits - config_.preambleBits;
+    } else {
+        estimate.transmissionBits = config_.preambleBits + estimate.frameBits;
     }
     estimate.durationSeconds = static_cast<double>(estimate.transmissionBits)
         * static_cast<double>(config_.symbolDurationSec);
@@ -97,9 +90,7 @@ void ModemController::generateWav(
     const std::string& outputPath
 ) const {
     const std::string payload = buildPayload(callsign, message);
-    const auto audio = robustMode_
-        ? hftext::modulateTextRobust(payload, config_)
-        : hftext::modulateText(payload, config_);
+    const auto audio = hftext::modulateText(payload, config_);
     hftext::tools::writeMonoPcm16Wav(outputPath, audio, config_.sampleRate);
 }
 
@@ -124,7 +115,5 @@ hftext::DecodeResult ModemController::decodeWav(const std::string& inputPath) co
     const auto wav = hftext::tools::readPcm16Wav(inputPath);
     hftext::ModemConfig decodeConfig = config_;
     decodeConfig.sampleRate = wav.sampleRate;
-    return robustMode_
-        ? hftext::demodulateSamplesRobust(wav.samples, decodeConfig)
-        : hftext::demodulateSamples(wav.samples, decodeConfig);
+    return hftext::demodulateSamples(wav.samples, decodeConfig);
 }

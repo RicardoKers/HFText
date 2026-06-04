@@ -11,7 +11,4 @@ namespace hftext {
 std::vector<float> modulateText(const std::string& text, const ModemConfig& config = ModemConfig{});
 DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemConfig& config = ModemConfig{});
 
-std::vector<float> modulateTextRobust(const std::string& text, const ModemConfig& config = ModemConfig{});
-DecodeResult demodulateSamplesRobust(const std::vector<float>& samples, const ModemConfig& config = ModemConfig{});
-
 }  // namespace hftext

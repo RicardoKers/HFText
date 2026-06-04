@@ -1,6 +1,6 @@
 # HFText Python Simulation
 
-Simulação inicial do HFText Basic v0.1 em Python.
+Simulação inicial do HFText v0.1 em Python.
 
 ## Testes
 
@@ -87,9 +87,9 @@ Alem de `summary.csv` e `trials.csv`, ele grava `best_summary.csv` com a melhor 
 
 O modulo `hftext.fec` contem um helper inicial Hamming(7,4), apenas para experimentos de validacao. Ele codifica blocos de 4 bits em 7 bits, corrige 1 erro por codeword e informa quantos blocos foram corrigidos.
 
-O mesmo modulo tambem contem um codigo convolucional experimental rate 1/2, K=3, com geradores `111` e `101` e decoder Viterbi hard-decision.
+O mesmo modulo tambem contem o codigo convolucional rate 1/2, K=3, com geradores `111` e `101` e decoder Viterbi hard-decision usado pelo modo robusto atual.
 
-Esse FEC ainda nao faz parte do HFText Basic v0.1 e nao esta integrado aos scripts TX/RX normais.
+Esse FEC faz parte do modo robusto atual no core C++. Os scripts Python historicos ainda podem ser usados para experimentos e comparacoes.
 
 Para comparar o quadro sem FEC, Hamming(7,4) e o convolucional K=3:
 

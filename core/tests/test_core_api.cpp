@@ -38,8 +38,10 @@ int main() {
 
     config.syncSearch = false;
     const auto noSyncSearch = hftext::demodulateSamples(audio, config);
-    assert(!noSyncSearch.frameDetected);
-    assert(noSyncSearch.error == "sync not found");
+    assert(noSyncSearch.frameDetected);
+    assert(noSyncSearch.crcOk);
+    assert(noSyncSearch.payloadValid);
+    assert(noSyncSearch.text == "pu5lrk Teste");
 
     config.syncSearch = true;
     config.preambleBits = 0;
@@ -50,20 +52,6 @@ int main() {
     assert(frameOnlyResult.text == "abc");
     assert(frameOnlyResult.syncIndex == 0);
     assert(frameOnlyResult.confidence > 0.9F);
-
-    config.preambleBits = 64;
-    const auto robustAudio = hftext::modulateTextRobust("pu5lrk Teste", config);
-    assert(!robustAudio.empty());
-    assert(robustAudio.size() > audio.size());
-    const auto robustResult = hftext::demodulateSamplesRobust(robustAudio, config);
-    assert(robustResult.frameDetected);
-    assert(robustResult.crcOk);
-    assert(robustResult.payloadValid);
-    assert(robustResult.text == "pu5lrk Teste");
-    assert(robustResult.syncIndex == config.preambleBits);
-    assert(robustResult.startOffset == 0);
-    assert(robustResult.offsetsTried >= 1);
-    assert(robustResult.confidence > 0.9F);
 
     config.preambleBits = -1;
     bool rejected = false;

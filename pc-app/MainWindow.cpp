@@ -12,7 +12,6 @@
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
@@ -143,9 +142,6 @@ MainWindow::MainWindow(QWidget* parent)
     preambleBitsSpin_->setValue(controller_.config().preambleBits);
     configForm->addRow("Preambulo", preambleBitsSpin_);
 
-    robustModeCheck_ = new QCheckBox("Modo robusto experimental", this);
-    configForm->addRow("Modo", robustModeCheck_);
-
     outputDeviceCombo_ = new QComboBox(this);
     configForm->addRow("Saida de audio", outputDeviceCombo_);
     populateOutputDevices();
@@ -232,7 +228,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
     connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
     connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
-    connect(robustModeCheck_, &QCheckBox::toggled, this, &MainWindow::updateTxEstimate);
 
     rxLevelTimer_ = new QTimer(this);
     rxLevelTimer_->setInterval(100);
@@ -263,13 +258,12 @@ void MainWindow::generateWav() {
 
     try {
         controller_.setConfig(readConfig());
-        controller_.setRobustMode(robustModeCheck_->isChecked());
         const std::string callsign = toStdString(callsignEdit_->text().trimmed());
         const std::string message = toStdString(messageEdit_->toPlainText());
         controller_.generateWav(callsign, message, toStdString(outputPath));
         lastWavPath_ = outputPath;
         appendLog("WAV gerado: " + outputPath);
-        appendLog(QStringLiteral("Modo TX: ") + (controller_.robustMode() ? "robust" : "basic"));
+        appendLog("Modo TX: robust");
         appendLog("Payload TX: " + QString::fromStdString(controller_.buildPayload(callsign, message)));
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
@@ -290,7 +284,6 @@ void MainWindow::decodeWav() {
 
     try {
         controller_.setConfig(readConfig());
-        controller_.setRobustMode(robustModeCheck_->isChecked());
         const auto stats = controller_.analyzeWav(toStdString(inputPath));
         appendLog(
             "WAV duracao: " + QString::number(stats.durationSeconds(), 'f', 2)
@@ -302,7 +295,7 @@ void MainWindow::decodeWav() {
         const auto result = controller_.decodeWav(toStdString(inputPath));
         showDecodeResult(result);
         appendLog("WAV decodificado: " + inputPath);
-        appendLog(QStringLiteral("Modo RX: ") + (controller_.robustMode() ? "robust" : "basic"));
+        appendLog("Modo RX: robust");
         appendLog(
             "RX offset: " + QString::number(result.startOffset)
             + " amostras, tentativas: " + QString::number(result.offsetsTried)
@@ -395,7 +388,6 @@ void MainWindow::stopReceive() {
 
     try {
         controller_.setConfig(readRxConfig());
-        controller_.setRobustMode(robustModeCheck_->isChecked());
         const auto stats = audioInput_.stopAndSave(toStdString(lastRxWavPath_));
         audioInput_.setSamplesCallback({});
         rxLevelTimer_->stop();
@@ -416,7 +408,7 @@ void MainWindow::stopReceive() {
         );
         const auto result = controller_.decodeWav(toStdString(lastRxWavPath_));
         showDecodeResult(result);
-        appendLog(QStringLiteral("Modo RX: ") + (controller_.robustMode() ? "robust" : "basic"));
+        appendLog("Modo RX: robust");
         appendLog(
             "RX offset: " + QString::number(result.startOffset)
             + " amostras, tentativas: " + QString::number(result.offsetsTried)
@@ -481,7 +473,6 @@ void MainWindow::sanitizeTxMessage() {
 void MainWindow::updateTxEstimate() {
     try {
         controller_.setConfig(readConfig());
-        controller_.setRobustMode(robustModeCheck_->isChecked());
         const auto estimate = controller_.estimateTransmission(
             toStdString(callsignEdit_->text().trimmed()),
             toStdString(messageEdit_->toPlainText())
@@ -490,9 +481,8 @@ void MainWindow::updateTxEstimate() {
         if (estimate.messageEmpty) {
             txEstimateLabel_->setStyleSheet({});
             txEstimateLabel_->setText(
-                QString("0/%1 simbolos | %2 | TX: --")
+                QString("0/%1 simbolos | robust | TX: --")
                     .arg(estimate.maxPayloadSymbols)
-                    .arg(controller_.robustMode() ? "robust" : "basic")
             );
             return;
         }
@@ -500,7 +490,7 @@ void MainWindow::updateTxEstimate() {
         QString text = QString("%1/%2 simbolos | %3 | %4 bits | TX: %5 s")
             .arg(estimate.payloadSymbols)
             .arg(estimate.maxPayloadSymbols)
-            .arg(controller_.robustMode() ? "robust" : "basic")
+            .arg("robust")
             .arg(estimate.transmissionBits)
             .arg(estimate.durationSeconds, 0, 'f', 2);
 

@@ -118,7 +118,7 @@ Primeira melhoria aplicada nesta fase: a busca de `SYNC` no fluxo demodulado pas
 
 Outra melhoria iniciada: o demodulador passou a calcular uma confianca media baseada na separacao relativa entre as energias dos tons 0 e 1. A confianca e diagnostica e nao altera a regra de aceitacao por CRC.
 
-A investigacao de robustez em Python apontou `conv_k3 + interleaving` como candidato principal para um futuro modo robusto experimental: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, Viterbi hard-decision e interleaving retangular sobre o fluxo codificado. Antes de portar para C++, ainda e necessario definir um algoritmo deterministico para escolher a geometria do interleaving a partir do tamanho codificado e documentar como esse modo sera sinalizado fora do HFText Basic v0.1.
+A investigacao de robustez em Python apontou `conv_k3 + interleaving` como modo principal: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, Viterbi hard-decision e interleaving retangular sobre o fluxo codificado. O HFText v0.1 usa esse modo sempre; o frame simples `SYNC | LENGTH | PAYLOAD | CRC16` permanece como frame logico interno antes do FEC.
 
 ## Fase 7 — Aplicação Android TX
 
@@ -186,7 +186,7 @@ As proximas melhorias recomendadas para a Fase 5 sao incrementais e focadas em o
 
 O contador de simbolos e a estimativa de duracao foram implementados no app PC como primeira melhoria operacional. Eles consideram o indicativo inserido automaticamente no payload, o limite de 127 simbolos, o preambulo configurado e a duracao de simbolo atual.
 
-A sanitizacao visual da mensagem TX tambem foi iniciada: caracteres fora do alfabeto HFText Basic sao substituidos por `?` diretamente no campo de mensagem durante a digitacao.
+A sanitizacao visual da mensagem TX tambem foi iniciada: caracteres fora do alfabeto HFText sao substituidos por `?` diretamente no campo de mensagem durante a digitacao.
 
 O alfabeto v0.1 foi expandido para portugues usando os tres simbolos restantes: `acute`, `tilde` e `ç`. Vogais acentuadas passam a consumir dois simbolos, vogais acentuadas maiusculas consomem tres simbolos, `ç` consome um simbolo e `Ç` consome dois.
 

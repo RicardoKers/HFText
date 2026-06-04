@@ -45,19 +45,4 @@ core\build-msvc\Debug\hftext_rx_wav.exe --verbose python-sim\generated\cpp_tx.wa
 
 O CTest do core tambem executa um round-trip automatico `hftext_tx_wav` -> `hftext_rx_wav`.
 
-### Modo robusto experimental
-
-Os CLIs tambem aceitam `--robust` para testar o candidato experimental `conv_k3 + interleaving`.
-Esse modo e opt-in e nao altera o HFText Basic v0.1.
-
-Gerar WAV robusto:
-
-```powershell
-core\build-msvc\Debug\hftext_tx_wav.exe --robust --callsign pu5lrk "Teste" python-sim\generated\cpp_tx_robust.wav
-```
-
-Decodificar WAV robusto:
-
-```powershell
-core\build-msvc\Debug\hftext_rx_wav.exe --robust --verbose python-sim\generated\cpp_tx_robust.wav
-```
+Os CLIs usam sempre o modo robusto atual: frame logico HFText v0.1, codigo convolucional `conv_k3`, interleaving deterministico e 2-FSK. Nao ha opcao para transmitir ou receber sem FEC/interleaving.

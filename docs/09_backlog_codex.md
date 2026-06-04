@@ -302,7 +302,7 @@ Tarefa 7.4 — Implementar repetição
 
 Enviar bits ou símbolos repetidos.
 
-Antes de implementar no protocolo definitivo, criar experimento Python isolado de repeticao por bit ou simbolo com voto majoritario no RX. O HFText Basic v0.1 permanece sem repeticao; qualquer modo repetido deve ser identificado explicitamente em versao futura para evitar ambiguidade entre transmissores e receptores.
+Antes de implementar no protocolo definitivo, criar experimento Python isolado de repeticao por bit ou simbolo com voto majoritario no RX. O HFText v0.1 permanece sem repeticao; qualquer modo repetido deve ser identificado explicitamente em versao futura para evitar ambiguidade entre transmissores e receptores.
 
 Experimento Python inicial criado com helpers puros de repeticao de bits e voto majoritario. Proximo passo: integrar opcionalmente em uma varredura separada para medir ganho real contra AWGN/fading antes de qualquer mudanca no core ou no protocolo.
 
@@ -354,19 +354,19 @@ Varredura posterior por SNR com `conv_k3 + interleaving`, payload `pu5lrk Teste`
 
 Comparacao posterior por tamanho de mensagem em -12 dB, fading por blocos de 4 simbolos e 50 sementes mostrou que o ganho tambem depende do tamanho do quadro: payload `pu5lrk Ok` teve melhor resultado com `conv_k3 + int5x68`, 36% de CRC valido; payload `pu5lrk Teste` com `conv_k3 + int6x62`, 26%; payload `pu5lrk Mensagem maior para teste` com `conv_k3 + int4x153`, 12%. Isso reforca que qualquer modo robusto futuro deve derivar a geometria de interleaving do tamanho codificado, em vez de fixar uma matriz unica.
 
-Conclusao de implementacao experimental: o candidato principal para um futuro modo robusto e `conv_k3 + interleaving`, mantendo o frame logico Basic v0.1 antes do FEC e aplicando FEC/interleaving apenas no fluxo de bits transmitido. Proxima tarefa antes de portar para C++: definir e testar um algoritmo deterministico de escolha da geometria de interleaving a partir do tamanho codificado.
+Conclusao de implementacao: o modo robusto principal e `conv_k3 + interleaving`, mantendo o frame logico v0.1 antes do FEC e aplicando FEC/interleaving apenas no fluxo de bits transmitido.
 
 Algoritmo deterministico inicial criado em Python: `choose_interleave_shape(bit_count, preferred_rows=6, min_rows=2, max_rows=16)`. Ele escolhe uma geometria completa cujo numero de linhas divide exatamente o tamanho codificado, priorizando a proximidade de 6 linhas e usando o menor numero de linhas em empates. O `fec_interleaving_sweep.py` agora aceita `--auto-shape` para testar essa regra sem varrer todas as geometrias.
 
-Portabilidade para C++ iniciada: `core/include/hftext_robust.h` e `core/src/robust.cpp` implementam helpers puros para `conv_k3`, Viterbi hard-decision, interleaving/deinterleaving e escolha deterministica de geometria. A primeira etapa nao altera o modo Basic, CLI ou app PC; apenas adiciona testes unitarios em `core/tests/test_robust.cpp`.
+Portabilidade para C++ iniciada: `core/include/hftext_robust.h` e `core/src/robust.cpp` implementam helpers puros para `conv_k3`, Viterbi hard-decision, interleaving/deinterleaving e escolha deterministica de geometria. A primeira etapa adicionou testes unitarios em `core/tests/test_robust.cpp`.
 
-O core C++ agora tambem possui montagem e decodificacao de frame robusto em bits: `buildRobustFrameBits` monta o frame logico Basic, aplica `conv_k3` e interleaving deterministico; `parseRobustFrameBits` desfaz interleaving, executa Viterbi e valida o frame logico com CRC normal. Essa etapa ainda nao liga o modo robusto a modulacao, CLI ou app PC.
+O core C++ agora tambem possui montagem e decodificacao de frame robusto em bits: `buildRobustFrameBits` monta o frame logico v0.1, aplica `conv_k3` e interleaving deterministico; `parseRobustFrameBits` desfaz interleaving, executa Viterbi e valida o frame logico com CRC normal.
 
-O core C++ tambem passou a montar uma transmissao robusta em bits com preambulo (`buildRobustTransmission`) e a procurar automaticamente um bloco robusto dentro de um fluxo de bits (`parseRobustFrameFromStream`). Como o fluxo codificado nao contem `SYNC` visivel antes do Viterbi, o RX experimental testa offsets e comprimentos logicos validos, aceitando apenas candidatos cujo frame Basic recuperado tenha CRC e payload validos. Essa etapa ainda nao altera o modo Basic nem app PC.
+O core C++ tambem passou a montar uma transmissao robusta em bits com preambulo (`buildRobustTransmission`) e a procurar automaticamente um bloco robusto dentro de um fluxo de bits (`parseRobustFrameFromStream`). Como o fluxo codificado nao contem `SYNC` visivel antes do Viterbi, o RX testa offsets e comprimentos logicos validos, aceitando apenas candidatos cujo frame logico recuperado tenha CRC e payload validos.
 
-O modo robusto experimental foi exposto no core por APIs explicitas (`modulateTextRobust` e `demodulateSamplesRobust`) e nos CLIs WAV por `--robust`. O modo Basic continua sendo o padrao; `--robust` e opt-in e existe apenas para validacao experimental de WAV/CLI antes de qualquer promocao de protocolo.
+O modo robusto foi promovido a modo unico do sistema. As APIs publicas `modulateText` e `demodulateSamples`, os CLIs WAV e o app PC usam sempre `conv_k3 + interleaving`; nao ha opcao operacional para desligar FEC/interleaving.
 
-O app PC tambem recebeu a opcao `Modo robusto experimental` na aba `Configuracao`. Quando habilitada, a estimativa TX passa a refletir o fluxo robusto, `Gerar WAV` usa `modulateTextRobust` e `Decodificar WAV`/RX salvo usam `demodulateSamplesRobust`. O modo Basic continua sendo o padrao quando a opcao esta desmarcada.
+O app PC usa sempre o modo robusto. A estimativa TX reflete o fluxo robusto, `Gerar WAV` usa `modulateText` robusto e `Decodificar WAV`/RX salvo usam `demodulateSamples` robusto.
 
 ## Estado atual do backlog
 

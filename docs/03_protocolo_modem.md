@@ -4,9 +4,25 @@
 
 Definir o formato inicial de quadro e a codificação de mensagem.
 
-## Versão inicial do protocolo
+## Versão atual do protocolo
 
-Nome: HFText Basic v0.1
+Nome: HFText v0.1
+
+O modo de transmissao unico e robusto. Nao existe modo operacional sem FEC/interleaving.
+
+O frame logico antes da camada de robustez continua sendo:
+
+```text
+SYNC | LENGTH | PAYLOAD | CRC16
+```
+
+Antes da modulacao, esse frame logico deve passar por:
+
+```text
+codigo convolucional rate 1/2, K=3, geradores 111 e 101
+-> interleaving retangular deterministico
+-> 2-FSK
+```
 
 ## Alfabeto inicial
 
@@ -102,9 +118,9 @@ Para letras acentuadas maiúsculas, o modificador de acento deve preceder o `shi
 SYNC | LENGTH | PAYLOAD | CRC16
 ```
 
-O preâmbulo de transmissão é necessário para preparar a detecção e habilitar corretamente o TX do rádio, mas não faz parte do quadro do protocolo v0.1. Ele será especificado e implementado em etapa posterior.
+O preâmbulo de transmissão é necessário para preparar a detecção e habilitar corretamente o TX do rádio, mas não faz parte do frame lógico `SYNC | LENGTH | PAYLOAD | CRC16`.
 
-Na simulação Python inicial, o transmissor deve antepor um preâmbulo simples ao quadro:
+O transmissor deve antepor um preâmbulo simples ao fluxo codificado:
 
 ```text
 10101010 ... 1010
@@ -118,7 +134,7 @@ Tamanho inicial:
 
 O preâmbulo não entra no cálculo do CRC e não faz parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
 
-O receptor deve procurar `SYNC` no fluxo de bits recebido e descartar todos os bits anteriores ao `SYNC`.
+Como o fluxo transmitido passa por FEC/interleaving, `SYNC` não aparece diretamente antes do Viterbi. O receptor deve procurar candidatos de bloco robusto no fluxo de bits demodulado, desfazer interleaving, aplicar Viterbi e aceitar apenas o frame lógico recuperado cujo CRC e payload sejam válidos.
 
 ## Campos
 
@@ -255,6 +271,51 @@ Taxa bruta:
 2 bits/s
 ```
 
+A taxa util e menor que a taxa bruta porque o frame logico passa por codigo convolucional rate 1/2 e bits de cauda antes da modulacao.
+
+## Camada de robustez
+
+O HFText v0.1 usa sempre a camada robusta abaixo. Esta camada nao e opcional.
+
+TX:
+
+```text
+frame logico v0.1
+-> codigo convolucional rate 1/2, K=3, geradores 111 e 101
+-> interleaving retangular derivado do tamanho codificado
+-> preambulo + 2-FSK
+```
+
+RX:
+
+```text
+bits demodulados
+-> busca de candidatos de bloco robusto
+-> deinterleaving
+-> Viterbi hard-decision
+-> frame logico v0.1
+-> CRC16 normal
+```
+
+Regras:
+
+- o frame logico antes do FEC continua sendo `SYNC | LENGTH | PAYLOAD | CRC16`;
+- o CRC continua protegendo o payload logico original, nao os bits codificados;
+- o codigo convolucional usa tail bits zero para retornar ao estado zero;
+- o receptor deve remover os bits de cauda apos o Viterbi;
+- o interleaving deve ser aplicado depois do FEC e revertido antes do Viterbi;
+- a geometria do interleaving e derivada do tamanho do fluxo codificado;
+- o receptor deve aceitar texto apenas quando o frame logico recuperado tiver CRC e payload validos.
+
+Regra deterministica de interleaving:
+
+- calcular o tamanho do fluxo codificado apos FEC;
+- considerar apenas geometrias cujo numero de linhas divida exatamente esse tamanho;
+- limitar inicialmente as linhas a 2..16;
+- escolher o numero de linhas mais proximo de 6;
+- em caso de empate, escolher o menor numero de linhas;
+- colunas = tamanho codificado / linhas.
+
 ## Versões futuras
 
 ### 4-FSK
@@ -281,8 +342,6 @@ O protocolo inicial deve privilegiar simplicidade, não eficiência.
 
 Depois de validado, adicionar:
 
-- FEC;
-- interleaving;
 - repetição;
 - ACK;
 - timestamp opcional;
@@ -290,7 +349,7 @@ Depois de validado, adicionar:
 
 ### Repeticao experimental futura
 
-A repeticao nao faz parte do HFText Basic v0.1.
+A repeticao nao faz parte do HFText v0.1.
 
 Quando for implementada, deve ser tratada como modo explicito de uma versao futura do protocolo, para evitar que receptores v0.1 interpretem um fluxo repetido de forma ambigua.
 
@@ -301,48 +360,3 @@ Direcao inicial recomendada:
 - manter CRC sobre o payload logico original, nao sobre as copias repetidas;
 - registrar no quadro ou na configuracao negociada qual fator de repeticao esta ativo;
 - validar primeiro em Python com varreduras de SNR e fading antes de portar para C++.
-
-### Modo robusto experimental futuro
-
-O modo robusto nao faz parte do HFText Basic v0.1.
-
-A direcao experimental recomendada, com base nas varreduras Python, e:
-
-```text
-HFText Robust experimental
-frame v0.1 logico
--> codigo convolucional rate 1/2, K=3, geradores 111 e 101
--> interleaving retangular derivado do tamanho codificado
--> 2-FSK igual ao modo Basic
-```
-
-No RX:
-
-```text
-bits demodulados
--> deinterleaving
--> Viterbi hard-decision
--> frame v0.1 logico
--> CRC16 normal
-```
-
-Regras propostas:
-
-- o frame logico antes do FEC continua sendo `SYNC | LENGTH | PAYLOAD | CRC16`;
-- o CRC continua protegendo o payload logico original, nao os bits codificados;
-- o codigo convolucional usa tail bits zero para retornar ao estado zero;
-- o receptor deve remover os bits de cauda apos o Viterbi;
-- o interleaving deve ser aplicado depois do FEC e revertido antes do Viterbi;
-- a geometria do interleaving nao deve ser fixa; deve ser derivada do tamanho do fluxo codificado;
-- o modo robusto precisa ser sinalizado explicitamente em uma versao futura do protocolo ou por configuracao operacional, para evitar que receptores Basic v0.1 tentem decodificar um fluxo robusto como Basic.
-
-Regra deterministica inicial para validacao:
-
-- calcular o tamanho do fluxo codificado apos FEC;
-- considerar apenas geometrias cujo numero de linhas divida exatamente esse tamanho;
-- limitar inicialmente as linhas a 2..16;
-- escolher o numero de linhas mais proximo de 6;
-- em caso de empate, escolher o menor numero de linhas;
-- colunas = tamanho codificado / linhas.
-
-Essa regra ainda e experimental. Ela deve ser validada em Python antes de virar parte normativa de uma versao futura do protocolo.
