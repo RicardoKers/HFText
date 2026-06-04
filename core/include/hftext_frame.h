@@ -14,9 +14,13 @@ constexpr int kBitsPerSymbol = 6;
 constexpr int kCrcBytes = 2;
 constexpr int kHeaderBytes = 3;
 constexpr int kDefaultPreambleBits = 64;
+constexpr int kPhysicalLengthRepeat = 3;
 
 std::vector<std::uint8_t> syncBytes();
 std::vector<std::uint8_t> syncBits();
+std::vector<std::uint8_t> startSyncBits();
+std::vector<std::uint8_t> physicalLengthBits(int payloadLength);
+int decodePhysicalLengthBits(const std::vector<std::uint8_t>& bits, std::size_t start);
 std::vector<std::uint8_t> defaultPreambleBits();
 
 std::vector<std::uint8_t> bytesToBits(const std::vector<std::uint8_t>& data);

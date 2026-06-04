@@ -34,13 +34,20 @@ Usar HFText Basic v0.1:
 ```text
 SYNC | LENGTH | PAYLOAD | CRC16
 
+Fluxo fisico transmitido:
+
+PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
+
 Regras:
 
 SYNC = 0x2DD4, 2 bytes.
+START_SYNC = 0x2DD4 0x2DD4, 32 bits, transmitido diretamente antes de PHYS_LENGTH.
+PHYS_LENGTH = LENGTH_BYTE repetido 3 vezes, 24 bits MSB-first, transmitido diretamente antes de ROBUST_FRAME.
 LENGTH tem 1 byte, usa apenas os 7 bits inferiores.
 Bit 7 de LENGTH deve ser zero.
 LENGTH representa a quantidade de símbolos de 6 bits no PAYLOAD.
 Valores válidos de LENGTH: 0 a 127.
+PHYS_LENGTH representa a mesma quantidade de símbolos do PAYLOAD e deve bater com LENGTH após Viterbi.
 PAYLOAD tem no máximo 127 símbolos de 6 bits.
 O indicativo não é campo separado; quando configurado, o transmissor o insere automaticamente no início do PAYLOAD, seguido por um espaço.
 O alfabeto usa letras minúsculas; letras maiúsculas são codificadas como shift + letra minúscula.
@@ -51,13 +58,17 @@ Caracteres não suportados devem ser substituídos por ?.
 CRC16 é CRC-16/CCITT-FALSE calculado sobre PAYLOAD compactado em bytes.
 Símbolos de 6 bits são compactados em bytes MSB-first, com zero padding no último byte.
 SYNC e CRC16 são serializados em big-endian; o quadro completo vira bits MSB-first antes da modulação.
-TX usa preâmbulo alternado de 64 bits antes do quadro; RX procura SYNC no fluxo de bits e descarta bits anteriores.
-RX Python pode tentar múltiplos offsets iniciais de amostra dentro do símbolo para melhorar alinhamento temporal.
+TX usa preâmbulo alternado de 64 bits antes de START_SYNC.
+RX procura START_SYNC no fluxo de bits, recupera PHYS_LENGTH e acumula o ROBUST_FRAME de tamanho conhecido.
+RX em operação normal deve ser contínuo, processando blocos de áudio durante a recepção; WAV fechado é ferramenta de debug.
+RX offline pode tentar múltiplos offsets iniciais de amostra dentro do símbolo para melhorar alinhamento temporal.
 Não incluir SYNC nem LENGTH no CRC.
+Não incluir START_SYNC nem PHYS_LENGTH no CRC.
+```
 
-## Implementação inicial
+## Implementação inicial histórica
 
-A primeira implementação deve usar:
+A primeira implementação usou:
 
 Python;
 2-FSK;
@@ -66,6 +77,8 @@ CRC16;
 sem FEC;
 sem interleaving;
 sem recepção em tempo real.
+
+A implementação atual usa modo robusto único com `conv_k3 + interleaving`, `PHYS_LENGTH` físico e recepção contínua no app PC.
 
 ## Estilo Python
 Usar funções pequenas.

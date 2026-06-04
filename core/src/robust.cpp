@@ -70,6 +70,24 @@ std::size_t encodedBitCountForLogicalFrameBits(int logicalFrameBitCount) {
     return static_cast<std::size_t>(logicalFrameBitCount + kConvTailBits) * kConvOutputBitsPerInputBit;
 }
 
+int bitMismatchCount(
+    const std::vector<std::uint8_t>& bits,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern
+) {
+    if (start + pattern.size() > bits.size()) {
+        return static_cast<int>(pattern.size());
+    }
+
+    int mismatches = 0;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        if (bits[start + index] != pattern[index]) {
+            ++mismatches;
+        }
+    }
+    return mismatches;
+}
+
 }  // namespace
 
 InterleaveShape chooseInterleaveShape(std::size_t bitCount, int preferredRows, int minRows, int maxRows) {
@@ -259,8 +277,11 @@ std::vector<std::uint8_t> buildRobustTransmission(
     validateBits(preambleBits);
 
     auto transmission = preambleBits;
-    const auto startSync = syncBits();
+    const auto startSync = startSyncBits();
     transmission.insert(transmission.end(), startSync.begin(), startSync.end());
+    const auto payloadSymbols = encodeTextToSymbols(payloadText);
+    const auto lengthBits = physicalLengthBits(static_cast<int>(payloadSymbols.size()));
+    transmission.insert(transmission.end(), lengthBits.begin(), lengthBits.end());
     const auto frameBits = buildRobustFrameBits(payloadText);
     transmission.insert(transmission.end(), frameBits.begin(), frameBits.end());
     return transmission;
@@ -288,7 +309,7 @@ RobustDecodeResult parseRobustFrameFromStream(const std::vector<std::uint8_t>& b
 
     RobustDecodeResult firstCandidate;
     bool hasCandidate = false;
-    const auto startSync = syncBits();
+    const auto startSync = startSyncBits();
     if (bits.size() < startSync.size()) {
         DecodeResult result;
         result.error = "robust frame not found";
@@ -296,32 +317,37 @@ RobustDecodeResult parseRobustFrameFromStream(const std::vector<std::uint8_t>& b
     }
 
     const std::size_t lastSyncStart = bits.size() - startSync.size();
+    const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
     for (std::size_t syncStart = 0; syncStart <= lastSyncStart; ++syncStart) {
-        if (!std::equal(startSync.begin(), startSync.end(), bits.begin() + static_cast<std::ptrdiff_t>(syncStart))) {
+        if (bitMismatchCount(bits, syncStart, startSync) > maxSyncMismatches) {
             continue;
         }
 
-        const std::size_t offset = syncStart + startSync.size();
-        for (int payloadLength = 0; payloadLength <= kMaxPayloadSymbols; ++payloadLength) {
-            const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
-            const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);
-            if (offset + encodedBitCount > bits.size()) {
-                continue;
-            }
+        const std::size_t lengthStart = syncStart + startSync.size();
+        const int payloadLength = decodePhysicalLengthBits(bits, lengthStart);
+        if (payloadLength < 0) {
+            continue;
+        }
 
-            const std::vector<std::uint8_t> candidateBits(
-                bits.begin() + static_cast<std::ptrdiff_t>(offset),
-                bits.begin() + static_cast<std::ptrdiff_t>(offset + encodedBitCount)
-            );
-            auto result = parseRobustFrameBits(candidateBits, logicalFrameBitCount);
-            result.frame.syncIndex = static_cast<int>(offset);
-            if (!hasCandidate) {
-                firstCandidate = result;
-                hasCandidate = true;
-            }
-            if (result.frame.crcOk && result.frame.payloadValid && result.frame.length == payloadLength) {
-                return result;
-            }
+        const std::size_t offset = lengthStart + static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat);
+        const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
+        const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);
+        if (offset + encodedBitCount > bits.size()) {
+            continue;
+        }
+
+        const std::vector<std::uint8_t> candidateBits(
+            bits.begin() + static_cast<std::ptrdiff_t>(offset),
+            bits.begin() + static_cast<std::ptrdiff_t>(offset + encodedBitCount)
+        );
+        auto result = parseRobustFrameBits(candidateBits, logicalFrameBitCount);
+        result.frame.syncIndex = static_cast<int>(offset);
+        if (!hasCandidate) {
+            firstCandidate = result;
+            hasCandidate = true;
+        }
+        if (result.frame.crcOk && result.frame.payloadValid && result.frame.length == payloadLength) {
+            return result;
         }
     }
 

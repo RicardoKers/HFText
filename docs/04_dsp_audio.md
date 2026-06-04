@@ -61,7 +61,7 @@ Quando as duas energias sao zero, a confianca e zero. O resultado final de recep
 
 Esta versão assume que o áudio está alinhado à janela de símbolo do demodulador.
 
-Após a demodulação, o receptor procura o `START_SYNC` fisico no fluxo de bits e descarta preambulo, silencio demodulado, ruido demodulado ou outros bits anteriores ao quadro robusto.
+Após a demodulação, o receptor procura o `START_SYNC` fisico de 32 bits no fluxo de bits e descarta preambulo, silencio demodulado, ruido demodulado ou outros bits anteriores ao quadro robusto.
 
 Se um `START_SYNC` candidato aparecer em ruido antes do quadro real, o receptor deve continuar procurando outros candidatos ate encontrar um quadro completo com CRC e payload validos. Caso nenhum candidato seja valido, o primeiro erro encontrado pode ser usado como diagnostico.
 
@@ -72,11 +72,15 @@ O receptor Python também pode tentar múltiplos deslocamentos iniciais de amost
 - validar CRC e payload;
 - aceitar o primeiro resultado válido.
 
-O passo padrão da busca é `samples_per_symbol / 20`, com mínimo de 1 amostra. A CLI Python permite ajustar esse passo com `--offset-step`.
+O RX C++ pode tambem tentar pequenas variacoes de tempo de simbolo, escala de frequencia e deslocamento comum dos tons para compensar erro de clock, sintonia, BFO ou SDR. Essa busca deve ser limitada a desvios pequenos e a aceitacao da mensagem continua dependendo de CRC e payload validos.
 
-O núcleo C++ também usa busca de offset inicial quando `syncSearch` está habilitado, usando o mesmo passo padrão de `samples_per_symbol / 20`. O resultado de decodificação informa o offset aceito e quantos offsets foram testados. A CLI C++ `hftext_rx_wav` pode exibir esses dados com `--verbose`.
+Para operacao normal em radio, o RX deve ser orientado a fluxo continuo. O receptor deve processar blocos curtos de audio, acumular uma janela limitada e tentar decodificacao apenas quando houver amostras suficientes e novo audio relevante. Arquivos WAV completos continuam uteis para debug, mas nao devem ser o caminho principal de recepcao em operacao continua.
 
-Sincronismo temporal fino contínuo, rastreamento de clock e recuperação em áudio sem alinhamento aproximado ficam para etapa posterior.
+O passo padrão da busca offline é `samples_per_symbol / 20`, com mínimo de 1 amostra. A CLI Python permite ajustar esse passo com `--offset-step`.
+
+O núcleo C++ também usa busca de offset inicial no caminho offline quando `syncSearch` está habilitado. O resultado de decodificação informa o offset aceito e quantos offsets foram testados. A CLI C++ `hftext_rx_wav` pode exibir esses dados com `--verbose`.
+
+Sincronismo temporal fino contínuo e rastreamento de clock ainda ficam para etapa posterior.
 
 ## Recepcao em fluxo
 
@@ -85,12 +89,14 @@ Para escuta continua, o receptor nao deve depender de um WAV infinito. O app dev
 O primeiro passo no C++ e `StreamingReceiver`, que:
 
 - recebe blocos de amostras por `pushSamples`;
-- acumula temporariamente as amostras em buffer interno;
-- tenta decodificar quadros completos com o receptor offline existente;
+- mantém um banco limitado de fases de simbolo para nao depender do instante exato em que a captura foi iniciada;
+- demodula incrementalmente apenas janelas de simbolo novas;
+- acumula bits por fase em uma janela limitada;
+- procura `START_SYNC`, recupera `PHYS_LENGTH` e espera apenas o bloco robusto de tamanho conhecido;
 - emite `DecodeResult` quando CRC e payload sao validos;
-- descarta amostras consumidas apos um quadro recuperado.
+- descarta amostras e bits consumidos apos um quadro recuperado.
 
-Esta primeira versao ainda nao implementa rastreamento continuo de clock nem demodulacao incremental por simbolo; ela cria uma ponte segura entre o modo WAV offline e a futura recepcao em tempo real.
+Essa estrategia evita varrer todos os comprimentos possiveis de payload e evita reprocessar continuamente um WAV crescente. A validacao continua dependendo de CRC e payload validos; candidatos falsos de sincronismo sao descartados quando nao produzem frame logico valido.
 
 ## Canal simulado
 

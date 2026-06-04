@@ -123,7 +123,7 @@ O preâmbulo de transmissão é necessário para preparar a detecção e habilit
 O transmissor deve antepor um preambulo simples e uma palavra fisica de inicio ao fluxo codificado:
 
 ```text
-PREAMBLE | START_SYNC | ROBUST_FRAME
+PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 ```
 
 O preambulo e alternado:
@@ -143,7 +143,7 @@ Tamanho inicial do preambulo:
 Valor:
 
 ```text
-0x2DD4
+0x2DD4 0x2DD4
 ```
 
 Serializacao:
@@ -152,9 +152,42 @@ Serializacao:
 big-endian, MSB-first
 ```
 
-O preambulo e `START_SYNC` nao entram no calculo do CRC e nao fazem parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
+Tamanho:
 
-O receptor deve procurar `START_SYNC` no fluxo de bits demodulado, tolerando pequena quantidade de erros de bit, e iniciar o bloco robusto imediatamente apos essa palavra. Apos isso deve desfazer interleaving, aplicar Viterbi e aceitar apenas o frame logico recuperado cujo CRC e payload sejam validos.
+```text
+32 bits
+```
+
+O preambulo, `START_SYNC` e `PHYS_LENGTH` nao entram no calculo do CRC e nao fazem parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
+
+### PHYS_LENGTH
+
+`PHYS_LENGTH` e uma copia fisica do tamanho do payload, transmitida diretamente apos `START_SYNC` e antes do bloco robusto.
+
+Formato:
+
+```text
+LENGTH_BYTE repetido 3 vezes
+```
+
+Tamanho:
+
+```text
+24 bits
+```
+
+Regras:
+
+- cada repeticao tem 1 byte MSB-first;
+- usa apenas os 7 bits inferiores;
+- bit 7 deve ser zero;
+- o receptor recupera cada bit por maioria entre as 3 repeticoes;
+- valores validos: 0 a 127;
+- `PHYS_LENGTH` nao entra no CRC e nao faz parte do frame logico.
+
+Objetivo: permitir que o receptor saiba o tamanho do bloco robusto antes do fim da recepcao, evitando varrer todos os comprimentos possiveis depois da transmissao.
+
+O receptor deve procurar `START_SYNC` no fluxo de bits demodulado, tolerando erro moderado de bit no marcador fisico, recuperar `PHYS_LENGTH` e calcular exatamente quantos bits do `ROBUST_FRAME` devem ser acumulados. Apos receber esse bloco, deve desfazer interleaving, aplicar Viterbi e aceitar apenas o frame logico recuperado cujo CRC, `LENGTH` logico e payload sejam validos.
 
 ## Campos
 
@@ -182,7 +215,7 @@ big-endian: 0x2D 0xD4
 
 SYNC não entra no cálculo do CRC.
 
-Observacao: o mesmo valor `0x2DD4` tambem e usado como `START_SYNC` fisico antes do bloco robusto, para marcar o inicio dos dados codificados no fluxo transmitido. O `START_SYNC` fisico e visivel antes do Viterbi; o `SYNC` do frame logico so reaparece depois da decodificacao robusta.
+Observacao: o mesmo valor `0x2DD4` tambem e usado como base do `START_SYNC` fisico antes de `PHYS_LENGTH | ROBUST_FRAME`. No fluxo fisico ele e repetido duas vezes (`0x2DD4 0x2DD4`) para melhorar a correlacao em ruido. O `START_SYNC` fisico e visivel antes do Viterbi; o `SYNC` do frame logico so reaparece depois da decodificacao robusta.
 
 ### LENGTH
 
@@ -305,7 +338,7 @@ TX:
 frame logico v0.1
 -> codigo convolucional rate 1/2, K=3, geradores 111 e 101
 -> interleaving retangular derivado do tamanho codificado
--> preambulo + START_SYNC + 2-FSK
+-> preambulo + START_SYNC + PHYS_LENGTH + 2-FSK
 ```
 
 RX:
@@ -313,7 +346,9 @@ RX:
 ```text
 bits demodulados
 -> busca de START_SYNC fisico
--> deinterleaving do bloco seguinte
+-> recuperacao de PHYS_LENGTH
+-> acumulacao do ROBUST_FRAME com tamanho conhecido
+-> deinterleaving do bloco robusto
 -> Viterbi hard-decision
 -> frame logico v0.1
 -> CRC16 normal
@@ -322,7 +357,8 @@ bits demodulados
 Regras:
 
 - o frame logico antes do FEC continua sendo `SYNC | LENGTH | PAYLOAD | CRC16`;
-- o fluxo fisico transmitido usa `PREAMBLE | START_SYNC | ROBUST_FRAME`;
+- o fluxo fisico transmitido usa `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
+- `PHYS_LENGTH` deve bater com o `LENGTH` recuperado no frame logico apos Viterbi;
 - o CRC continua protegendo o payload logico original, nao os bits codificados;
 - o codigo convolucional usa tail bits zero para retornar ao estado zero;
 - o receptor deve remover os bits de cauda apos o Viterbi;

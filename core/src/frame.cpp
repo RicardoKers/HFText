@@ -67,6 +67,52 @@ std::vector<std::uint8_t> syncBits() {
     return bytesToBits(syncBytes());
 }
 
+std::vector<std::uint8_t> startSyncBits() {
+    auto bits = syncBits();
+    const auto repeated = syncBits();
+    bits.insert(bits.end(), repeated.begin(), repeated.end());
+    return bits;
+}
+
+std::vector<std::uint8_t> physicalLengthBits(int payloadLength) {
+    if (payloadLength < 0 || payloadLength > kMaxPayloadSymbols) {
+        throw std::invalid_argument("payload length must be between 0 and 127");
+    }
+
+    std::vector<std::uint8_t> bits;
+    bits.reserve(kBitsPerByte * kPhysicalLengthRepeat);
+    const auto byte = static_cast<std::uint8_t>(payloadLength & 0x7F);
+    for (int repeat = 0; repeat < kPhysicalLengthRepeat; ++repeat) {
+        for (int shift = kBitsPerByte - 1; shift >= 0; --shift) {
+            bits.push_back(static_cast<std::uint8_t>((byte >> shift) & 1U));
+        }
+    }
+    return bits;
+}
+
+int decodePhysicalLengthBits(const std::vector<std::uint8_t>& bits, std::size_t start) {
+    const auto requiredBits = static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat);
+    if (start + requiredBits > bits.size()) {
+        return -1;
+    }
+
+    int value = 0;
+    for (int bitIndex = 0; bitIndex < kBitsPerByte; ++bitIndex) {
+        int ones = 0;
+        for (int repeat = 0; repeat < kPhysicalLengthRepeat; ++repeat) {
+            const auto bit = bits[start + static_cast<std::size_t>(repeat * kBitsPerByte + bitIndex)];
+            validateBit(bit);
+            ones += bit;
+        }
+        value = (value << 1) | (ones >= 2 ? 1 : 0);
+    }
+
+    if ((value & 0x80) != 0 || value > kMaxPayloadSymbols) {
+        return -1;
+    }
+    return value;
+}
+
 std::vector<std::uint8_t> defaultPreambleBits() {
     std::vector<std::uint8_t> bits;
     bits.reserve(kDefaultPreambleBits);

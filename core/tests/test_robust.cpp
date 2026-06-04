@@ -1,4 +1,5 @@
 #include "hftext_frame.h"
+#include "hftext_encoder.h"
 #include "hftext_robust.h"
 
 #include <cassert>
@@ -99,7 +100,8 @@ int main() {
 
     const auto robustTransmission = hftext::buildRobustTransmission("pu5lrk Teste");
     const auto preamble = hftext::defaultPreambleBits();
-    const auto startSync = hftext::syncBits();
+    const auto startSync = hftext::startSyncBits();
+    const auto physicalLength = hftext::physicalLengthBits(static_cast<int>(hftext::encodeTextToSymbols("pu5lrk Teste").size()));
     assert(
         std::vector<std::uint8_t>(robustTransmission.begin(), robustTransmission.begin() + preamble.size())
         == preamble
@@ -114,6 +116,13 @@ int main() {
     assert(
         std::vector<std::uint8_t>(
             robustTransmission.begin() + static_cast<std::ptrdiff_t>(preamble.size() + startSync.size()),
+            robustTransmission.begin() + static_cast<std::ptrdiff_t>(preamble.size() + startSync.size() + physicalLength.size())
+        )
+        == physicalLength
+    );
+    assert(
+        std::vector<std::uint8_t>(
+            robustTransmission.begin() + static_cast<std::ptrdiff_t>(preamble.size() + startSync.size() + physicalLength.size()),
             robustTransmission.end()
         )
         == robustBits
@@ -123,15 +132,16 @@ int main() {
     assert(robustResult.frame.crcOk);
     assert(robustResult.frame.payloadValid);
     assert(robustResult.frame.text == "pu5lrk Teste");
-    assert(robustResult.frame.syncIndex == static_cast<int>(preamble.size() + startSync.size()));
+    assert(robustResult.frame.syncIndex == static_cast<int>(preamble.size() + startSync.size() + physicalLength.size()));
 
     const std::vector<std::uint8_t> customPreamble = {1, 0, 0, 1, 1, 0};
     const auto customTransmission = hftext::buildRobustTransmission("Ok", customPreamble);
+    const auto customPhysicalLength = hftext::physicalLengthBits(static_cast<int>(hftext::encodeTextToSymbols("Ok").size()));
     robustResult = hftext::parseRobustFrameFromStream(customTransmission);
     assert(robustResult.frame.crcOk);
     assert(robustResult.frame.payloadValid);
     assert(robustResult.frame.text == "Ok");
-    assert(robustResult.frame.syncIndex == static_cast<int>(customPreamble.size() + startSync.size()));
+    assert(robustResult.frame.syncIndex == static_cast<int>(customPreamble.size() + startSync.size() + customPhysicalLength.size()));
 
     std::vector<std::uint8_t> noisyStream = {0, 0, 1, 1, 0};
     noisyStream.insert(noisyStream.end(), robustTransmission.begin(), robustTransmission.end());
@@ -140,7 +150,17 @@ int main() {
     assert(robustResult.frame.crcOk);
     assert(robustResult.frame.payloadValid);
     assert(robustResult.frame.text == "pu5lrk Teste");
-    assert(robustResult.frame.syncIndex == static_cast<int>(5 + preamble.size() + startSync.size()));
+    assert(robustResult.frame.syncIndex == static_cast<int>(5 + preamble.size() + startSync.size() + physicalLength.size()));
+
+    auto damagedStartSyncStream = robustTransmission;
+    for (std::size_t index : {preamble.size(), preamble.size() + 3, preamble.size() + 8, preamble.size() + 15, preamble.size() + 24}) {
+        damagedStartSyncStream[index] = static_cast<std::uint8_t>(damagedStartSyncStream[index] ^ 1U);
+    }
+    robustResult = hftext::parseRobustFrameFromStream(damagedStartSyncStream);
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "pu5lrk Teste");
+    assert(robustResult.frame.syncIndex == static_cast<int>(preamble.size() + startSync.size() + physicalLength.size()));
 
     robustResult = hftext::parseRobustFrameFromStream({0, 1, 0, 1});
     assert(!robustResult.frame.frameDetected);

@@ -240,6 +240,7 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    stopRxWorker();
     audioInput_.setSamplesCallback({});
     (void)audioInput_.stopAndSave({});
     audioOutput_.stop();
@@ -342,21 +343,14 @@ void MainWindow::stopTransmit() {
 }
 
 void MainWindow::startReceive() {
-    const QString outputPath = QFileDialog::getSaveFileName(
-        this,
-        "Salvar RX WAV",
-        QString(),
-        "WAV (*.wav)"
-    );
-    if (outputPath.isEmpty()) {
-        return;
-    }
-
     try {
         const auto rxConfig = readRxConfig();
+        stopRxWorker();
+        startRxWorker(rxConfig);
         waterfallWidget_->clear();
         rxQualityBar_->setValue(0);
         audioInput_.setSamplesCallback([this, sampleRate = rxConfig.sampleRate](const std::vector<float>& samples) {
+            enqueueRxSamples(samples);
             auto chunk = samples;
             QMetaObject::invokeMethod(
                 this,
@@ -368,10 +362,10 @@ void MainWindow::startReceive() {
         });
         const unsigned int deviceId = inputDeviceCombo_->currentData().toUInt();
         audioInput_.start(deviceId, rxConfig.sampleRate);
-        lastRxWavPath_ = outputPath;
+        lastRxWavPath_.clear();
         rxLevelTimer_->start();
         appendLog(
-            "RX iniciado: " + outputPath
+            QStringLiteral("RX streaming iniciado")
             + " (captura " + QString::number(rxConfig.sampleRate) + " Hz)"
         );
     } catch (const std::exception& exc) {
@@ -381,15 +375,16 @@ void MainWindow::startReceive() {
 }
 
 void MainWindow::stopReceive() {
-    if (lastRxWavPath_.isEmpty() && !audioInput_.isRecording()) {
+    if (!audioInput_.isRecording()) {
         appendLog("RX nao iniciado.");
         return;
     }
 
     try {
         controller_.setConfig(readRxConfig());
-        const auto stats = audioInput_.stopAndSave(toStdString(lastRxWavPath_));
+        const auto stats = audioInput_.stopAndSave({});
         audioInput_.setSamplesCallback({});
+        stopRxWorker(true);
         rxLevelTimer_->stop();
         rxLevelBar_->setValue(0);
         const std::string error = audioInput_.lastError();
@@ -398,7 +393,7 @@ void MainWindow::stopReceive() {
             appendLog("Erro no RX: " + QString::fromStdString(error));
             return;
         }
-        appendLog("RX salvo: " + lastRxWavPath_);
+        appendLog("RX streaming encerrado.");
         appendLog(
             "RX duracao: " + QString::number(stats.durationSeconds(), 'f', 2)
             + " s, sample rate: " + QString::number(stats.sampleRate)
@@ -406,21 +401,6 @@ void MainWindow::stopReceive() {
             + "%, clipping aprox.: " + QString::number(static_cast<qulonglong>(stats.clippedSamples))
             + " samples"
         );
-        const auto result = controller_.decodeWav(toStdString(lastRxWavPath_));
-        showDecodeResult(result);
-        appendLog("Modo RX: robust");
-        appendLog(
-            "RX offset: " + QString::number(result.startOffset)
-            + " amostras, tentativas: " + QString::number(result.offsetsTried)
-            + ", confianca: " + formatConfidence(result.confidence)
-        );
-        if (result.crcOk && result.payloadValid) {
-            appendLog("RX decodificado automaticamente com CRC valido.");
-        } else if (result.frameDetected) {
-            appendLog("RX decodificado automaticamente, mas sem payload valido.");
-        } else {
-            appendLog("RX salvo, mas quadro nao detectado automaticamente.");
-        }
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Erro ao parar RX: " + QString::fromUtf8(exc.what()));
@@ -536,6 +516,80 @@ void MainWindow::populateOutputDevices() {
 
     for (const auto& device : devices) {
         outputDeviceCombo_->addItem(QString::fromStdString(device.name), device.id);
+    }
+}
+
+void MainWindow::startRxWorker(const hftext::ModemConfig& config) {
+    {
+        std::lock_guard<std::mutex> lock(rxMutex_);
+        rxPendingSamples_.clear();
+        rxWorkerStop_ = false;
+    }
+    rxWorker_ = std::thread(&MainWindow::rxWorkerLoop, this, config);
+}
+
+void MainWindow::stopRxWorker(bool drainPending) {
+    {
+        std::lock_guard<std::mutex> lock(rxMutex_);
+        rxWorkerStop_ = true;
+        if (!drainPending) {
+            rxPendingSamples_.clear();
+        }
+    }
+    rxCondition_.notify_all();
+    if (rxWorker_.joinable()) {
+        rxWorker_.join();
+    }
+}
+
+void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
+    if (samples.empty()) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(rxMutex_);
+        if (rxWorkerStop_) {
+            return;
+        }
+        rxPendingSamples_.insert(rxPendingSamples_.end(), samples.begin(), samples.end());
+    }
+    rxCondition_.notify_one();
+}
+
+void MainWindow::rxWorkerLoop(hftext::ModemConfig config) {
+    hftext::StreamingReceiver receiver(config);
+
+    while (true) {
+        std::vector<float> chunk;
+        {
+            std::unique_lock<std::mutex> lock(rxMutex_);
+            rxCondition_.wait(lock, [this] {
+                return rxWorkerStop_ || !rxPendingSamples_.empty();
+            });
+
+            if (rxWorkerStop_ && rxPendingSamples_.empty()) {
+                break;
+            }
+
+            chunk.swap(rxPendingSamples_);
+        }
+
+        const auto results = receiver.pushSamples(chunk);
+        for (const auto& result : results) {
+            QMetaObject::invokeMethod(
+                this,
+                [this, result]() {
+                    showDecodeResult(result);
+                    appendLog("RX streaming: quadro com CRC valido.");
+                    appendLog(
+                        "RX offset: " + QString::number(result.startOffset)
+                        + " amostras, tentativas: " + QString::number(result.offsetsTried)
+                        + ", confianca: " + formatConfidence(result.confidence)
+                    );
+                },
+                Qt::QueuedConnection
+            );
+        }
     }
 }
 

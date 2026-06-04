@@ -290,7 +290,11 @@ Tarefa 7.2 — Implementar detecção automática de início
 
 Não assumir que o áudio começa exatamente no início do quadro.
 
-Refinamento aplicado: o fluxo fisico agora usa `PREAMBLE | START_SYNC | ROBUST_FRAME`. O `START_SYNC` e transmitido diretamente antes do bloco robusto para marcar o inicio dos dados e reduzir a busca lenta por candidatos Viterbi.
+Refinamento aplicado: o fluxo fisico agora usa `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`. O `START_SYNC` e transmitido diretamente antes do bloco robusto para marcar o inicio dos dados e reduzir a busca lenta por candidatos Viterbi. O marcador fisico atual e `0x2DD4 0x2DD4`. O `PHYS_LENGTH` vem logo depois do `START_SYNC`, repetido 3 vezes, para permitir que o RX saiba exatamente quantos bits robustos deve acumular antes de rodar Viterbi.
+
+Refinamento de RX aplicado: a demodulacao C++ passou a varrer pequenas variacoes de duracao de simbolo e escala de frequencia, compensando desvios de clock em capturas por microfone, especialmente perceptiveis com simbolos longos como `0,3 s`.
+
+Refinamento de operacao aplicado: o app PC passou a receber em streaming, com decodificacao em thread de segundo plano alimentada por blocos curtos de audio. O `StreamingReceiver` demodula incrementalmente simbolos novos em um banco limitado de fases e usa `PHYS_LENGTH` para evitar varrer todos os tamanhos de payload. O fluxo de WAV fechado fica reservado para debug e reproducao de capturas, evitando travamento da interface durante recepcao continua.
 
 Tambem foi iniciada uma metrica diagnostica de confianca no demodulador, calculada pela separacao relativa entre as energias dos dois tons. Essa metrica deve ajudar logs e interface no futuro, mas nao substitui CRC.
 
@@ -378,7 +382,7 @@ O alvo `hftext_pc` e construido somente quando Qt6 Widgets esta instalado; sem Q
 
 A tarefa 5.2 foi iniciada com reproducao explicita de WAV no app PC: `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV` e botao `Parar TX`.
 
-A tarefa 5.3 foi iniciada com captura explicita de WAV no app PC: `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX` e indicador simples de nivel RX. A demodulacao em tempo real ainda nao foi implementada.
+A tarefa 5.3 evoluiu para recepcao continua no app PC: `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX`, indicador simples de nivel RX e decodificacao em thread de segundo plano por `StreamingReceiver`. WAV permanece como ferramenta de debug.
 
 A tarefa 5.4 foi iniciada com a estimativa TX ao vivo no app PC: o campo `Estimativa TX` mostra simbolos de payload, limite de 127 simbolos, bits totais transmitidos e duracao aproximada. A contagem inclui o indicativo automatico e letras maiusculas como `shift` + letra.
 

@@ -4,8 +4,14 @@
 #include "AudioOutput.h"
 #include "ModemController.h"
 #include "WaterfallWidget.h"
+#include "hftext_streaming_receiver.h"
 
 #include <QMainWindow>
+
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <vector>
 
 class QLineEdit;
 class QLabel;
@@ -44,10 +50,19 @@ private:
     hftext::ModemConfig readConfig() const;
     hftext::ModemConfig readRxConfig() const;
     void showDecodeResult(const hftext::DecodeResult& result);
+    void startRxWorker(const hftext::ModemConfig& config);
+    void stopRxWorker(bool drainPending = false);
+    void enqueueRxSamples(const std::vector<float>& samples);
+    void rxWorkerLoop(hftext::ModemConfig config);
 
     AudioInput audioInput_;
     AudioOutput audioOutput_;
     ModemController controller_;
+    std::thread rxWorker_;
+    std::mutex rxMutex_;
+    std::condition_variable rxCondition_;
+    std::vector<float> rxPendingSamples_;
+    bool rxWorkerStop_ = false;
     QString lastWavPath_;
     QString lastRxWavPath_;
     QLineEdit* callsignEdit_ = nullptr;

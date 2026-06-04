@@ -67,9 +67,9 @@ Controle de volume.
 ModemController
 Conecta UI, áudio e núcleo C++.
 Não deve implementar DSP diretamente.
-MVP PC
+MVP PC historico
 
-O primeiro MVP pode ignorar recepção em tempo real.
+O primeiro MVP podia ignorar recepção em tempo real.
 
 Fluxo mínimo:
 
@@ -124,19 +124,21 @@ A reproducao de audio TX foi iniciada no `pc-app/` com `AudioOutput`.
 
 Nesta etapa, o botao `Transmitir WAV` reproduz explicitamente o ultimo WAV gerado no dispositivo de saida selecionado, ou permite escolher um WAV se nenhum arquivo tiver sido gerado na sessao. O botao `Parar TX` interrompe a reproducao.
 
-Ainda nao ha selecao avancada de formato de audio, demodulacao em tempo real ou controle automatico de ganho.
+Ainda nao ha selecao avancada de formato de audio ou controle automatico de ganho.
 
 A captura RX basica tambem foi iniciada com `AudioInput`.
 
-Nesta etapa, o botao `Receber` inicia a gravacao pelo dispositivo de entrada selecionado e o botao `Parar RX` salva o audio recebido em WAV. O indicador `Nivel RX` mostra o pico aproximado dos buffers recebidos.
+Nesta etapa, o botao `Receber` inicia escuta continua pelo dispositivo de entrada selecionado. Os blocos de audio capturados alimentam o `StreamingReceiver` em uma thread de segundo plano, enquanto a interface continua atualizando `Nivel RX`, qualidade e waterfall.
 
-Ao parar RX, o app registra no log a duracao capturada, o pico de audio, uma contagem aproximada de amostras proximas de clipping, o offset aceito, a quantidade de tentativas e a confianca media estimada pelo demodulador. Em seguida, tenta decodificar automaticamente o WAV salvo e mostra o resultado na area de texto recebido.
+Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra offset/fases testadas e confianca media no log.
+
+Ao parar RX, o app encerra a escuta e registra duracao capturada, pico de audio e uma contagem aproximada de amostras proximas de clipping. A parada do RX nao dispara mais uma decodificacao offline de toda a captura.
 
 Ao usar `Decodificar WAV` manualmente, o app tambem registra duracao, sample rate, pico e clipping aproximado do arquivo aberto antes de tentar recuperar o quadro.
 
-O sample rate de TX/WAV e o sample rate de captura RX sao configuracoes separadas. A captura RX usa 48000 Hz por padrao, que e a taxa mais comum em dispositivos de audio no Windows. O WAV salvo pela recepcao deve usar no cabecalho a mesma taxa usada na captura, e o receptor em fluxo tambem deve decodificar usando essa taxa. Isso evita arquivos RX com duracao aparente comprimida ou esticada por divergencia entre a taxa real de captura e a taxa gravada no WAV.
+O sample rate de TX/WAV e o sample rate de captura RX sao configuracoes separadas. A captura RX usa 48000 Hz por padrao, que e a taxa mais comum em dispositivos de audio no Windows. O receptor em fluxo decodifica usando essa taxa. Isso evita audio RX com duracao aparente comprimida ou esticada por divergencia entre a taxa real de captura e a taxa assumida pelo demodulador.
 
-O app ainda nao roda decodificacao em fluxo durante a captura. A thread de audio deve gravar e reciclar buffers com prioridade, e a decodificacao automatica acontece depois que `Parar RX` salva o WAV. O `StreamingReceiver` permanece no core como base testada para uma etapa posterior, mas sua integracao no app precisa de uma fila/thread dedicada para nao bloquear a captura.
+Arquivos WAV continuam suportados para debug e reproducao de capturas, mas nao sao o caminho principal da operacao em radio.
 
 Ainda nao ha controle automatico de ganho nem rastreamento continuo fino de clock.
 

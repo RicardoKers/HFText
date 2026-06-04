@@ -68,6 +68,30 @@ std::vector<float> clippedNoisyCaptureLikeAudio(
     );
 }
 
+std::vector<float> timeScaledAudio(const std::vector<float>& audio, double scale) {
+    if (audio.empty() || scale <= 0.0) {
+        return {};
+    }
+
+    const auto outputSize = static_cast<std::size_t>(std::lround(static_cast<double>(audio.size()) * scale));
+    std::vector<float> output;
+    output.reserve(outputSize);
+    for (std::size_t index = 0; index < outputSize; ++index) {
+        const double sourcePosition = static_cast<double>(index) / scale;
+        const auto left = static_cast<std::size_t>(std::floor(sourcePosition));
+        if (left + 1 >= audio.size()) {
+            output.push_back(audio.back());
+            continue;
+        }
+        const double fraction = sourcePosition - static_cast<double>(left);
+        const double sample =
+            static_cast<double>(audio[left]) * (1.0 - fraction)
+            + static_cast<double>(audio[left + 1]) * fraction;
+        output.push_back(static_cast<float>(sample));
+    }
+    return output;
+}
+
 }  // namespace
 
 int main() {
@@ -85,7 +109,8 @@ int main() {
     assert(result.crcOk);
     assert(result.payloadValid);
     assert(result.text == "pu5lrk Teste");
-    assert(result.syncIndex == config.preambleBits + static_cast<int>(hftext::syncBits().size()));
+    const int physicalLengthBitCount = static_cast<int>(hftext::physicalLengthBits(0).size());
+    assert(result.syncIndex == config.preambleBits + static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
     assert(result.startOffset == 0);
     assert(result.offsetsTried >= 1);
     assert(result.confidence > 0.9F);
@@ -112,7 +137,7 @@ int main() {
     assert(recordedResult.crcOk);
     assert(recordedResult.payloadValid);
     assert(recordedResult.text == "pu5lrk Teste");
-    assert(recordedResult.syncIndex >= config.preambleBits + static_cast<int>(hftext::syncBits().size()));
+    assert(recordedResult.syncIndex >= config.preambleBits + static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
     assert(recordedResult.offsetsTried >= 1);
 
     hftext::ModemConfig captureConfig = config;
@@ -130,6 +155,37 @@ int main() {
     assert(noisyRecordedResult.crcOk);
     assert(noisyRecordedResult.payloadValid);
     assert(noisyRecordedResult.text == "pu5lrk Teste");
+
+    const auto driftedSlowAudio = timeScaledAudio(slowAudio, 1.005);
+    const auto driftedNoisyRecordedAudio = noisyCaptureLikeAudio(
+        driftedSlowAudio,
+        captureConfig.sampleRate,
+        0.5F,
+        0.2F,
+        0.01F
+    );
+    const auto driftedNoisyRecordedResult = hftext::demodulateSamples(driftedNoisyRecordedAudio, captureConfig);
+    assert(driftedNoisyRecordedResult.frameDetected);
+    assert(driftedNoisyRecordedResult.crcOk);
+    assert(driftedNoisyRecordedResult.payloadValid);
+    assert(driftedNoisyRecordedResult.text == "pu5lrk Teste");
+
+    hftext::ModemConfig shiftedToneTxConfig = captureConfig;
+    shiftedToneTxConfig.frequency0Hz = 1207.0F;
+    shiftedToneTxConfig.frequency1Hz = 1607.0F;
+    const auto shiftedToneAudio = hftext::modulateText("pu5lrk Teste", shiftedToneTxConfig);
+    const auto shiftedToneRecordedAudio = noisyCaptureLikeAudio(
+        shiftedToneAudio,
+        captureConfig.sampleRate,
+        0.5F,
+        0.2F,
+        0.01F
+    );
+    const auto shiftedToneResult = hftext::demodulateSamples(shiftedToneRecordedAudio, captureConfig);
+    assert(shiftedToneResult.frameDetected);
+    assert(shiftedToneResult.crcOk);
+    assert(shiftedToneResult.payloadValid);
+    assert(shiftedToneResult.text == "pu5lrk Teste");
 
     hftext::ModemConfig clippedConfig = config;
     clippedConfig.symbolDurationSec = 0.03F;
@@ -163,7 +219,7 @@ int main() {
     assert(frameOnlyResult.crcOk);
     assert(frameOnlyResult.payloadValid);
     assert(frameOnlyResult.text == "abc");
-    assert(frameOnlyResult.syncIndex == static_cast<int>(hftext::syncBits().size()));
+    assert(frameOnlyResult.syncIndex == static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
     assert(frameOnlyResult.confidence > 0.9F);
 
     config.preambleBits = -1;

@@ -179,25 +179,25 @@ Cada recepção deve salvar opcionalmente:
 
 ## Validacao no app PC
 
-No app PC, o fluxo inicial de validacao com audio real e:
+No app PC, o fluxo atual de validacao com audio real e:
 
 - gerar um WAV TX com a configuracao desejada;
 - transmitir explicitamente o WAV pelo dispositivo de saida selecionado;
 - iniciar RX pelo dispositivo de entrada selecionado;
-- parar RX para salvar o WAV capturado;
+- aguardar a mensagem aparecer no historico de texto recebido durante a captura;
+- registrar offset/fase aceita, quantidade de fases testadas e confianca media estimada;
+- parar RX para encerrar a escuta;
 - registrar duracao, pico de audio e amostras proximas de clipping;
-- tentar decodificar automaticamente o WAV salvo;
-- registrar offset inicial aceito, quantidade de offsets testados e confianca media estimada;
 - aceitar o texto recebido apenas se o CRC estiver valido.
 
 Ao abrir um WAV manualmente no app PC, a validacao tambem deve registrar duracao, sample rate, pico de audio e amostras proximas de clipping antes da decodificacao.
 
-Durante uma captura RX ativa, o app deve priorizar apenas a gravacao dos buffers de audio. A decodificacao automatica ocorre depois de `Parar RX`, usando o WAV salvo. A decodificacao em fluxo com `StreamingReceiver` fica para uma etapa posterior com fila/thread propria, para nao atrasar a captura.
+Durante uma captura RX ativa, o app deve priorizar a reciclagem dos buffers de audio e enviar copias curtas para o `StreamingReceiver` em thread propria. A decodificacao deve acontecer durante a recepcao e publicar mensagens pouco depois do fim do quadro. WAV fechado deve ser usado apenas para debug e reproducao de casos de teste.
 
 Ao testar captura por placa de som, conferir no log do app:
 
-- `RX iniciado` deve informar a taxa de captura RX;
-- `RX duracao` deve informar o mesmo sample rate salvo no WAV;
+- `RX streaming iniciado` deve informar a taxa de captura RX;
+- `RX duracao` deve informar o sample rate usado na captura;
 - a duracao exibida deve bater com o tempo real de gravacao.
 
 Se o WAV recebido parecer comprimido ou esticado, a primeira verificacao e comparar o sample rate RX configurado com o sample rate mostrado no log e no arquivo WAV salvo. Em Windows, usar 48000 Hz para RX e o ponto de partida recomendado.
@@ -215,7 +215,7 @@ As proximas melhorias do app PC devem incluir validacoes manuais simples:
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving.
 
-Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao do WAV capturado deve continuar coerente com o tempo real de gravacao.
+Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. Ele serve como alerta operacional para reduzir ganho ou volume quando necessario.
 
@@ -238,7 +238,9 @@ No core C++, os testes automatizados devem cobrir:
 - helpers puros de `conv_k3`, Viterbi, interleaving e deinterleaving;
 - montagem e parse de frame robusto em bits;
 - deteccao de `START_SYNC` fisico em fluxo de bits com preambulo e bits extras;
+- recuperacao de `PHYS_LENGTH` repetido e rejeicao de tamanho fisico invalido;
 - round-trip limpo via API publica `modulateText`/`demodulateSamples`;
+- recepcao continua por `StreamingReceiver`, incluindo atraso inicial arbitrario e mais de um quadro no mesmo fluxo;
 - round-trip WAV pelos CLIs `hftext_tx_wav` e `hftext_rx_wav`;
 - round-trip manual no app PC gerando e decodificando o mesmo WAV.
 

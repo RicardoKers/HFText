@@ -45,4 +45,6 @@ core\build-msvc\Debug\hftext_rx_wav.exe --verbose python-sim\generated\cpp_tx.wa
 
 O CTest do core tambem executa um round-trip automatico `hftext_tx_wav` -> `hftext_rx_wav`.
 
-Os CLIs usam sempre o modo robusto atual: frame logico HFText v0.1, codigo convolucional `conv_k3`, interleaving deterministico e 2-FSK. Nao ha opcao para transmitir ou receber sem FEC/interleaving.
+Os CLIs usam sempre o modo robusto atual: frame logico HFText v0.1, codigo convolucional `conv_k3`, interleaving deterministico, fluxo fisico `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME` e 2-FSK. Nao ha opcao para transmitir ou receber sem FEC/interleaving.
+
+`hftext_rx_wav` continua sendo ferramenta offline de debug. A recepcao operacional do app PC usa `StreamingReceiver`, que processa blocos de audio durante a captura e evita depender de um WAV fechado.

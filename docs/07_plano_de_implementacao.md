@@ -114,7 +114,11 @@ Tarefas:
 Resultado esperado:
 Melhor desempenho em ruído e fading.
 
-Melhoria aplicada nesta fase: o fluxo fisico passou a usar `PREAMBLE | START_SYNC | ROBUST_FRAME`. O `START_SYNC` e transmitido diretamente antes do bloco robusto, permitindo que o RX encontre o inicio dos dados antes de aplicar Viterbi, em vez de testar muitos candidatos de bloco robusto.
+Melhoria aplicada nesta fase: o fluxo fisico passou a usar `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`. O `START_SYNC` e transmitido diretamente antes do bloco robusto, permitindo que o RX encontre o inicio dos dados antes de aplicar Viterbi. O marcador fisico foi alongado para `0x2DD4 0x2DD4`, melhorando a correlacao em ruido. O `PHYS_LENGTH` e transmitido logo depois do `START_SYNC`, repetido 3 vezes, para que o RX saiba o tamanho do bloco robusto antes de terminar a recepcao.
+
+Refinamento posterior: o RX C++ passou a tentar pequenas variacoes de duracao de simbolo e frequencia aparente durante a busca, para tolerar erro de clock entre WAV reproduzido e audio capturado por microfone.
+
+Refinamento operacional: a recepcao do app PC passou a usar o `StreamingReceiver` em uma thread de segundo plano. O botao `Receber` agora inicia escuta continua e as mensagens sao publicadas quando um quadro com CRC valido e encontrado. O receptor em fluxo demodula simbolos novos incrementalmente em um banco limitado de fases, em vez de reprocessar um WAV crescente. A decodificacao de WAV fechado permanece como ferramenta de debug.
 
 Outra melhoria iniciada: o demodulador passou a calcular uma confianca media baseada na separacao relativa entre as energias dos tons 0 e 1. A confianca e diagnostica e nao altera a regra de aceitacao por CRC.
 
@@ -172,9 +176,9 @@ Fases 1, 2 e 3 possuem implementacao inicial validada por testes automatizados.
 
 A Fase 4 foi iniciada com uma aplicacao PC offline em `pc-app/`, usando Qt Widgets, `hftext_core`, geracao de WAV e decodificacao de WAV. O alvo do app e ignorado pelo CMake quando Qt6 Widgets nao esta instalado.
 
-A Fase 5 foi iniciada pelos fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV`, botao `Parar TX`, `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX`, indicador simples de nivel RX, metricas basicas da captura e decodificacao automatica do WAV salvo ao parar RX. A demodulacao em tempo real fica para etapas posteriores.
+A Fase 5 possui os fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV`, botao `Parar TX`, `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX`, indicador simples de nivel RX, metricas basicas da captura e recepcao em fluxo via `StreamingReceiver`.
 
-A preparacao para RX continuo foi iniciada no core com `StreamingReceiver`, testado com audio gerado pelo core e entregue em blocos. A integracao direta desse receptor no app foi adiada porque executar a decodificacao offline dentro do caminho de captura pode atrasar a reciclagem dos buffers de audio e encurtar o WAV gravado. Por enquanto, o app prioriza capturar o WAV completo e decodificar automaticamente ao parar RX.
+O RX continuo foi integrado ao app em uma thread propria. O app nao depende mais de capturar um WAV completo para tentar decodificar; arquivos WAV permanecem apenas para debug e reproducao de casos reais.
 
 As proximas melhorias recomendadas para a Fase 5 sao incrementais e focadas em operacao:
 

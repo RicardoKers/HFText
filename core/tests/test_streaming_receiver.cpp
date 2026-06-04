@@ -40,4 +40,35 @@ int main() {
     const auto replayResults = receiver.pushSamples(audio);
     assert(replayResults.size() == 1);
     assert(replayResults.front().text == "pu5lrk streaming");
+
+    receiver.reset();
+    std::vector<float> delayedAudio(17, 0.0F);
+    delayedAudio.insert(delayedAudio.end(), audio.begin(), audio.end());
+    std::vector<hftext::DecodeResult> delayedResults;
+    for (std::size_t offset = 0; offset < delayedAudio.size(); offset += chunkSize) {
+        const auto end = std::min(delayedAudio.size(), offset + chunkSize);
+        const std::vector<float> chunk(delayedAudio.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       delayedAudio.begin() + static_cast<std::ptrdiff_t>(end));
+        const auto results = receiver.pushSamples(chunk);
+        delayedResults.insert(delayedResults.end(), results.begin(), results.end());
+    }
+    assert(delayedResults.size() == 1);
+    assert(delayedResults.front().text == "pu5lrk streaming");
+
+    receiver.reset();
+    const auto secondAudio = hftext::modulateText("pu5lrk segunda", config);
+    std::vector<float> continuousAudio = delayedAudio;
+    continuousAudio.insert(continuousAudio.end(), 231, 0.0F);
+    continuousAudio.insert(continuousAudio.end(), secondAudio.begin(), secondAudio.end());
+    std::vector<hftext::DecodeResult> continuousResults;
+    for (std::size_t offset = 0; offset < continuousAudio.size(); offset += chunkSize) {
+        const auto end = std::min(continuousAudio.size(), offset + chunkSize);
+        const std::vector<float> chunk(continuousAudio.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       continuousAudio.begin() + static_cast<std::ptrdiff_t>(end));
+        const auto results = receiver.pushSamples(chunk);
+        continuousResults.insert(continuousResults.end(), results.begin(), results.end());
+    }
+    assert(continuousResults.size() == 2);
+    assert(continuousResults[0].text == "pu5lrk streaming");
+    assert(continuousResults[1].text == "pu5lrk segunda");
 }

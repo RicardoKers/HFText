@@ -32,6 +32,36 @@ int defaultOffsetStep(const ModemConfig& config) {
     return std::max(1, samplesPerSymbol(config) / 20);
 }
 
+struct ReceiverSearchVariant {
+    float symbolDurationScale = 1.0F;
+    float frequencyScale = 1.0F;
+    float frequencyOffsetHz = 0.0F;
+};
+
+std::vector<ReceiverSearchVariant> receiverSearchVariants() {
+    return {
+        {1.0F, 1.0F, 0.0F},
+        {1.0F, 1.0F, 5.0F},
+        {1.0F, 1.0F, 7.5F},
+        {1.0F, 1.0F, 10.0F},
+        {1.0F, 1.0F, -5.0F},
+        {1.0F, 1.0F, -7.5F},
+        {1.0F, 1.0F, -10.0F},
+        {1.0F, 1.0F, 15.0F},
+        {1.0F, 1.0F, -15.0F},
+        {0.9975F, 1.0F / 0.9975F, 0.0F},
+        {1.0025F, 1.0F / 1.0025F, 0.0F},
+        {0.995F, 1.0F / 0.995F, 0.0F},
+        {1.005F, 1.0F / 1.005F, 0.0F},
+        {0.99F, 1.0F / 0.99F, 0.0F},
+        {1.01F, 1.0F / 1.01F, 0.0F},
+        {0.995F, 1.0F, 0.0F},
+        {1.005F, 1.0F, 0.0F},
+        {0.99F, 1.0F, 0.0F},
+        {1.01F, 1.0F, 0.0F},
+    };
+}
+
 std::vector<std::uint8_t> bitsFromDecisions(const std::vector<BitDecision>& decisions) {
     std::vector<std::uint8_t> bits;
     bits.reserve(decisions.size());
@@ -93,38 +123,95 @@ int bitMismatchCount(
     return mismatches;
 }
 
-std::vector<int> findStartSyncFrameStarts(const std::vector<std::uint8_t>& bits) {
-    const auto startSync = syncBits();
+int alternatingPreambleScore(
+    const std::vector<std::uint8_t>& bits,
+    std::size_t syncStart,
+    int preambleBitCount
+) {
+    if (preambleBitCount <= 0) {
+        return 0;
+    }
+
+    const std::size_t targetBits = static_cast<std::size_t>(std::min(32, std::max(8, preambleBitCount / 2)));
+    const std::size_t availableBits = std::min(syncStart, targetBits);
+    const std::size_t preambleStart = syncStart - availableBits;
+
+    int mismatchesPhase0 = static_cast<int>(targetBits - availableBits);
+    int mismatchesPhase1 = mismatchesPhase0;
+    for (std::size_t index = 0; index < availableBits; ++index) {
+        const auto bit = bits[preambleStart + index];
+        const auto expectedPhase0 = static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0);
+        const auto expectedPhase1 = static_cast<std::uint8_t>(expectedPhase0 ^ 1U);
+        if (bit != expectedPhase0) {
+            ++mismatchesPhase0;
+        }
+        if (bit != expectedPhase1) {
+            ++mismatchesPhase1;
+        }
+    }
+
+    return std::min(mismatchesPhase0, mismatchesPhase1);
+}
+
+struct StartSyncCandidate {
+    int frameStart = 0;
+    int payloadLength = 0;
+};
+
+std::vector<StartSyncCandidate> findStartSyncFrameStarts(const std::vector<std::uint8_t>& bits, int preambleBitCount) {
+    const auto startSync = startSyncBits();
     if (bits.size() < startSync.size()) {
         return {};
     }
 
-    std::vector<std::pair<int, int>> scoredStarts;
+    struct Candidate {
+        int score = 0;
+        int syncMismatches = 0;
+        int frameStart = 0;
+        int payloadLength = 0;
+    };
+    std::vector<Candidate> scoredStarts;
     const std::size_t lastStart = bits.size() - startSync.size();
-    constexpr int kMaxSyncMismatches = 2;
+    const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
     for (std::size_t syncStart = 0; syncStart <= lastStart; ++syncStart) {
         const int mismatches = bitMismatchCount(bits, syncStart, startSync);
-        if (mismatches <= kMaxSyncMismatches) {
+        if (mismatches <= maxSyncMismatches) {
+            const auto lengthStart = syncStart + startSync.size();
+            const int payloadLength = decodePhysicalLengthBits(bits, lengthStart);
+            if (payloadLength < 0) {
+                continue;
+            }
+            const int preambleScore = alternatingPreambleScore(bits, syncStart, preambleBitCount);
             scoredStarts.push_back({
+                mismatches + preambleScore,
                 mismatches,
-                static_cast<int>(syncStart + startSync.size())
+                static_cast<int>(lengthStart + static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat)),
+                payloadLength
             });
         }
     }
 
-    std::sort(scoredStarts.begin(), scoredStarts.end());
+    std::sort(scoredStarts.begin(), scoredStarts.end(), [](const Candidate& left, const Candidate& right) {
+        if (left.score != right.score) {
+            return left.score < right.score;
+        }
+        if (left.syncMismatches != right.syncMismatches) {
+            return left.syncMismatches < right.syncMismatches;
+        }
+        return left.frameStart < right.frameStart;
+    });
 
-    std::vector<int> frameStarts;
+    std::vector<StartSyncCandidate> frameStarts;
     frameStarts.reserve(scoredStarts.size());
     for (const auto& candidate : scoredStarts) {
-        const int frameStart = candidate.second;
-        const bool nearExisting = std::any_of(frameStarts.begin(), frameStarts.end(), [frameStart](int existing) {
-            return std::abs(existing - frameStart) <= 2;
+        const int frameStart = candidate.frameStart;
+        const bool nearExisting = std::any_of(frameStarts.begin(), frameStarts.end(), [frameStart](const StartSyncCandidate& existing) {
+            return std::abs(existing.frameStart - frameStart) <= 2;
         });
         if (!nearExisting) {
-            frameStarts.push_back(frameStart);
+            frameStarts.push_back({frameStart, candidate.payloadLength});
         }
-        if (frameStarts.size() >= 8) {
+        if (frameStarts.size() >= 64) {
             break;
         }
     }
@@ -141,7 +228,11 @@ std::size_t encodedBitCountForLogicalFrameBits(int logicalFrameBitCount) {
     return static_cast<std::size_t>(logicalFrameBitCount + kConvTailBits) * kConvOutputBitsPerInputBit;
 }
 
-DecodeResult parseRobustFrameAtExpectedOffset(const std::vector<std::uint8_t>& bits, int bitOffset) {
+DecodeResult parseRobustFrameAtExpectedOffset(
+    const std::vector<std::uint8_t>& bits,
+    int bitOffset,
+    int payloadLength
+) {
     if (bitOffset < 0 || static_cast<std::size_t>(bitOffset) >= bits.size()) {
         DecodeResult result;
         result.error = "robust frame not found";
@@ -149,47 +240,41 @@ DecodeResult parseRobustFrameAtExpectedOffset(const std::vector<std::uint8_t>& b
     }
 
     const auto start = static_cast<std::size_t>(bitOffset);
-    DecodeResult firstCandidate;
-    bool hasCandidate = false;
-    for (int payloadLength = 0; payloadLength <= kMaxPayloadSymbols; ++payloadLength) {
-        const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
-        const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);
-        if (start + encodedBitCount > bits.size()) {
-            continue;
-        }
-
-        const std::vector<std::uint8_t> candidateBits(
-            bits.begin() + static_cast<std::ptrdiff_t>(start),
-            bits.begin() + static_cast<std::ptrdiff_t>(start + encodedBitCount)
-        );
-        auto robustResult = parseRobustFrameBits(candidateBits, logicalFrameBitCount);
-        robustResult.frame.syncIndex = bitOffset;
-        if (!hasCandidate) {
-            firstCandidate = robustResult.frame;
-            hasCandidate = true;
-        }
-        if (
-            robustResult.frame.crcOk
-            && robustResult.frame.payloadValid
-            && robustResult.frame.length == payloadLength
-        ) {
-            return robustResult.frame;
-        }
+    if (payloadLength < 0 || payloadLength > kMaxPayloadSymbols) {
+        DecodeResult result;
+        result.error = "robust frame not found";
+        return result;
     }
 
-    if (hasCandidate) {
-        firstCandidate.frameDetected = false;
-        firstCandidate.crcOk = false;
-        firstCandidate.payloadValid = false;
-        firstCandidate.text.clear();
-        firstCandidate.error = "robust frame not found";
-        firstCandidate.syncIndex = -1;
-        return firstCandidate;
+    const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
+    const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);
+    if (start + encodedBitCount > bits.size()) {
+        DecodeResult result;
+        result.error = "robust frame not found";
+        return result;
     }
 
-    DecodeResult result;
-    result.error = "robust frame not found";
-    return result;
+    const std::vector<std::uint8_t> candidateBits(
+        bits.begin() + static_cast<std::ptrdiff_t>(start),
+        bits.begin() + static_cast<std::ptrdiff_t>(start + encodedBitCount)
+    );
+    auto robustResult = parseRobustFrameBits(candidateBits, logicalFrameBitCount);
+    robustResult.frame.syncIndex = bitOffset;
+    if (
+        robustResult.frame.crcOk
+        && robustResult.frame.payloadValid
+        && robustResult.frame.length == payloadLength
+    ) {
+        return robustResult.frame;
+    }
+
+    robustResult.frame.frameDetected = false;
+    robustResult.frame.crcOk = false;
+    robustResult.frame.payloadValid = false;
+    robustResult.frame.text.clear();
+    robustResult.frame.error = "robust frame not found";
+    robustResult.frame.syncIndex = -1;
+    return robustResult.frame;
 }
 
 DecodeResult demodulateAndParse(
@@ -200,8 +285,8 @@ DecodeResult demodulateAndParse(
     const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
     const auto bits = bitsFromDecisions(decisions);
     DecodeResult result;
-    for (int frameStart : findStartSyncFrameStarts(bits)) {
-        result = parseRobustFrameAtExpectedOffset(bits, frameStart);
+    for (const auto& candidate : findStartSyncFrameStarts(bits, config.preambleBits)) {
+        result = parseRobustFrameAtExpectedOffset(bits, candidate.frameStart, candidate.payloadLength);
         if (result.crcOk && result.payloadValid) {
             result.startOffset = startOffset;
             result.confidence = meanConfidence(decisions, 0, decisions.size());
@@ -230,28 +315,40 @@ DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemCon
         return result;
     }
 
-    const int symbolSamples = samplesPerSymbol(config);
-    const int step = defaultOffsetStep(config);
     DecodeResult fallback;
     bool hasFallback = false;
     DecodeResult bestValid;
     bool hasBestValid = false;
     int offsetsTried = 0;
 
-    for (int startOffset = 0; startOffset < symbolSamples; startOffset += step) {
-        auto result = demodulateAndParse(samples, config, startOffset);
-        ++offsetsTried;
-        result.offsetsTried = offsetsTried;
+    for (const auto& variant : receiverSearchVariants()) {
+        ModemConfig candidateConfig = config;
+        candidateConfig.symbolDurationSec = config.symbolDurationSec * variant.symbolDurationScale;
+        candidateConfig.frequency0Hz = config.frequency0Hz * variant.frequencyScale + variant.frequencyOffsetHz;
+        candidateConfig.frequency1Hz = config.frequency1Hz * variant.frequencyScale + variant.frequencyOffsetHz;
 
-        if (!hasFallback || (result.frameDetected && !fallback.frameDetected)) {
-            fallback = result;
-            hasFallback = true;
-        }
-        if (result.crcOk && result.payloadValid) {
-            if (!hasBestValid || result.confidence > bestValid.confidence) {
-                bestValid = result;
-                hasBestValid = true;
+        const int symbolSamples = samplesPerSymbol(candidateConfig);
+        const int step = defaultOffsetStep(candidateConfig);
+        for (int startOffset = 0; startOffset < symbolSamples; startOffset += step) {
+            auto result = demodulateAndParse(samples, candidateConfig, startOffset);
+            ++offsetsTried;
+            result.offsetsTried = offsetsTried;
+
+            if (!hasFallback || (result.frameDetected && !fallback.frameDetected)) {
+                fallback = result;
+                hasFallback = true;
             }
+            if (result.crcOk && result.payloadValid) {
+                if (!hasBestValid || result.confidence > bestValid.confidence) {
+                    bestValid = result;
+                    hasBestValid = true;
+                }
+            }
+        }
+
+        if (hasBestValid) {
+            bestValid.offsetsTried = offsetsTried;
+            return bestValid;
         }
     }
 
