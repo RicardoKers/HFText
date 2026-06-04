@@ -237,7 +237,7 @@ No core C++, os testes automatizados devem cobrir:
 
 - helpers puros de `conv_k3`, Viterbi, interleaving e deinterleaving;
 - montagem e parse de frame robusto em bits;
-- deteccao de bloco robusto em fluxo de bits com preambulo e bits extras;
+- deteccao de `START_SYNC` fisico em fluxo de bits com preambulo e bits extras;
 - round-trip limpo via API publica `modulateText`/`demodulateSamples`;
 - round-trip WAV pelos CLIs `hftext_tx_wav` e `hftext_rx_wav`;
 - round-trip manual no app PC gerando e decodificando o mesmo WAV.

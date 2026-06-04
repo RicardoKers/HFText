@@ -21,7 +21,7 @@ Antes da modulacao, esse frame logico deve passar por:
 ```text
 codigo convolucional rate 1/2, K=3, geradores 111 e 101
 -> interleaving retangular deterministico
--> 2-FSK
+-> preambulo + START_SYNC + 2-FSK
 ```
 
 ## Alfabeto inicial
@@ -120,27 +120,47 @@ SYNC | LENGTH | PAYLOAD | CRC16
 
 O preâmbulo de transmissão é necessário para preparar a detecção e habilitar corretamente o TX do rádio, mas não faz parte do frame lógico `SYNC | LENGTH | PAYLOAD | CRC16`.
 
-O transmissor deve antepor um preâmbulo simples ao fluxo codificado:
+O transmissor deve antepor um preambulo simples e uma palavra fisica de inicio ao fluxo codificado:
+
+```text
+PREAMBLE | START_SYNC | ROBUST_FRAME
+```
+
+O preambulo e alternado:
 
 ```text
 10101010 ... 1010
 ```
 
-Tamanho inicial:
+Tamanho inicial do preambulo:
 
 ```text
 64 bits
 ```
 
-O preâmbulo não entra no cálculo do CRC e não faz parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
+`START_SYNC` e transmitido diretamente, sem FEC/interleaving, imediatamente antes do bloco robusto.
 
-Como o fluxo transmitido passa por FEC/interleaving, `SYNC` não aparece diretamente antes do Viterbi. O receptor deve procurar candidatos de bloco robusto no fluxo de bits demodulado, desfazer interleaving, aplicar Viterbi e aceitar apenas o frame lógico recuperado cujo CRC e payload sejam válidos.
+Valor:
+
+```text
+0x2DD4
+```
+
+Serializacao:
+
+```text
+big-endian, MSB-first
+```
+
+O preambulo e `START_SYNC` nao entram no calculo do CRC e nao fazem parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
+
+O receptor deve procurar `START_SYNC` no fluxo de bits demodulado, tolerando pequena quantidade de erros de bit, e iniciar o bloco robusto imediatamente apos essa palavra. Apos isso deve desfazer interleaving, aplicar Viterbi e aceitar apenas o frame logico recuperado cujo CRC e payload sejam validos.
 
 ## Campos
 
 ### SYNC
 
-Palavra fixa de sincronismo.
+Palavra fixa de sincronismo do frame logico.
 
 Valor:
 
@@ -161,6 +181,8 @@ big-endian: 0x2D 0xD4
 ```
 
 SYNC não entra no cálculo do CRC.
+
+Observacao: o mesmo valor `0x2DD4` tambem e usado como `START_SYNC` fisico antes do bloco robusto, para marcar o inicio dos dados codificados no fluxo transmitido. O `START_SYNC` fisico e visivel antes do Viterbi; o `SYNC` do frame logico so reaparece depois da decodificacao robusta.
 
 ### LENGTH
 
@@ -283,15 +305,15 @@ TX:
 frame logico v0.1
 -> codigo convolucional rate 1/2, K=3, geradores 111 e 101
 -> interleaving retangular derivado do tamanho codificado
--> preambulo + 2-FSK
+-> preambulo + START_SYNC + 2-FSK
 ```
 
 RX:
 
 ```text
 bits demodulados
--> busca de candidatos de bloco robusto
--> deinterleaving
+-> busca de START_SYNC fisico
+-> deinterleaving do bloco seguinte
 -> Viterbi hard-decision
 -> frame logico v0.1
 -> CRC16 normal
@@ -300,6 +322,7 @@ bits demodulados
 Regras:
 
 - o frame logico antes do FEC continua sendo `SYNC | LENGTH | PAYLOAD | CRC16`;
+- o fluxo fisico transmitido usa `PREAMBLE | START_SYNC | ROBUST_FRAME`;
 - o CRC continua protegendo o payload logico original, nao os bits codificados;
 - o codigo convolucional usa tail bits zero para retornar ao estado zero;
 - o receptor deve remover os bits de cauda apos o Viterbi;

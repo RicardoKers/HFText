@@ -290,7 +290,7 @@ Tarefa 7.2 — Implementar detecção automática de início
 
 Não assumir que o áudio começa exatamente no início do quadro.
 
-Refinamento iniciado: o parser agora testa multiplos candidatos de `SYNC` no fluxo demodulado e aceita o primeiro quadro posterior com CRC e payload validos, em vez de desistir no primeiro `SYNC` falso causado por ruido.
+Refinamento aplicado: o fluxo fisico agora usa `PREAMBLE | START_SYNC | ROBUST_FRAME`. O `START_SYNC` e transmitido diretamente antes do bloco robusto para marcar o inicio dos dados e reduzir a busca lenta por candidatos Viterbi.
 
 Tambem foi iniciada uma metrica diagnostica de confianca no demodulador, calculada pela separacao relativa entre as energias dos dois tons. Essa metrica deve ajudar logs e interface no futuro, mas nao substitui CRC.
 
@@ -362,7 +362,7 @@ Portabilidade para C++ iniciada: `core/include/hftext_robust.h` e `core/src/robu
 
 O core C++ agora tambem possui montagem e decodificacao de frame robusto em bits: `buildRobustFrameBits` monta o frame logico v0.1, aplica `conv_k3` e interleaving deterministico; `parseRobustFrameBits` desfaz interleaving, executa Viterbi e valida o frame logico com CRC normal.
 
-O core C++ tambem passou a montar uma transmissao robusta em bits com preambulo (`buildRobustTransmission`) e a procurar automaticamente um bloco robusto dentro de um fluxo de bits (`parseRobustFrameFromStream`). Como o fluxo codificado nao contem `SYNC` visivel antes do Viterbi, o RX testa offsets e comprimentos logicos validos, aceitando apenas candidatos cujo frame logico recuperado tenha CRC e payload validos.
+O core C++ tambem monta uma transmissao robusta em bits com preambulo e `START_SYNC` fisico (`buildRobustTransmission`). O RX procura o `START_SYNC` no fluxo demodulado e decodifica o bloco robusto seguinte, aceitando apenas candidatos cujo frame logico recuperado tenha CRC e payload validos.
 
 O modo robusto foi promovido a modo unico do sistema. As APIs publicas `modulateText` e `demodulateSamples`, os CLIs WAV e o app PC usam sempre `conv_k3 + interleaving`; nao ha opcao operacional para desligar FEC/interleaving.
 

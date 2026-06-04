@@ -24,7 +24,7 @@ amplitude = 0.8
 preamble_bits = 64
 ```
 
-Com `symbol_duration = 0.5 s`, cada bit ocupa meio segundo. Portanto, o preâmbulo padrão de 64 bits dura cerca de 32 segundos antes do `SYNC`. Esse valor é conservador para testes com rádio, mas pode ser reduzido em testes locais quando o caminho de áudio é conhecido e estável.
+Com `symbol_duration = 0.5 s`, cada bit ocupa meio segundo. Portanto, o preambulo padrao de 64 bits dura cerca de 32 segundos antes do `START_SYNC` fisico. Esse valor e conservador para testes com radio, mas pode ser reduzido em testes locais quando o caminho de audio e conhecido e estavel.
 
 O modulador deve gerar áudio mono em `float32`, normalizado entre `-1.0` e `+1.0`.
 
@@ -61,14 +61,14 @@ Quando as duas energias sao zero, a confianca e zero. O resultado final de recep
 
 Esta versão assume que o áudio está alinhado à janela de símbolo do demodulador.
 
-Após a demodulação, o receptor procura o `SYNC` no fluxo de bits e descarta preâmbulo, silêncio demodulado ou outros bits anteriores ao quadro.
+Após a demodulação, o receptor procura o `START_SYNC` fisico no fluxo de bits e descarta preambulo, silencio demodulado, ruido demodulado ou outros bits anteriores ao quadro robusto.
 
-Se um `SYNC` candidato aparecer em ruido antes do quadro real, o receptor deve continuar procurando outros candidatos ate encontrar um quadro completo com CRC e payload validos. Caso nenhum candidato seja valido, o primeiro erro encontrado pode ser usado como diagnostico.
+Se um `START_SYNC` candidato aparecer em ruido antes do quadro real, o receptor deve continuar procurando outros candidatos ate encontrar um quadro completo com CRC e payload validos. Caso nenhum candidato seja valido, o primeiro erro encontrado pode ser usado como diagnostico.
 
 O receptor Python também pode tentar múltiplos deslocamentos iniciais de amostra dentro de uma janela de símbolo. Para cada offset candidato:
 
 - demodular o fluxo de bits;
-- procurar `SYNC`;
+- procurar `START_SYNC`;
 - validar CRC e payload;
 - aceitar o primeiro resultado válido.
 

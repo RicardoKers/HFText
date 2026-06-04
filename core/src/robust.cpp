@@ -259,6 +259,8 @@ std::vector<std::uint8_t> buildRobustTransmission(
     validateBits(preambleBits);
 
     auto transmission = preambleBits;
+    const auto startSync = syncBits();
+    transmission.insert(transmission.end(), startSync.begin(), startSync.end());
     const auto frameBits = buildRobustFrameBits(payloadText);
     transmission.insert(transmission.end(), frameBits.begin(), frameBits.end());
     return transmission;
@@ -286,8 +288,20 @@ RobustDecodeResult parseRobustFrameFromStream(const std::vector<std::uint8_t>& b
 
     RobustDecodeResult firstCandidate;
     bool hasCandidate = false;
+    const auto startSync = syncBits();
+    if (bits.size() < startSync.size()) {
+        DecodeResult result;
+        result.error = "robust frame not found";
+        return {result, {}, 0};
+    }
 
-    for (std::size_t offset = 0; offset < bits.size(); ++offset) {
+    const std::size_t lastSyncStart = bits.size() - startSync.size();
+    for (std::size_t syncStart = 0; syncStart <= lastSyncStart; ++syncStart) {
+        if (!std::equal(startSync.begin(), startSync.end(), bits.begin() + static_cast<std::ptrdiff_t>(syncStart))) {
+            continue;
+        }
+
+        const std::size_t offset = syncStart + startSync.size();
         for (int payloadLength = 0; payloadLength <= kMaxPayloadSymbols; ++payloadLength) {
             const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
             const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);

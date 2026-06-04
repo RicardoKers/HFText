@@ -114,7 +114,7 @@ Tarefas:
 Resultado esperado:
 Melhor desempenho em ruído e fading.
 
-Primeira melhoria aplicada nesta fase: a busca de `SYNC` no fluxo demodulado passou a testar multiplos candidatos. Assim, um falso `SYNC` causado por ruido antes do quadro real nao impede a recuperacao de um quadro posterior com CRC valido.
+Melhoria aplicada nesta fase: o fluxo fisico passou a usar `PREAMBLE | START_SYNC | ROBUST_FRAME`. O `START_SYNC` e transmitido diretamente antes do bloco robusto, permitindo que o RX encontre o inicio dos dados antes de aplicar Viterbi, em vez de testar muitos candidatos de bloco robusto.
 
 Outra melhoria iniciada: o demodulador passou a calcular uma confianca media baseada na separacao relativa entre as energias dos tons 0 e 1. A confianca e diagnostica e nao altera a regra de aceitacao por CRC.
 

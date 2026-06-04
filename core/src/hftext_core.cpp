@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <stdexcept>
+#include <utility>
 
 namespace hftext {
 
@@ -38,25 +39,6 @@ std::vector<std::uint8_t> bitsFromDecisions(const std::vector<BitDecision>& deci
         bits.push_back(decision.bit);
     }
     return bits;
-}
-
-bool preambleMatches(const std::vector<std::uint8_t>& bits, int preambleBitCount) {
-    if (preambleBitCount <= 0) {
-        return true;
-    }
-    if (bits.size() < static_cast<std::size_t>(preambleBitCount)) {
-        return false;
-    }
-
-    int mismatches = 0;
-    for (int index = 0; index < preambleBitCount; ++index) {
-        const auto expected = static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0);
-        if (bits[static_cast<std::size_t>(index)] != expected) {
-            ++mismatches;
-        }
-    }
-
-    return mismatches <= std::max(2, preambleBitCount / 8);
 }
 
 float meanConfidence(const std::vector<BitDecision>& decisions, std::size_t start, std::size_t count) {
@@ -91,6 +73,62 @@ std::vector<std::uint8_t> preambleBitsFromConfig(const ModemConfig& config) {
         preamble.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
     }
     return preamble;
+}
+
+int bitMismatchCount(
+    const std::vector<std::uint8_t>& bits,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern
+) {
+    if (start + pattern.size() > bits.size()) {
+        return static_cast<int>(pattern.size());
+    }
+
+    int mismatches = 0;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        if (bits[start + index] != pattern[index]) {
+            ++mismatches;
+        }
+    }
+    return mismatches;
+}
+
+std::vector<int> findStartSyncFrameStarts(const std::vector<std::uint8_t>& bits) {
+    const auto startSync = syncBits();
+    if (bits.size() < startSync.size()) {
+        return {};
+    }
+
+    std::vector<std::pair<int, int>> scoredStarts;
+    const std::size_t lastStart = bits.size() - startSync.size();
+    constexpr int kMaxSyncMismatches = 2;
+    for (std::size_t syncStart = 0; syncStart <= lastStart; ++syncStart) {
+        const int mismatches = bitMismatchCount(bits, syncStart, startSync);
+        if (mismatches <= kMaxSyncMismatches) {
+            scoredStarts.push_back({
+                mismatches,
+                static_cast<int>(syncStart + startSync.size())
+            });
+        }
+    }
+
+    std::sort(scoredStarts.begin(), scoredStarts.end());
+
+    std::vector<int> frameStarts;
+    frameStarts.reserve(scoredStarts.size());
+    for (const auto& candidate : scoredStarts) {
+        const int frameStart = candidate.second;
+        const bool nearExisting = std::any_of(frameStarts.begin(), frameStarts.end(), [frameStart](int existing) {
+            return std::abs(existing - frameStart) <= 2;
+        });
+        if (!nearExisting) {
+            frameStarts.push_back(frameStart);
+        }
+        if (frameStarts.size() >= 8) {
+            break;
+        }
+    }
+    return frameStarts;
 }
 
 int logicalFrameBitCountForPayloadLength(int payloadLength) {
@@ -162,11 +200,15 @@ DecodeResult demodulateAndParse(
     const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
     const auto bits = bitsFromDecisions(decisions);
     DecodeResult result;
-    if (preambleMatches(bits, config.preambleBits)) {
-        result = parseRobustFrameAtExpectedOffset(bits, config.preambleBits);
-    } else {
-        result.error = "robust frame not found";
+    for (int frameStart : findStartSyncFrameStarts(bits)) {
+        result = parseRobustFrameAtExpectedOffset(bits, frameStart);
+        if (result.crcOk && result.payloadValid) {
+            result.startOffset = startOffset;
+            result.confidence = meanConfidence(decisions, 0, decisions.size());
+            return result;
+        }
     }
+    result.error = "robust frame not found";
     result.startOffset = startOffset;
     result.confidence = meanConfidence(decisions, 0, decisions.size());
     return result;
