@@ -301,3 +301,48 @@ Direcao inicial recomendada:
 - manter CRC sobre o payload logico original, nao sobre as copias repetidas;
 - registrar no quadro ou na configuracao negociada qual fator de repeticao esta ativo;
 - validar primeiro em Python com varreduras de SNR e fading antes de portar para C++.
+
+### Modo robusto experimental futuro
+
+O modo robusto nao faz parte do HFText Basic v0.1.
+
+A direcao experimental recomendada, com base nas varreduras Python, e:
+
+```text
+HFText Robust experimental
+frame v0.1 logico
+-> codigo convolucional rate 1/2, K=3, geradores 111 e 101
+-> interleaving retangular derivado do tamanho codificado
+-> 2-FSK igual ao modo Basic
+```
+
+No RX:
+
+```text
+bits demodulados
+-> deinterleaving
+-> Viterbi hard-decision
+-> frame v0.1 logico
+-> CRC16 normal
+```
+
+Regras propostas:
+
+- o frame logico antes do FEC continua sendo `SYNC | LENGTH | PAYLOAD | CRC16`;
+- o CRC continua protegendo o payload logico original, nao os bits codificados;
+- o codigo convolucional usa tail bits zero para retornar ao estado zero;
+- o receptor deve remover os bits de cauda apos o Viterbi;
+- o interleaving deve ser aplicado depois do FEC e revertido antes do Viterbi;
+- a geometria do interleaving nao deve ser fixa; deve ser derivada do tamanho do fluxo codificado;
+- o modo robusto precisa ser sinalizado explicitamente em uma versao futura do protocolo ou por configuracao operacional, para evitar que receptores Basic v0.1 tentem decodificar um fluxo robusto como Basic.
+
+Regra deterministica inicial para validacao:
+
+- calcular o tamanho do fluxo codificado apos FEC;
+- considerar apenas geometrias cujo numero de linhas divida exatamente esse tamanho;
+- limitar inicialmente as linhas a 2..16;
+- escolher o numero de linhas mais proximo de 6;
+- em caso de empate, escolher o menor numero de linhas;
+- colunas = tamanho codificado / linhas.
+
+Essa regra ainda e experimental. Ela deve ser validada em Python antes de virar parte normativa de uma versao futura do protocolo.

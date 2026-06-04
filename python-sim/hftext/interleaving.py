@@ -16,6 +16,30 @@ def _validate_dimensions(rows: int, columns: int) -> None:
         raise ValueError("columns must be positive")
 
 
+def choose_interleave_shape(
+    bit_count: int,
+    preferred_rows: int = 6,
+    min_rows: int = 2,
+    max_rows: int = 16,
+) -> tuple[int, int]:
+    """Choose a deterministic complete rectangular interleaver shape."""
+    if bit_count <= 0:
+        raise ValueError("bit_count must be positive")
+    if preferred_rows <= 0:
+        raise ValueError("preferred_rows must be positive")
+    if min_rows <= 0:
+        raise ValueError("min_rows must be positive")
+    if max_rows < min_rows:
+        raise ValueError("max_rows must be greater than or equal to min_rows")
+
+    candidates = [rows for rows in range(min_rows, max_rows + 1) if bit_count % rows == 0]
+    if not candidates:
+        raise ValueError("no interleaving shape exactly fits bit_count")
+
+    rows = min(candidates, key=lambda candidate: (abs(candidate - preferred_rows), candidate))
+    return rows, bit_count // rows
+
+
 def interleave_bits(bits: list[int], rows: int, columns: int) -> list[int]:
     """Interleave complete row-major blocks by reading them column-major."""
     _validate_dimensions(rows, columns)

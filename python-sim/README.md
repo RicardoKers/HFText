@@ -83,6 +83,38 @@ Sem `--rows`, o script testa automaticamente linhas que dividem exatamente o num
 Por padrao, ele tambem inclui a linha de base com repeticao sem interleaving; use `--no-baseline` para comparar apenas geometrias.
 Alem de `summary.csv` e `trials.csv`, ele grava `best_summary.csv` com a melhor opcao por SNR, priorizando CRC, payload valido e BER.
 
+## FEC experimental
+
+O modulo `hftext.fec` contem um helper inicial Hamming(7,4), apenas para experimentos de validacao. Ele codifica blocos de 4 bits em 7 bits, corrige 1 erro por codeword e informa quantos blocos foram corrigidos.
+
+O mesmo modulo tambem contem um codigo convolucional experimental rate 1/2, K=3, com geradores `111` e `101` e decoder Viterbi hard-decision.
+
+Esse FEC ainda nao faz parte do HFText Basic v0.1 e nao esta integrado aos scripts TX/RX normais.
+
+Para comparar o quadro sem FEC, Hamming(7,4) e o convolucional K=3:
+
+```powershell
+python fec_sweep.py "Teste" --callsign pu5lrk --snr -12 --trials 20 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0
+```
+
+O script salva `summary.csv` e `trials.csv` em `generated\fec_sweep\`, incluindo BER do canal codificado, BER recuperada do quadro original, CRC/payload, quantidade media de codewords corrigidas e distancia media do decoder Viterbi para o modo convolucional.
+
+Tambem e possivel aplicar interleaving experimental depois da codificacao FEC:
+
+```powershell
+python fec_sweep.py "Teste" --callsign pu5lrk --mode hamming74 --snr -12 --trials 20 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0 --interleave-rows 14 --interleave-columns 23
+```
+
+Para varrer varias geometrias de interleaving com um modo FEC:
+
+```powershell
+python fec_interleaving_sweep.py "Teste" --callsign pu5lrk --mode conv_k3 --snr -12 --trials 20 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0
+```
+
+O script inclui por padrao a linha de base do modo FEC escolhido sem interleaving e grava `best_summary.csv` com a melhor geometria por SNR. Os modos aceitos sao `hamming74` e `conv_k3`.
+
+Use `--auto-shape` para testar a geometria deterministica inicial. Ela escolhe um divisor exato do tamanho codificado com numero de linhas mais proximo de `--preferred-rows`, cujo padrao atual e 6.
+
 ## Varredura de canal
 
 ```powershell

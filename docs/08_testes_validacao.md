@@ -217,3 +217,19 @@ As proximas melhorias do app PC devem incluir validacoes manuais simples:
 Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao do WAV capturado deve continuar coerente com o tempo real de gravacao.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. Ele serve como alerta operacional para reduzir ganho ou volume quando necessario.
+
+## Testes futuros do modo robusto experimental
+
+Antes de portar `conv_k3 + interleaving` para C++, a simulacao Python deve validar:
+
+- round-trip limpo com `conv_k3` sem interleaving;
+- round-trip limpo com `conv_k3 + interleaving`;
+- Viterbi recuperando quadros com erros esparsos antes da verificacao de CRC;
+- deinterleaving restaurando exatamente o fluxo codificado antes do Viterbi;
+- geometria de interleaving derivada de forma deterministica a partir do tamanho codificado;
+- rejeicao de geometrias que nao encaixem exatamente no fluxo codificado;
+- varredura por SNR comparando Basic, repeticao 3x, Hamming(7,4), `conv_k3` e `conv_k3 + interleaving`;
+- comparacao por tamanho de payload curto, medio e longo;
+- registro de taxa de CRC, payload valido, BER recuperada, confianca media, pior BER e distancia media do Viterbi.
+
+O modo robusto experimental deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC nao substitui o CRC.

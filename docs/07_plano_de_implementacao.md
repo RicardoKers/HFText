@@ -118,6 +118,8 @@ Primeira melhoria aplicada nesta fase: a busca de `SYNC` no fluxo demodulado pas
 
 Outra melhoria iniciada: o demodulador passou a calcular uma confianca media baseada na separacao relativa entre as energias dos tons 0 e 1. A confianca e diagnostica e nao altera a regra de aceitacao por CRC.
 
+A investigacao de robustez em Python apontou `conv_k3 + interleaving` como candidato principal para um futuro modo robusto experimental: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, Viterbi hard-decision e interleaving retangular sobre o fluxo codificado. Antes de portar para C++, ainda e necessario definir um algoritmo deterministico para escolher a geometria do interleaving a partir do tamanho codificado e documentar como esse modo sera sinalizado fora do HFText Basic v0.1.
+
 ## Fase 7 — Aplicação Android TX
 
 Objetivo:

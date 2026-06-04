@@ -326,9 +326,37 @@ A varredura grava tambem `best_summary.csv`, destacando a melhor opcao por SNR c
 
 Resultado experimental inicial: com payload `pu5lrk Teste`, repeticao 3x, SNR -12 dB, fading por blocos de 4 simbolos e 50 sementes, a linha de base sem interleaving teve 0% de CRC valido, enquanto a geometria `12x46` atingiu 18% de CRC valido e a menor BER media do conjunto testado. Esse resultado nao altera o protocolo; apenas orienta proximas varreduras.
 
+Varredura posterior por SNR, com a mesma mensagem curta e 50 sementes por ponto, mostrou que o ganho de interleaving aparece principalmente perto da zona de transicao: em -18 dB e -15 dB nenhuma geometria fechou CRC; em -12 dB a melhor geometria foi `6x92` com 12% de CRC valido; em -9 dB foi `12x46` com 86%; em -6 dB foi `12x46` com 100%.
+
+Comparacao inicial por tamanho de mensagem em -12 dB indica que a geometria ideal depende do tamanho do quadro: payload `pu5lrk Ok` teve melhor resultado com `14x36` e 16% de CRC valido; payload `pu5lrk Teste` com `6x92` e 12%; payload `pu5lrk Mensagem maior para teste` com `8x114` e 4%. Isso sugere que um modo futuro nao deve fixar uma geometria unica sem antes definir como ela escala com o tamanho do quadro.
+
 Tarefa 7.6 — Implementar FEC simples
 
 Implementar código convolucional ou outro FEC simples.
+
+Experimento Python inicial criado com Hamming(7,4) em `python-sim/hftext/fec.py`. A implementacao codifica 4 bits em 7 bits, corrige 1 erro por codeword, preserva o tamanho original por truncamento apos decode e ainda nao altera o protocolo nem os scripts TX/RX normais.
+
+`python-sim/fec_sweep.py` foi adicionado para comparar `raw` e `hamming74` sob AWGN e fading por blocos, medindo overhead de duracao, BER no canal codificado, BER recuperada, CRC/payload e quantidade de codewords corrigidas.
+
+A varredura FEC tambem aceita interleaving experimental sobre o fluxo ja codificado. Resultado inicial com payload `pu5lrk Teste`, SNR -12 dB, fading por blocos de 4 simbolos e 50 sementes: `raw` teve 0% de CRC e BER recuperada 0.082935; `hamming74` sem interleaving teve 0% de CRC e BER 0.056196; `hamming74` com interleaving `14x23` teve 6% de CRC e BER 0.044130, com overhead de 1.75x. O ganho existe, mas ainda fica abaixo de repeticao 3x + interleaving nesse cenario, embora use menos tempo de transmissao.
+
+`python-sim/fec_interleaving_sweep.py` foi adicionado para varrer automaticamente geometrias de interleaving sobre Hamming(7,4), incluindo linha de base sem interleaving e `best_summary.csv` por SNR.
+
+Varredura automatica inicial com payload `pu5lrk Teste`, SNR -12 dB, fading por blocos de 4 simbolos e 50 sementes confirmou ganho limitado para Hamming(7,4): linha de base `hamming74` teve 0% de CRC e BER 0.056848; melhor geometria foi `14x23`, com 2% de CRC e BER 0.051413. Isso reforca que Hamming(7,4) serve como referencia simples, mas provavelmente nao e FEC suficiente para o modo robusto principal.
+
+Foi iniciado um segundo helper FEC em Python: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, com decoder Viterbi hard-decision. Nesta etapa ele esta apenas em `python-sim/hftext/fec.py` com testes unitarios; a integracao em varredura e medicao contra Hamming/repeticao ficam para o proximo passo.
+
+`python-sim/fec_sweep.py` passou a aceitar o modo `conv_k3` junto de `raw` e `hamming74`, registrando tambem `decoder_distance` do Viterbi. Resultado inicial com payload `pu5lrk Teste`, SNR -12 dB, fading por blocos de 4 simbolos e 50 sementes: `raw` teve 0% de CRC e BER 0.082935; `hamming74` teve 0% de CRC e BER 0.056196; `conv_k3` teve 8% de CRC e BER 0.045543, com overhead aproximado de 2.02x por causa dos bits de cauda.
+
+`python-sim/fec_interleaving_sweep.py` foi generalizado para aceitar `hamming74` ou `conv_k3`. Varredura inicial com `conv_k3`, payload `pu5lrk Teste`, SNR -12 dB, fading por blocos de 4 simbolos e 50 sementes mostrou ganho relevante com interleaving: linha de base `conv_k3` teve 12% de CRC valido e BER 0.040326; melhor geometria `6x62` atingiu 30% de CRC valido e BER 0.034457, mantendo overhead aproximado de 2.02x. Esse e o melhor candidato experimental ate aqui entre os FECs simples testados.
+
+Varredura posterior por SNR com `conv_k3 + interleaving`, payload `pu5lrk Teste` e 50 sementes por ponto: em -18 dB e -15 dB nenhuma configuracao fechou CRC; em -12 dB a melhor geometria foi `6x62` com 26% de CRC valido; em -9 dB foi `4x93` com 96%; em -6 dB chegou a 100%. Comparado a repeticao 3x + interleaving no mesmo conjunto de SNRs, `conv_k3 + interleaving` teve melhor taxa de CRC em -12 dB e -9 dB com overhead menor, embora a BER media nem sempre seja menor. Esse resultado sugere `conv_k3 + interleaving` como candidato principal para um futuro modo robusto experimental.
+
+Comparacao posterior por tamanho de mensagem em -12 dB, fading por blocos de 4 simbolos e 50 sementes mostrou que o ganho tambem depende do tamanho do quadro: payload `pu5lrk Ok` teve melhor resultado com `conv_k3 + int5x68`, 36% de CRC valido; payload `pu5lrk Teste` com `conv_k3 + int6x62`, 26%; payload `pu5lrk Mensagem maior para teste` com `conv_k3 + int4x153`, 12%. Isso reforca que qualquer modo robusto futuro deve derivar a geometria de interleaving do tamanho codificado, em vez de fixar uma matriz unica.
+
+Conclusao de implementacao experimental: o candidato principal para um futuro modo robusto e `conv_k3 + interleaving`, mantendo o frame logico Basic v0.1 antes do FEC e aplicando FEC/interleaving apenas no fluxo de bits transmitido. Proxima tarefa antes de portar para C++: definir e testar um algoritmo deterministico de escolha da geometria de interleaving a partir do tamanho codificado.
+
+Algoritmo deterministico inicial criado em Python: `choose_interleave_shape(bit_count, preferred_rows=6, min_rows=2, max_rows=16)`. Ele escolhe uma geometria completa cujo numero de linhas divide exatamente o tamanho codificado, priorizando a proximidade de 6 linhas e usando o menor numero de linhas em empates. O `fec_interleaving_sweep.py` agora aceita `--auto-shape` para testar essa regra sem varrer todas as geometrias.
 
 ## Estado atual do backlog
 
