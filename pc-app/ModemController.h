@@ -31,6 +31,8 @@ public:
 
     void setConfig(const hftext::ModemConfig& config);
     const hftext::ModemConfig& config() const;
+    void setRobustMode(bool enabled);
+    bool robustMode() const;
 
     std::string buildPayload(const std::string& callsign, const std::string& message) const;
     TransmissionEstimate estimateTransmission(const std::string& callsign, const std::string& message) const;
@@ -40,4 +42,5 @@ public:
 
 private:
     hftext::ModemConfig config_;
+    bool robustMode_ = false;
 };

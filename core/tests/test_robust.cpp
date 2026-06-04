@@ -1,0 +1,153 @@
+#include "hftext_frame.h"
+#include "hftext_robust.h"
+
+#include <cassert>
+#include <cstdint>
+#include <stdexcept>
+#include <vector>
+
+namespace {
+
+bool throwsInvalidArgument(void (*fn)()) {
+    try {
+        fn();
+    } catch (const std::invalid_argument&) {
+        return true;
+    }
+    return false;
+}
+
+}  // namespace
+
+int main() {
+    assert(hftext::interleaveBits({0, 1, 1, 0, 1, 0}, 2, 3) == std::vector<std::uint8_t>({0, 0, 1, 1, 1, 0}));
+
+    const std::vector<std::uint8_t> bits = {0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1};
+    const auto interleaved = hftext::interleaveBits(bits, 3, 2);
+    assert(hftext::deinterleaveBits(interleaved, 3, 2) == bits);
+
+    auto burst = std::vector<std::uint8_t>(16, 0);
+    auto spread = hftext::interleaveBits(burst, 4, 4);
+    spread[0] = 1;
+    spread[1] = 1;
+    assert(
+        hftext::deinterleaveBits(spread, 4, 4)
+        == std::vector<std::uint8_t>({1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+    );
+
+    assert(hftext::chooseInterleaveShape(340).rows == 5);
+    assert(hftext::chooseInterleaveShape(340).columns == 68);
+    assert(hftext::chooseInterleaveShape(372).rows == 6);
+    assert(hftext::chooseInterleaveShape(372).columns == 62);
+    assert(hftext::chooseInterleaveShape(612).rows == 6);
+    assert(hftext::chooseInterleaveShape(612).columns == 102);
+    assert(hftext::chooseInterleaveShape(372, 4).rows == 4);
+    assert(hftext::chooseInterleaveShape(372, 4).columns == 93);
+
+    assert(
+        hftext::convolutionalK3EncodeBits({1, 0, 1})
+        == std::vector<std::uint8_t>({1, 1, 1, 0, 0, 0, 1, 0, 1, 1})
+    );
+
+    const std::vector<std::uint8_t> sourceBits = {1, 0, 1, 1, 0, 0, 1};
+    auto encoded = hftext::convolutionalK3EncodeBits(sourceBits);
+    auto decoded = hftext::convolutionalK3DecodeBits(encoded, static_cast<int>(sourceBits.size()));
+    assert(decoded.bits == sourceBits);
+    assert(decoded.distance == 0);
+
+    std::vector<std::uint8_t> noisy = hftext::convolutionalK3EncodeBits({1, 0, 1, 1, 0, 0, 1, 0, 1});
+    noisy[1] ^= 1;
+    noisy[8] ^= 1;
+    decoded = hftext::convolutionalK3DecodeBits(noisy, 9);
+    assert(decoded.bits == std::vector<std::uint8_t>({1, 0, 1, 1, 0, 0, 1, 0, 1}));
+    assert(decoded.distance == 2);
+
+    const auto frameBits = hftext::buildFrame("pu5lrk cq");
+    noisy = hftext::convolutionalK3EncodeBits(frameBits);
+    for (std::size_t index = 3; index < noisy.size(); index += 31) {
+        noisy[index] ^= 1;
+    }
+    decoded = hftext::convolutionalK3DecodeBits(noisy, static_cast<int>(frameBits.size()));
+    const auto result = hftext::parseFrame(decoded.bits);
+    assert(decoded.distance > 0);
+    assert(result.crcOk);
+    assert(result.payloadValid);
+    assert(result.text == "pu5lrk cq");
+
+    const auto robustBits = hftext::buildRobustFrameBits("pu5lrk Teste");
+    const auto logicalFrameBits = hftext::buildFrame("pu5lrk Teste");
+    assert(robustBits.size() == (logicalFrameBits.size() + 2) * 2);
+    auto robustResult = hftext::parseRobustFrameBits(robustBits, static_cast<int>(logicalFrameBits.size()));
+    const auto expectedShape = hftext::chooseInterleaveShape((logicalFrameBits.size() + 2) * 2);
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "pu5lrk Teste");
+    assert(robustResult.shape.rows == expectedShape.rows);
+    assert(robustResult.shape.columns == expectedShape.columns);
+    assert(robustResult.viterbiDistance == 0);
+
+    auto noisyRobustBits = robustBits;
+    for (std::size_t index = 5; index < noisyRobustBits.size(); index += 47) {
+        noisyRobustBits[index] ^= 1;
+    }
+    robustResult = hftext::parseRobustFrameBits(noisyRobustBits, static_cast<int>(logicalFrameBits.size()));
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "pu5lrk Teste");
+    assert(robustResult.viterbiDistance > 0);
+
+    const auto robustTransmission = hftext::buildRobustTransmission("pu5lrk Teste");
+    const auto preamble = hftext::defaultPreambleBits();
+    assert(
+        std::vector<std::uint8_t>(robustTransmission.begin(), robustTransmission.begin() + preamble.size())
+        == preamble
+    );
+    assert(
+        std::vector<std::uint8_t>(robustTransmission.begin() + preamble.size(), robustTransmission.end())
+        == robustBits
+    );
+
+    robustResult = hftext::parseRobustFrameFromStream(robustTransmission);
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "pu5lrk Teste");
+    assert(robustResult.frame.syncIndex == static_cast<int>(preamble.size()));
+
+    const std::vector<std::uint8_t> customPreamble = {1, 0, 0, 1, 1, 0};
+    const auto customTransmission = hftext::buildRobustTransmission("Ok", customPreamble);
+    robustResult = hftext::parseRobustFrameFromStream(customTransmission);
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "Ok");
+    assert(robustResult.frame.syncIndex == static_cast<int>(customPreamble.size()));
+
+    std::vector<std::uint8_t> noisyStream = {0, 0, 1, 1, 0};
+    noisyStream.insert(noisyStream.end(), robustTransmission.begin(), robustTransmission.end());
+    noisyStream.insert(noisyStream.end(), {1, 1, 0});
+    robustResult = hftext::parseRobustFrameFromStream(noisyStream);
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "pu5lrk Teste");
+    assert(robustResult.frame.syncIndex == static_cast<int>(5 + preamble.size()));
+
+    robustResult = hftext::parseRobustFrameFromStream({0, 1, 0, 1});
+    assert(!robustResult.frame.frameDetected);
+    assert(!robustResult.frame.crcOk);
+    assert(!robustResult.frame.payloadValid);
+    assert(robustResult.frame.error == "robust frame not found");
+
+    assert(throwsInvalidArgument([] { (void)hftext::interleaveBits({0}, 0, 1); }));
+    assert(throwsInvalidArgument([] { (void)hftext::deinterleaveBits({0}, 1, 0); }));
+    assert(throwsInvalidArgument([] { (void)hftext::interleaveBits({0, 2}, 1, 2); }));
+    assert(throwsInvalidArgument([] { (void)hftext::deinterleaveBits({0, 1, 0}, 2, 2); }));
+    assert(throwsInvalidArgument([] { (void)hftext::chooseInterleaveShape(0); }));
+    assert(throwsInvalidArgument([] { (void)hftext::chooseInterleaveShape(17, 6, 2, 4); }));
+    assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3EncodeBits({2}); }));
+    assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeBits({0, 2}); }));
+    assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeBits({0}); }));
+    assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeBits({0, 0}, -2); }));
+    assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameBits({0, 0}, -1); }));
+    assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameBits({0, 2}, 1); }));
+    assert(throwsInvalidArgument([] { (void)hftext::buildRobustTransmission("Ok", {0, 2}); }));
+    assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameFromStream({0, 2}); }));
+}

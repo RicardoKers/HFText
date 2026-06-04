@@ -3,6 +3,7 @@
 #include "hftext_core.h"
 #include "hftext_encoder.h"
 #include "hftext_frame.h"
+#include "hftext_robust.h"
 #include "wav_io.h"
 
 #include <algorithm>
@@ -13,6 +14,19 @@ namespace {
 
 int packedPayloadBytes(int payloadSymbols) {
     return (payloadSymbols * hftext::kBitsPerSymbol + hftext::kBitsPerByte - 1) / hftext::kBitsPerByte;
+}
+
+std::vector<std::uint8_t> preambleBits(int bitCount) {
+    if (bitCount < 0) {
+        throw std::invalid_argument("preambulo deve ser nao negativo");
+    }
+
+    std::vector<std::uint8_t> bits;
+    bits.reserve(static_cast<std::size_t>(bitCount));
+    for (int index = 0; index < bitCount; ++index) {
+        bits.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+    }
+    return bits;
 }
 
 }  // namespace
@@ -30,6 +44,14 @@ void ModemController::setConfig(const hftext::ModemConfig& config) {
 
 const hftext::ModemConfig& ModemController::config() const {
     return config_;
+}
+
+void ModemController::setRobustMode(bool enabled) {
+    robustMode_ = enabled;
+}
+
+bool ModemController::robustMode() const {
+    return robustMode_;
 }
 
 std::string ModemController::buildPayload(const std::string& callsign, const std::string& message) const {
@@ -59,6 +81,11 @@ ModemController::TransmissionEstimate ModemController::estimateTransmission(
     estimate.frameBits = (hftext::kHeaderBytes + packedPayloadBytes(estimate.payloadSymbols) + hftext::kCrcBytes)
         * hftext::kBitsPerByte;
     estimate.transmissionBits = config_.preambleBits + estimate.frameBits;
+    if (robustMode_ && !estimate.payloadTooLong) {
+        const auto bits = hftext::buildRobustTransmission(estimate.payload, preambleBits(config_.preambleBits));
+        estimate.transmissionBits = static_cast<int>(bits.size());
+        estimate.frameBits = estimate.transmissionBits - config_.preambleBits;
+    }
     estimate.durationSeconds = static_cast<double>(estimate.transmissionBits)
         * static_cast<double>(config_.symbolDurationSec);
     return estimate;
@@ -70,7 +97,9 @@ void ModemController::generateWav(
     const std::string& outputPath
 ) const {
     const std::string payload = buildPayload(callsign, message);
-    const auto audio = hftext::modulateText(payload, config_);
+    const auto audio = robustMode_
+        ? hftext::modulateTextRobust(payload, config_)
+        : hftext::modulateText(payload, config_);
     hftext::tools::writeMonoPcm16Wav(outputPath, audio, config_.sampleRate);
 }
 
@@ -95,5 +124,7 @@ hftext::DecodeResult ModemController::decodeWav(const std::string& inputPath) co
     const auto wav = hftext::tools::readPcm16Wav(inputPath);
     hftext::ModemConfig decodeConfig = config_;
     decodeConfig.sampleRate = wav.sampleRate;
-    return hftext::demodulateSamples(wav.samples, decodeConfig);
+    return robustMode_
+        ? hftext::demodulateSamplesRobust(wav.samples, decodeConfig)
+        : hftext::demodulateSamples(wav.samples, decodeConfig);
 }

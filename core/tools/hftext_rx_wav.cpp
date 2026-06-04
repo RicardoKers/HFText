@@ -18,6 +18,7 @@ void printUsage(const char* program) {
         << "  --f0 <Hz>                   padrao: 1200\n"
         << "  --f1 <Hz>                   padrao: 1600\n"
         << "  --no-sync-search            interpreta o fluxo desde o primeiro bit\n"
+        << "  --robust                    usa modo robusto experimental\n"
         << "  --verbose                   imprime diagnostico de sincronismo\n";
 }
 
@@ -27,6 +28,7 @@ int main(int argc, char** argv) {
     hftext::ModemConfig config;
     std::string inputPath;
     bool verbose = false;
+    bool robust = false;
 
     try {
         for (int index = 1; index < argc; ++index) {
@@ -50,6 +52,8 @@ int main(int argc, char** argv) {
                 config.frequency1Hz = std::stof(requireValue(arg));
             } else if (arg == "--no-sync-search") {
                 config.syncSearch = false;
+            } else if (arg == "--robust") {
+                robust = true;
             } else if (arg == "--verbose" || arg == "-v") {
                 verbose = true;
             } else if (inputPath.empty()) {
@@ -66,11 +70,14 @@ int main(int argc, char** argv) {
 
         const auto wav = hftext::tools::readPcm16Wav(inputPath);
         config.sampleRate = wav.sampleRate;
-        const auto result = hftext::demodulateSamples(wav.samples, config);
+        const auto result = robust
+            ? hftext::demodulateSamplesRobust(wav.samples, config)
+            : hftext::demodulateSamples(wav.samples, config);
         auto printDiagnostics = [&]() {
             if (!verbose) {
                 return;
             }
+            std::cout << "Modo: " << (robust ? "robust" : "basic") << "\n";
             std::cout << "Sample rate: " << config.sampleRate << " Hz\n";
             std::cout << "Start offset: " << result.startOffset << " samples\n";
             std::cout << "Offsets tried: " << result.offsetsTried << "\n";

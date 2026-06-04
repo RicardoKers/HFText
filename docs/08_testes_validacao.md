@@ -213,14 +213,15 @@ As proximas melhorias do app PC devem incluir validacoes manuais simples:
 - ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
 - durante `Transmitir WAV`, a barra de progresso deve avancar ate o fim do arquivo ou parar corretamente ao clicar `Parar TX`;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX.
+- ao habilitar `Modo robusto experimental`, a estimativa TX deve aumentar para refletir FEC/interleaving, o WAV gerado deve decodificar somente com o mesmo modo robusto habilitado, e o modo Basic deve continuar sendo o padrao quando a opcao estiver desmarcada.
 
 Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao do WAV capturado deve continuar coerente com o tempo real de gravacao.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. Ele serve como alerta operacional para reduzir ganho ou volume quando necessario.
 
-## Testes futuros do modo robusto experimental
+## Testes do modo robusto experimental
 
-Antes de portar `conv_k3 + interleaving` para C++, a simulacao Python deve validar:
+A simulacao Python deve continuar validando:
 
 - round-trip limpo com `conv_k3` sem interleaving;
 - round-trip limpo com `conv_k3 + interleaving`;
@@ -231,5 +232,14 @@ Antes de portar `conv_k3 + interleaving` para C++, a simulacao Python deve valid
 - varredura por SNR comparando Basic, repeticao 3x, Hamming(7,4), `conv_k3` e `conv_k3 + interleaving`;
 - comparacao por tamanho de payload curto, medio e longo;
 - registro de taxa de CRC, payload valido, BER recuperada, confianca media, pior BER e distancia media do Viterbi.
+
+No core C++, os testes automatizados devem cobrir:
+
+- helpers puros de `conv_k3`, Viterbi, interleaving e deinterleaving;
+- montagem e parse de frame robusto em bits;
+- deteccao de bloco robusto em fluxo de bits com preambulo e bits extras;
+- round-trip limpo via API `modulateTextRobust`/`demodulateSamplesRobust`;
+- round-trip WAV pelos CLIs `hftext_tx_wav --robust` e `hftext_rx_wav --robust`.
+- round-trip manual no app PC com `Modo robusto experimental` habilitado para gerar e decodificar o mesmo WAV.
 
 O modo robusto experimental deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC nao substitui o CRC.

@@ -3,6 +3,7 @@
 #include "hftext_demodulator.h"
 #include "hftext_frame.h"
 #include "hftext_modulator.h"
+#include "hftext_robust.h"
 #include "hftext_result.h"
 
 #include <algorithm>
@@ -86,24 +87,48 @@ DecodeResult demodulateAndParse(
     return result;
 }
 
-}  // namespace
-
-std::vector<float> modulateText(const std::string& text, const ModemConfig& config) {
+std::vector<std::uint8_t> preambleBitsFromConfig(const ModemConfig& config) {
     if (config.preambleBits < 0) {
         throw std::invalid_argument("preamble_bits must be non-negative");
     }
 
-    std::vector<std::uint8_t> bits;
     if (config.preambleBits == kDefaultPreambleBits) {
-        bits = buildTransmission(text);
-    } else {
-        std::vector<std::uint8_t> preamble;
-        preamble.reserve(static_cast<std::size_t>(config.preambleBits));
-        for (std::int32_t index = 0; index < config.preambleBits; ++index) {
-            preamble.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
-        }
-        bits = buildTransmission(text, preamble);
+        return defaultPreambleBits();
     }
+
+    std::vector<std::uint8_t> preamble;
+    preamble.reserve(static_cast<std::size_t>(config.preambleBits));
+    for (std::int32_t index = 0; index < config.preambleBits; ++index) {
+        preamble.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+    }
+    return preamble;
+}
+
+DecodeResult demodulateAndParseRobust(
+    const std::vector<float>& samples,
+    const ModemConfig& config,
+    int startOffset
+) {
+    const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
+    const auto bits = bitsFromDecisions(decisions);
+    auto robustResult = parseRobustFrameFromStream(bits);
+    robustResult.frame.startOffset = startOffset;
+    robustResult.frame.confidence = meanConfidence(decisions, 0, decisions.size());
+    return robustResult.frame;
+}
+
+}  // namespace
+
+std::vector<float> modulateText(const std::string& text, const ModemConfig& config) {
+    const auto preamble = preambleBitsFromConfig(config);
+    const auto bits = buildTransmission(text, preamble);
+
+    return modulateBits2Fsk(bits, config);
+}
+
+std::vector<float> modulateTextRobust(const std::string& text, const ModemConfig& config) {
+    const auto preamble = preambleBitsFromConfig(config);
+    const auto bits = buildRobustTransmission(text, preamble);
 
     return modulateBits2Fsk(bits, config);
 }
@@ -157,6 +182,44 @@ DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemCon
     DecodeResult result;
     result.offsetsTried = offsetsTried;
     result.error = "sync not found";
+    return result;
+}
+
+DecodeResult demodulateSamplesRobust(const std::vector<float>& samples, const ModemConfig& config) {
+    if (!config.syncSearch) {
+        auto result = demodulateAndParseRobust(samples, config, 0);
+        result.offsetsTried = 1;
+        return result;
+    }
+
+    const int symbolSamples = samplesPerSymbol(config);
+    const int step = defaultOffsetStep(config);
+    DecodeResult fallback;
+    bool hasFallback = false;
+    int offsetsTried = 0;
+
+    for (int startOffset = 0; startOffset < symbolSamples; startOffset += step) {
+        auto result = demodulateAndParseRobust(samples, config, startOffset);
+        ++offsetsTried;
+        result.offsetsTried = offsetsTried;
+
+        if (result.crcOk && result.payloadValid) {
+            return result;
+        }
+        if (!hasFallback || (result.frameDetected && !fallback.frameDetected)) {
+            fallback = result;
+            hasFallback = true;
+        }
+    }
+
+    if (hasFallback) {
+        fallback.offsetsTried = offsetsTried;
+        return fallback;
+    }
+
+    DecodeResult result;
+    result.offsetsTried = offsetsTried;
+    result.error = "robust frame not found";
     return result;
 }
 

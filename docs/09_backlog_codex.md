@@ -358,6 +358,16 @@ Conclusao de implementacao experimental: o candidato principal para um futuro mo
 
 Algoritmo deterministico inicial criado em Python: `choose_interleave_shape(bit_count, preferred_rows=6, min_rows=2, max_rows=16)`. Ele escolhe uma geometria completa cujo numero de linhas divide exatamente o tamanho codificado, priorizando a proximidade de 6 linhas e usando o menor numero de linhas em empates. O `fec_interleaving_sweep.py` agora aceita `--auto-shape` para testar essa regra sem varrer todas as geometrias.
 
+Portabilidade para C++ iniciada: `core/include/hftext_robust.h` e `core/src/robust.cpp` implementam helpers puros para `conv_k3`, Viterbi hard-decision, interleaving/deinterleaving e escolha deterministica de geometria. A primeira etapa nao altera o modo Basic, CLI ou app PC; apenas adiciona testes unitarios em `core/tests/test_robust.cpp`.
+
+O core C++ agora tambem possui montagem e decodificacao de frame robusto em bits: `buildRobustFrameBits` monta o frame logico Basic, aplica `conv_k3` e interleaving deterministico; `parseRobustFrameBits` desfaz interleaving, executa Viterbi e valida o frame logico com CRC normal. Essa etapa ainda nao liga o modo robusto a modulacao, CLI ou app PC.
+
+O core C++ tambem passou a montar uma transmissao robusta em bits com preambulo (`buildRobustTransmission`) e a procurar automaticamente um bloco robusto dentro de um fluxo de bits (`parseRobustFrameFromStream`). Como o fluxo codificado nao contem `SYNC` visivel antes do Viterbi, o RX experimental testa offsets e comprimentos logicos validos, aceitando apenas candidatos cujo frame Basic recuperado tenha CRC e payload validos. Essa etapa ainda nao altera o modo Basic nem app PC.
+
+O modo robusto experimental foi exposto no core por APIs explicitas (`modulateTextRobust` e `demodulateSamplesRobust`) e nos CLIs WAV por `--robust`. O modo Basic continua sendo o padrao; `--robust` e opt-in e existe apenas para validacao experimental de WAV/CLI antes de qualquer promocao de protocolo.
+
+O app PC tambem recebeu a opcao `Modo robusto experimental` na aba `Configuracao`. Quando habilitada, a estimativa TX passa a refletir o fluxo robusto, `Gerar WAV` usa `modulateTextRobust` e `Decodificar WAV`/RX salvo usam `demodulateSamplesRobust`. O modo Basic continua sendo o padrao quando a opcao esta desmarcada.
+
 ## Estado atual do backlog
 
 As tarefas de simulacao Python, core C++ e CLI WAV possuem implementacao inicial.
