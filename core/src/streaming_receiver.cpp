@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
@@ -20,12 +21,40 @@ constexpr int kConvTailBits = 2;
 constexpr int kConvOutputBitsPerInputBit = 2;
 constexpr int kMaxRetainedBits = 1800;
 constexpr int kPhaseDivisions = 20;
+constexpr int kPhysicalLengthBits = kBitsPerByte * kPhysicalLengthRepeat;
 
 std::size_t packedPayloadBytes(int symbolCount) {
     if (symbolCount <= 0) {
         return 0;
     }
     return static_cast<std::size_t>((symbolCount * kBitsPerSymbol + kBitsPerByte - 1) / kBitsPerByte);
+}
+
+int bitMismatchCount(
+    const std::vector<std::uint8_t>& bits,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern
+) {
+    if (start + pattern.size() > bits.size()) {
+        return static_cast<int>(pattern.size());
+    }
+
+    int mismatches = 0;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        if (bits[start + index] != pattern[index]) {
+            ++mismatches;
+        }
+    }
+    return mismatches;
+}
+
+int logicalFrameBitCountForPayloadLength(int payloadLength) {
+    return (kHeaderBytes + payloadByteCount(payloadLength) + kCrcBytes) * kBitsPerByte;
+}
+
+std::size_t robustFrameBitCountForPayloadLength(int payloadLength) {
+    const int logicalBits = logicalFrameBitCountForPayloadLength(payloadLength);
+    return static_cast<std::size_t>(logicalBits + kConvTailBits) * kConvOutputBitsPerInputBit;
 }
 
 double toneEnergyWindow(
@@ -55,8 +84,20 @@ BitDecision demodulateSymbol(
     std::size_t count,
     const ModemConfig& config
 ) {
-    const double energy0 = toneEnergyWindow(samples, start, count, config.sampleRate, config.frequency0Hz);
-    const double energy1 = toneEnergyWindow(samples, start, count, config.sampleRate, config.frequency1Hz);
+    const double energy0 = toneEnergyWindow(
+        samples,
+        start,
+        count,
+        config.sampleRate,
+        config.frequency0Hz
+    );
+    const double energy1 = toneEnergyWindow(
+        samples,
+        start,
+        count,
+        config.sampleRate,
+        config.frequency1Hz
+    );
     const double totalEnergy = energy0 + energy1;
     const double confidence = totalEnergy <= 0.0 ? 0.0 : std::abs(energy1 - energy0) / totalEnergy;
 
@@ -86,6 +127,19 @@ float meanConfidence(
 
 }  // namespace
 
+bool StreamingReceiver::EventKey::operator<(const EventKey& other) const {
+    if (type != other.type) {
+        return static_cast<int>(type) < static_cast<int>(other.type);
+    }
+    if (phaseOffsetSamples != other.phaseOffsetSamples) {
+        return phaseOffsetSamples < other.phaseOffsetSamples;
+    }
+    if (syncSample != other.syncSample) {
+        return syncSample < other.syncSample;
+    }
+    return bucket < other.bucket;
+}
+
 StreamingReceiver::StreamingReceiver(const ModemConfig& config)
     : config_(config) {
     resetPhaseStates();
@@ -103,6 +157,8 @@ const ModemConfig& StreamingReceiver::config() const {
 void StreamingReceiver::reset() {
     buffer_.clear();
     sampleCursor_ = 0;
+    events_.clear();
+    reportedEvents_.clear();
     resetPhaseStates();
 }
 
@@ -141,6 +197,12 @@ std::vector<DecodeResult> StreamingReceiver::pushSamples(const std::vector<float
     return results;
 }
 
+std::vector<StreamingReceiverEvent> StreamingReceiver::takeEvents() {
+    auto events = events_;
+    events_.clear();
+    return events;
+}
+
 int StreamingReceiver::samplesPerSymbol() const {
     const auto samples = static_cast<int>(
         std::lround(static_cast<double>(config_.sampleRate) * config_.symbolDurationSec)
@@ -152,9 +214,7 @@ int StreamingReceiver::samplesPerSymbol() const {
 }
 
 std::size_t StreamingReceiver::frameBitCount(const DecodeResult& result) const {
-    const auto logicalBits = static_cast<std::size_t>(kSyncBits + kLengthBits + kCrcBits)
-        + packedPayloadBytes(result.length) * kBitsPerByte;
-    return (logicalBits + kConvTailBits) * kConvOutputBitsPerInputBit;
+    return robustFrameBitCountForPayloadLength(result.length);
 }
 
 std::vector<int> StreamingReceiver::phaseOffsets() const {
@@ -206,31 +266,110 @@ void StreamingReceiver::processPhase(PhaseState& phase) {
     }
 }
 
-bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEndSample) const {
+bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEndSample) {
     bool hasCandidate = false;
     DecodeResult bestResult;
     std::size_t bestFrameEndSample = 0;
+    StreamingReceiverEvent bestEvent;
+    const auto startSync = startSyncBits();
+    const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
+    const std::size_t latestSample = sampleCursor_ + buffer_.size();
 
     for (const auto& phase : phases_) {
-        const auto robustResult = parseRobustFrameFromStream(phase.bits);
-        if (!robustResult.frame.crcOk || !robustResult.frame.payloadValid) {
+        if (phase.bits.size() < startSync.size() + static_cast<std::size_t>(kPhysicalLengthBits)) {
             continue;
         }
 
-        auto candidate = robustResult.frame;
-        const auto robustBits = frameBitCount(candidate);
-        const auto robustStart = static_cast<std::size_t>(candidate.syncIndex);
-        candidate.startOffset = phase.offsetSamples;
-        candidate.offsetsTried = static_cast<std::int32_t>(phases_.size());
-        candidate.confidence = meanConfidence(phase.decisions, robustStart, robustBits);
+        const std::size_t lastSyncStart = phase.bits.size() - startSync.size();
+        for (std::size_t syncStart = 0; syncStart <= lastSyncStart; ++syncStart) {
+            const int syncMismatches = bitMismatchCount(phase.bits, syncStart, startSync);
+            if (syncMismatches > maxSyncMismatches) {
+                continue;
+            }
 
-        const auto candidateEndSample = phase.firstBitSample
-            + (robustStart + robustBits) * static_cast<std::size_t>(samplesPerSymbol());
+            const auto lengthStart = syncStart + startSync.size();
+            if (lengthStart + static_cast<std::size_t>(kPhysicalLengthBits) > phase.bits.size()) {
+                continue;
+            }
 
-        if (!hasCandidate || candidate.confidence > bestResult.confidence) {
-            bestResult = candidate;
-            bestFrameEndSample = candidateEndSample;
-            hasCandidate = true;
+            const auto syncSample = static_cast<std::int64_t>(
+                phase.firstBitSample + syncStart * static_cast<std::size_t>(samplesPerSymbol())
+            );
+
+            StreamingReceiverEvent syncEvent;
+            syncEvent.type = StreamingReceiverEventType::SyncFound;
+            syncEvent.phaseOffsetSamples = phase.offsetSamples;
+            syncEvent.syncSample = syncSample;
+            syncEvent.syncBitIndex = static_cast<std::int32_t>(syncStart);
+            syncEvent.syncMismatches = syncMismatches;
+            emitEvent(syncEvent);
+
+            const int payloadLength = decodePhysicalLengthBits(phase.bits, lengthStart);
+            if (payloadLength < 0) {
+                StreamingReceiverEvent lengthEvent = syncEvent;
+                lengthEvent.type = StreamingReceiverEventType::PhysicalLengthInvalid;
+                emitEvent(lengthEvent);
+                continue;
+            }
+
+            const auto robustBits = robustFrameBitCountForPayloadLength(payloadLength);
+            StreamingReceiverEvent lengthEvent = syncEvent;
+            lengthEvent.type = StreamingReceiverEventType::PhysicalLengthRecovered;
+            lengthEvent.payloadLength = payloadLength;
+            lengthEvent.bitsExpected = static_cast<std::int32_t>(robustBits);
+            emitEvent(lengthEvent);
+
+            const auto robustStart = lengthStart + static_cast<std::size_t>(kPhysicalLengthBits);
+            const auto availableRobustBits = robustStart >= phase.bits.size() ? 0 : phase.bits.size() - robustStart;
+            if (availableRobustBits < robustBits) {
+                StreamingReceiverEvent waitingEvent = lengthEvent;
+                waitingEvent.type = StreamingReceiverEventType::FrameWaiting;
+                waitingEvent.bitsAvailable = static_cast<std::int32_t>(availableRobustBits);
+                waitingEvent.bitsExpected = static_cast<std::int32_t>(robustBits);
+                const int bucket = static_cast<int>((availableRobustBits * 4U) / robustBits);
+                emitEvent(waitingEvent, std::min(bucket, 3));
+                continue;
+            }
+
+            const std::vector<std::uint8_t> candidateBits(
+                phase.bits.begin() + static_cast<std::ptrdiff_t>(robustStart),
+                phase.bits.begin() + static_cast<std::ptrdiff_t>(robustStart + robustBits)
+            );
+
+            auto robustResult = parseRobustFrameBits(candidateBits, logicalFrameBitCountForPayloadLength(payloadLength));
+            auto candidate = robustResult.frame;
+            candidate.syncIndex = static_cast<int>(robustStart);
+            candidate.startOffset = phase.offsetSamples;
+            candidate.offsetsTried = static_cast<std::int32_t>(phases_.size());
+            candidate.confidence = meanConfidence(phase.decisions, robustStart, robustBits);
+
+            const auto candidateEndSample = phase.firstBitSample
+                + (robustStart + robustBits) * static_cast<std::size_t>(samplesPerSymbol());
+
+            StreamingReceiverEvent frameEvent = lengthEvent;
+            frameEvent.payloadLength = payloadLength;
+            frameEvent.decodedLength = candidate.length;
+            frameEvent.bitsAvailable = static_cast<std::int32_t>(robustBits);
+            frameEvent.bitsExpected = static_cast<std::int32_t>(robustBits);
+            frameEvent.crcOk = candidate.crcOk;
+            frameEvent.payloadValid = candidate.payloadValid;
+            frameEvent.confidence = candidate.confidence;
+            frameEvent.latencySeconds = candidateEndSample >= latestSample
+                ? 0.0F
+                : static_cast<float>(static_cast<double>(latestSample - candidateEndSample) / config_.sampleRate);
+
+            if (candidate.crcOk && candidate.payloadValid && candidate.length == payloadLength) {
+                frameEvent.type = StreamingReceiverEventType::FrameDecoded;
+                if (!hasCandidate || candidate.confidence > bestResult.confidence) {
+                    bestResult = candidate;
+                    bestFrameEndSample = candidateEndSample;
+                    bestEvent = frameEvent;
+                    hasCandidate = true;
+                }
+            } else {
+                frameEvent.type = StreamingReceiverEventType::FrameRejected;
+                emitEvent(frameEvent);
+            }
         }
     }
 
@@ -240,7 +379,24 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
 
     result = bestResult;
     frameEndSample = bestFrameEndSample;
+    emitEvent(bestEvent);
     return true;
+}
+
+void StreamingReceiver::emitEvent(const StreamingReceiverEvent& event, int bucket) {
+    if (reportedEvents_.size() > 4096) {
+        reportedEvents_.clear();
+    }
+
+    const EventKey key{
+        event.type,
+        event.phaseOffsetSamples,
+        event.syncSample,
+        bucket,
+    };
+    if (reportedEvents_.insert(key).second) {
+        events_.push_back(event);
+    }
 }
 
 void StreamingReceiver::resetAfterFrame(std::size_t frameEndSample) {
@@ -252,6 +408,7 @@ void StreamingReceiver::resetAfterFrame(std::size_t frameEndSample) {
         buffer_.clear();
     }
 
+    reportedEvents_.clear();
     resetPhaseStates();
 }
 

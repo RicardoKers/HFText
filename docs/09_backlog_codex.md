@@ -296,6 +296,12 @@ Refinamento de RX aplicado: a demodulacao C++ passou a varrer pequenas variacoes
 
 Refinamento de operacao aplicado: o app PC passou a receber em streaming, com decodificacao em thread de segundo plano alimentada por blocos curtos de audio. O `StreamingReceiver` demodula incrementalmente simbolos novos em um banco limitado de fases e usa `PHYS_LENGTH` para evitar varrer todos os tamanhos de payload. O fluxo de WAV fechado fica reservado para debug e reproducao de capturas, evitando travamento da interface durante recepcao continua.
 
+Telemetria aplicada: o `StreamingReceiver` agora emite eventos diagnosticos para `START_SYNC`, `PHYS_LENGTH`, acumulacao do `ROBUST_FRAME`, quadro rejeitado e quadro valido. O app PC registra timestamp em cada linha e possui `Log RX detalhado`: no modo normal mostra eventos consolidados para operacao; no modo detalhado mostra a telemetria completa por fase, permitindo diagnosticar se a falha ocorreu no sincronismo, no tamanho fisico, no acúmulo de bits ou no CRC/payload.
+
+Refinamento aplicado apos os primeiros testes continuos bem-sucedidos: o log normal foi reduzido para evitar poluicao durante operacao, e o resumo de clipping passou a mostrar porcentagem e classificar picos isolados, clipping ocasional ou clipping frequente.
+
+Condicionamento RX removido apos teste real: a remocao da media de cada janela de simbolo foi avaliada como opcao, mas em recepcao radio/SDR degradou a decodificacao. O demodulador C++ offline, o `StreamingReceiver` e o app PC voltaram a medir os tons diretamente, sem subtracao de DC por simbolo.
+
 Tambem foi iniciada uma metrica diagnostica de confianca no demodulador, calculada pela separacao relativa entre as energias dos dois tons. Essa metrica deve ajudar logs e interface no futuro, mas nao substitui CRC.
 
 Tarefa 7.3 — Implementar 4-FSK

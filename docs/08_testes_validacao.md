@@ -177,6 +177,8 @@ Cada recepção deve salvar opcionalmente:
 - texto recebido;
 - confiança estimada.
 
+No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas e latencia estimada quando um quadro valido for publicado. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
+
 ## Validacao no app PC
 
 No app PC, o fluxo atual de validacao com audio real e:
@@ -186,6 +188,7 @@ No app PC, o fluxo atual de validacao com audio real e:
 - iniciar RX pelo dispositivo de entrada selecionado;
 - aguardar a mensagem aparecer no historico de texto recebido durante a captura;
 - registrar offset/fase aceita, quantidade de fases testadas e confianca media estimada;
+- conferir no log a sequencia resumida `sync forte` -> `PHYS_LENGTH` -> acumulacao do `ROBUST_FRAME` -> quadro valido;
 - parar RX para encerrar a escuta;
 - registrar duracao, pico de audio e amostras proximas de clipping;
 - aceitar o texto recebido apenas se o CRC estiver valido.
@@ -217,7 +220,7 @@ As proximas melhorias do app PC devem incluir validacoes manuais simples:
 
 Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao.
 
-O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. Ele serve como alerta operacional para reduzir ganho ou volume quando necessario.
+O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. O app deve registrar quantidade e porcentagem de amostras clipadas; picos isolados podem ser ruido impulsivo do canal, enquanto clipping frequente sugere reduzir ganho ou volume quando possivel.
 
 ## Testes do modo robusto
 

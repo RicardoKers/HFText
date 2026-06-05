@@ -6,6 +6,15 @@
 #include <cstddef>
 #include <vector>
 
+bool hasEvent(
+    const std::vector<hftext::StreamingReceiverEvent>& events,
+    hftext::StreamingReceiverEventType type
+) {
+    return std::any_of(events.begin(), events.end(), [type](const hftext::StreamingReceiverEvent& event) {
+        return event.type == type;
+    });
+}
+
 int main() {
     hftext::ModemConfig config;
     config.sampleRate = 8000;
@@ -32,14 +41,22 @@ int main() {
     assert(allResults.front().crcOk);
     assert(allResults.front().payloadValid);
     assert(allResults.front().text == "pu5lrk streaming");
+    const auto firstEvents = receiver.takeEvents();
+    assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::SyncFound));
+    assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::PhysicalLengthRecovered));
+    assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::FrameWaiting));
+    assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::FrameDecoded));
 
     const auto noMoreResults = receiver.pushSamples({0.0F, 0.0F, 0.0F});
     assert(noMoreResults.empty());
+    assert(receiver.takeEvents().empty());
 
     receiver.reset();
     const auto replayResults = receiver.pushSamples(audio);
     assert(replayResults.size() == 1);
     assert(replayResults.front().text == "pu5lrk streaming");
+    const auto replayEvents = receiver.takeEvents();
+    assert(hasEvent(replayEvents, hftext::StreamingReceiverEventType::FrameDecoded));
 
     receiver.reset();
     std::vector<float> delayedAudio(17, 0.0F);

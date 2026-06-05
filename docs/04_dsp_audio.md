@@ -49,6 +49,8 @@ Para cada símbolo:
 - decidir `0` se `energia(f0) >= energia(f1)`;
 - decidir `1` se `energia(f1) > energia(f0)`.
 
+Testes reais via radio/SDR mostraram que a remocao de DC por janela degradou a recepcao em vez de ajudar. Por isso, o demodulador atual mede os tons diretamente na janela de simbolo, sem subtracao de media por simbolo.
+
 O demodulador tambem calcula uma confianca simples por simbolo:
 
 ```text
@@ -93,10 +95,13 @@ O primeiro passo no C++ e `StreamingReceiver`, que:
 - demodula incrementalmente apenas janelas de simbolo novas;
 - acumula bits por fase em uma janela limitada;
 - procura `START_SYNC`, recupera `PHYS_LENGTH` e espera apenas o bloco robusto de tamanho conhecido;
+- emite eventos diagnosticos quando encontra `START_SYNC`, recupera `PHYS_LENGTH`, acumula `ROBUST_FRAME`, rejeita um quadro ou valida CRC/payload;
 - emite `DecodeResult` quando CRC e payload sao validos;
 - descarta amostras e bits consumidos apos um quadro recuperado.
 
 Essa estrategia evita varrer todos os comprimentos possiveis de payload e evita reprocessar continuamente um WAV crescente. A validacao continua dependendo de CRC e payload validos; candidatos falsos de sincronismo sao descartados quando nao produzem frame logico valido.
+
+Os eventos diagnosticos do RX continuo devem ser usados pela interface apenas para log e observabilidade. A interface pode resumir esses eventos no modo normal e expor todos no modo detalhado. Eles nao alteram a regra de aceitacao: somente quadro com CRC e payload validos deve aparecer como mensagem recebida.
 
 ## Canal simulado
 

@@ -17,6 +17,7 @@ class QLineEdit;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
+class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
 class QProgressBar;
@@ -50,10 +51,10 @@ private:
     hftext::ModemConfig readConfig() const;
     hftext::ModemConfig readRxConfig() const;
     void showDecodeResult(const hftext::DecodeResult& result);
-    void startRxWorker(const hftext::ModemConfig& config);
+    void startRxWorker(const hftext::ModemConfig& config, bool detailedRxLog);
     void stopRxWorker(bool drainPending = false);
     void enqueueRxSamples(const std::vector<float>& samples);
-    void rxWorkerLoop(hftext::ModemConfig config);
+    void rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog);
 
     AudioInput audioInput_;
     AudioOutput audioOutput_;
@@ -81,6 +82,7 @@ private:
     QProgressBar* rxLevelBar_ = nullptr;
     QProgressBar* rxQualityBar_ = nullptr;
     WaterfallWidget* waterfallWidget_ = nullptr;
+    QCheckBox* detailedRxLogCheck_ = nullptr;
     QPlainTextEdit* receivedEdit_ = nullptr;
     QPlainTextEdit* logEdit_ = nullptr;
     QPushButton* generateButton_ = nullptr;

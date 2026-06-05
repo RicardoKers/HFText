@@ -95,6 +95,7 @@ A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
 - botao `Decodificar WAV`;
 - botao `Limpar RX` para limpar apenas o historico visual de texto recebido;
 - configuracao de sample rate TX/WAV, sample rate RX, duracao de simbolo, tom 0, tom 1, amplitude e preambulo;
+- opcao `Log RX detalhado` para alternar entre log operacional resumido e telemetria completa de debug;
 - estimativa TX ao vivo com simbolos de payload, bits totais e duracao aproximada;
 - sanitizacao visual da mensagem TX, preservando os acentos suportados do portugues e substituindo caracteres invalidos por `?` durante a digitacao;
 - barra de progresso durante a reproducao TX;
@@ -132,7 +133,15 @@ Nesta etapa, o botao `Receber` inicia escuta continua pelo dispositivo de entrad
 
 Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra offset/fases testadas e confianca media no log.
 
-Ao parar RX, o app encerra a escuta e registra duracao capturada, pico de audio e uma contagem aproximada de amostras proximas de clipping. A parada do RX nao dispara mais uma decodificacao offline de toda a captura.
+O log do app inclui timestamp em cada linha. Por padrao, o RX continuo mostra um resumo operacional com sync forte, tamanho fisico, progresso consolidado, rejeicoes agregadas e quadro valido. A opcao `Log RX detalhado` mostra a telemetria completa por fase:
+
+- `START_SYNC` encontrado;
+- `PHYS_LENGTH` recuperado ou invalido;
+- progresso de acumulacao do `ROBUST_FRAME`;
+- quadro rejeitado por CRC/payload/tamanho;
+- quadro valido, com confianca e latencia estimada apos o fim do frame.
+
+Ao parar RX, o app encerra a escuta e registra duracao capturada, pico de audio e a quantidade aproximada de amostras proximas de clipping, incluindo porcentagem sobre o total. Quando ha clipping, o log classifica como picos isolados, clipping ocasional ou clipping frequente. A parada do RX nao dispara mais uma decodificacao offline de toda a captura.
 
 Ao usar `Decodificar WAV` manualmente, o app tambem registra duracao, sample rate, pico e clipping aproximado do arquivo aberto antes de tentar recuperar o quadro.
 
