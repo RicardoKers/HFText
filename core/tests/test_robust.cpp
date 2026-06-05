@@ -64,6 +64,24 @@ int main() {
     assert(decoded.bits == std::vector<std::uint8_t>({1, 0, 1, 1, 0, 0, 1, 0, 1}));
     assert(decoded.distance == 2);
 
+    const std::vector<std::uint8_t> softSourceBits = {0, 0, 0, 0, 0, 1};
+    auto softEncoded = hftext::convolutionalK3EncodeBits(softSourceBits);
+    for (std::size_t index : {0U, 1U, 2U}) {
+        softEncoded[index] = static_cast<std::uint8_t>(softEncoded[index] ^ 1U);
+    }
+    decoded = hftext::convolutionalK3DecodeBits(softEncoded, static_cast<int>(softSourceBits.size()));
+    assert(decoded.bits != softSourceBits);
+
+    std::vector<hftext::SoftBitDecision> softDecisions;
+    softDecisions.reserve(softEncoded.size());
+    for (std::size_t index = 0; index < softEncoded.size(); ++index) {
+        const bool weakDecision = index == 0U || index == 1U || index == 2U;
+        softDecisions.push_back({softEncoded[index], weakDecision ? 0.025F : 1.0F});
+    }
+    decoded = hftext::convolutionalK3DecodeSoftBits(softDecisions, static_cast<int>(softSourceBits.size()));
+    assert(decoded.bits == softSourceBits);
+    assert(decoded.distance > 0);
+
     const auto frameBits = hftext::buildFrame("pu5lrk cq");
     noisy = hftext::convolutionalK3EncodeBits(frameBits);
     for (std::size_t index = 3; index < noisy.size(); index += 31) {
@@ -93,6 +111,21 @@ int main() {
         noisyRobustBits[index] ^= 1;
     }
     robustResult = hftext::parseRobustFrameBits(noisyRobustBits, static_cast<int>(logicalFrameBits.size()));
+    assert(robustResult.frame.crcOk);
+    assert(robustResult.frame.payloadValid);
+    assert(robustResult.frame.text == "pu5lrk Teste");
+    assert(robustResult.viterbiDistance > 0);
+
+    std::vector<hftext::SoftBitDecision> softRobustBits;
+    softRobustBits.reserve(robustBits.size());
+    for (std::size_t index = 0; index < robustBits.size(); ++index) {
+        softRobustBits.push_back({robustBits[index], 1.0F});
+    }
+    for (std::size_t index : {5U, 6U, 7U}) {
+        softRobustBits[index].bit = static_cast<std::uint8_t>(softRobustBits[index].bit ^ 1U);
+        softRobustBits[index].confidence = 0.025F;
+    }
+    robustResult = hftext::parseRobustFrameSoftBits(softRobustBits, static_cast<int>(logicalFrameBits.size()));
     assert(robustResult.frame.crcOk);
     assert(robustResult.frame.payloadValid);
     assert(robustResult.frame.text == "pu5lrk Teste");
@@ -178,8 +211,11 @@ int main() {
     assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeBits({0, 2}); }));
     assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeBits({0}); }));
     assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeBits({0, 0}, -2); }));
+    assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeSoftBits({{0, 1.5F}, {0, 1.0F}}); }));
+    assert(throwsInvalidArgument([] { (void)hftext::convolutionalK3DecodeSoftBits({{0, 1.0F}}); }));
     assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameBits({0, 0}, -1); }));
     assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameBits({0, 2}, 1); }));
+    assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameSoftBits({{0, 1.0F}, {0, 1.0F}}, -1); }));
     assert(throwsInvalidArgument([] { (void)hftext::buildRobustTransmission("Ok", {0, 2}); }));
     assert(throwsInvalidArgument([] { (void)hftext::parseRobustFrameFromStream({0, 2}); }));
 }

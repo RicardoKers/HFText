@@ -189,6 +189,8 @@ Objetivo: permitir que o receptor saiba o tamanho do bloco robusto antes do fim 
 
 O receptor deve procurar `START_SYNC` no fluxo de bits demodulado, tolerando erro moderado de bit no marcador fisico, recuperar `PHYS_LENGTH` e calcular exatamente quantos bits do `ROBUST_FRAME` devem ser acumulados. Apos receber esse bloco, deve desfazer interleaving, aplicar Viterbi e aceitar apenas o frame logico recuperado cujo CRC, `LENGTH` logico e payload sejam validos.
 
+Quando o demodulador fornecer confianca por simbolo, o RX pode usar essa confianca na busca de `START_SYNC` e na maioria repetida de `PHYS_LENGTH`. Bits errados com baixa confianca podem ser tratados como evidencias fracas, mas candidatos so podem ser aceitos operacionalmente depois que o frame logico passar em CRC e payload.
+
 ## Campos
 
 ### SYNC
@@ -345,11 +347,11 @@ RX:
 
 ```text
 bits demodulados
--> busca de START_SYNC fisico
--> recuperacao de PHYS_LENGTH
+-> busca de START_SYNC fisico, opcionalmente ponderada por confianca
+-> recuperacao de PHYS_LENGTH, opcionalmente ponderada por confianca
 -> acumulacao do ROBUST_FRAME com tamanho conhecido
 -> deinterleaving do bloco robusto
--> Viterbi hard-decision
+-> Viterbi hard-decision ou soft-decision no RX com confianca por simbolo
 -> frame logico v0.1
 -> CRC16 normal
 ```
@@ -364,6 +366,8 @@ Regras:
 - o receptor deve remover os bits de cauda apos o Viterbi;
 - o interleaving deve ser aplicado depois do FEC e revertido antes do Viterbi;
 - a geometria do interleaving e derivada do tamanho do fluxo codificado;
+- o RX pode ponderar `START_SYNC` e `PHYS_LENGTH` pela confianca do demodulador, sem alterar os bits transmitidos;
+- o RX pode usar Viterbi soft-decision quando o demodulador fornecer confianca por simbolo, sem alterar o fluxo transmitido;
 - o receptor deve aceitar texto apenas quando o frame logico recuperado tiver CRC e payload validos.
 
 Regra deterministica de interleaving:

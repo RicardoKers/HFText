@@ -34,13 +34,13 @@ Parâmetros:
 - frequência do tom 0;
 - espaçamento dos tons;
 - duração do símbolo;
-- quantidade de tons;
+- quantidade de tons, quando houver modos futuros alem do 2-FSK atual;
 - volume de transmissão;
 - tamanho máximo da mensagem;
-- modo de modulação;
+- modo de modulação, quando houver modos futuros;
 - indicativo do usuário;
-- habilitar/desabilitar CRC;
-- habilitar/desabilitar FEC futuramente.
+- modo robusto HFText v0.1 sempre ativo;
+- CRC, FEC e interleaving sempre ativos, sem opcao operacional para desligar.
 
 ## Permissões
 
@@ -67,9 +67,9 @@ Usar AudioRecord para capturar amostras PCM.
 
 ## Integração com C++
 
-Inicialmente, parte do DSP pode ser implementada em Kotlin para testes simples.
+A versão Android deve chamar o núcleo C++ por JNI. Kotlin e Jetpack Compose devem cuidar da interface, permissões e audio; a montagem de frame, FEC, interleaving, modulacao, demodulacao e recepcao robusta devem permanecer no core C++.
 
-A versão definitiva deve chamar o núcleo C++ por JNI.
+Testes simples em Kotlin podem existir para validar integracao, mas nao devem criar uma segunda implementacao operacional do modem.
 
 Exemplo de interface desejada:
 
@@ -78,7 +78,11 @@ object HfTextNative {
     external fun modulateText(text: String, config: ModemConfig): FloatArray
     external fun demodulateSamples(samples: FloatArray, config: ModemConfig): DecodeResult
 }
-MVP Android
+```
+
+No RX futuro, a interface JNI deve evoluir para expor um receptor em fluxo equivalente ao `StreamingReceiver` do PC, evitando decodificar capturas longas como WAV durante a operacao normal.
+
+## MVP Android
 
 A primeira versão Android deve apenas transmitir.
 

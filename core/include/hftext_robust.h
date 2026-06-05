@@ -19,6 +19,11 @@ struct ViterbiResult {
     int distance = 0;
 };
 
+struct SoftBitDecision {
+    std::uint8_t bit = 0;
+    float confidence = 1.0F;
+};
+
 struct RobustDecodeResult {
     DecodeResult frame;
     InterleaveShape shape;
@@ -55,6 +60,12 @@ ViterbiResult convolutionalK3DecodeBits(
     bool tail = true
 );
 
+ViterbiResult convolutionalK3DecodeSoftBits(
+    const std::vector<SoftBitDecision>& decisions,
+    int originalBitCount = -1,
+    bool tail = true
+);
+
 std::vector<std::uint8_t> buildRobustFrameBits(const std::string& payloadText);
 
 std::vector<std::uint8_t> buildRobustTransmission(const std::string& payloadText);
@@ -66,6 +77,11 @@ std::vector<std::uint8_t> buildRobustTransmission(
 
 RobustDecodeResult parseRobustFrameBits(
     const std::vector<std::uint8_t>& bits,
+    int originalFrameBitCount
+);
+
+RobustDecodeResult parseRobustFrameSoftBits(
+    const std::vector<SoftBitDecision>& decisions,
     int originalFrameBitCount
 );
 

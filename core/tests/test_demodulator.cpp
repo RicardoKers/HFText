@@ -12,6 +12,12 @@ namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
+float deterministicNoise(std::uint32_t& state, float amplitude) {
+    state = state * 1664525U + 1013904223U;
+    const float normalized = static_cast<float>((state >> 8) & 0xFFFFU) / 32767.5F - 1.0F;
+    return normalized * amplitude;
+}
+
 std::vector<float> sineTone(int sampleRate, int sampleCount, float frequencyHz) {
     std::vector<float> samples;
     samples.reserve(static_cast<std::size_t>(sampleCount));
@@ -38,6 +44,7 @@ int main() {
     for (std::size_t index = 0; index < decisions.size(); ++index) {
         assert(decisions[index].bit == bits[index]);
         assert(decisions[index].confidence > 0.9F);
+        assert(decisions[index].quality > 0.9F);
     }
     const auto silentDecisions = hftext::demodulateBitDecisions2Fsk(
         std::vector<float>(audio.size(), 0.0F),
@@ -48,7 +55,23 @@ int main() {
     );
     for (const auto& decision : silentDecisions) {
         assert(decision.confidence == 0.0F);
+        assert(decision.quality == 0.0F);
     }
+
+    std::uint32_t noiseState = 0xA53C19D2U;
+    std::vector<float> noiseOnly(800);
+    for (auto& sample : noiseOnly) {
+        sample = deterministicNoise(noiseState, 0.5F);
+    }
+    const auto noiseDecisions = hftext::demodulateBitDecisions2Fsk(
+        noiseOnly,
+        8000,
+        0.1F,
+        1000.0F,
+        2000.0F
+    );
+    assert(noiseDecisions.size() == 1);
+    assert(noiseDecisions.front().quality < 0.1F);
 
     audio = hftext::modulateBits2Fsk({0, 1}, 8000, 0.05F, 1200.0F, 1600.0F, 0.8F);
     audio.insert(audio.end(), 10, 0.0F);

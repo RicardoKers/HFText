@@ -27,13 +27,20 @@ Critérios de aceitação:
 
 ### RF003 — Geração de quadro
 
-O sistema deve montar um quadro contendo pelo menos:
+O sistema deve montar o frame logico HFText Basic v0.1 contendo:
 
-- preâmbulo;
 - palavra de sincronismo;
 - tamanho da mensagem;
 - payload;
 - CRC.
+
+Na transmissao operacional, esse frame logico deve ser encapsulado pelo modo robusto atual:
+
+- preambulo fisico;
+- marcador fisico de inicio;
+- tamanho fisico do bloco robusto;
+- FEC `conv_k3`;
+- interleaving deterministico.
 
 ### RF004 — Modulação em áudio
 
@@ -61,6 +68,8 @@ Critérios de aceitação:
 - detectar tons em áudio limpo;
 - recuperar bits em áudio limpo;
 - funcionar com ruído moderado em testes simulados.
+- no modo robusto, usar FEC/interleaving e validar o resultado final por CRC;
+- quando houver métrica de confiança por símbolo, permitir Viterbi soft-decision no RX C++.
 
 ### RF008 — Validação por CRC
 
@@ -80,6 +89,10 @@ A aplicação PC deve permitir:
 - mostrar texto recebido;
 - selecionar dispositivo de entrada e saída;
 - mostrar nível de áudio.
+- mostrar qualidade aproximada de RX;
+- mostrar waterfall simples para observação do sinal;
+- manter histórico de mensagens recebidas;
+- registrar log operacional com timestamp.
 
 ### RF010 — Aplicação Android
 

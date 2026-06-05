@@ -1,10 +1,17 @@
 #include "hftext_core.h"
+#include "hftext_frame.h"
 #include "hftext_streaming_receiver.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <cmath>
+#include <cstdint>
 #include <vector>
+
+namespace {
+
+constexpr double kPi = 3.141592653589793238462643383279502884;
 
 bool hasEvent(
     const std::vector<hftext::StreamingReceiverEvent>& events,
@@ -14,6 +21,48 @@ bool hasEvent(
         return event.type == type;
     });
 }
+
+void overwriteSymbolWithWeakWrongDecision(
+    std::vector<float>& audio,
+    const hftext::ModemConfig& config,
+    int bitIndex,
+    std::uint8_t expectedBit
+) {
+    const int symbolSamples = static_cast<int>(
+        std::lround(static_cast<double>(config.sampleRate) * config.symbolDurationSec)
+    );
+    const auto start = static_cast<std::size_t>(std::max(0, bitIndex) * symbolSamples);
+    if (start + static_cast<std::size_t>(symbolSamples) > audio.size()) {
+        return;
+    }
+
+    const float correctFrequency = expectedBit == 0 ? config.frequency0Hz : config.frequency1Hz;
+    const float wrongFrequency = expectedBit == 0 ? config.frequency1Hz : config.frequency0Hz;
+    for (int sample = 0; sample < symbolSamples; ++sample) {
+        const double t = static_cast<double>(sample) / config.sampleRate;
+        const double correct = 0.95 * std::sin(2.0 * kPi * correctFrequency * t);
+        const double wrong = std::sin(2.0 * kPi * wrongFrequency * t);
+        audio[start + static_cast<std::size_t>(sample)] = static_cast<float>(0.35 * (correct + wrong));
+    }
+}
+
+void damageStartSyncAndPhysicalLengthSoftly(std::vector<float>& audio, const hftext::ModemConfig& config) {
+    const auto startSync = hftext::startSyncBits();
+    for (int index = 0; index < 10; ++index) {
+        overwriteSymbolWithWeakWrongDecision(
+            audio,
+            config,
+            config.preambleBits + index,
+            startSync[static_cast<std::size_t>(index)]
+        );
+    }
+
+    const int lengthStart = config.preambleBits + static_cast<int>(startSync.size());
+    overwriteSymbolWithWeakWrongDecision(audio, config, lengthStart, 0);
+    overwriteSymbolWithWeakWrongDecision(audio, config, lengthStart + hftext::kBitsPerByte, 0);
+}
+
+}  // namespace
 
 int main() {
     hftext::ModemConfig config;
@@ -71,6 +120,22 @@ int main() {
     }
     assert(delayedResults.size() == 1);
     assert(delayedResults.front().text == "pu5lrk streaming");
+
+    receiver.reset();
+    auto softDamagedAudio = audio;
+    damageStartSyncAndPhysicalLengthSoftly(softDamagedAudio, config);
+    std::vector<hftext::DecodeResult> softDamagedResults;
+    for (std::size_t offset = 0; offset < softDamagedAudio.size(); offset += chunkSize) {
+        const auto end = std::min(softDamagedAudio.size(), offset + chunkSize);
+        const std::vector<float> chunk(softDamagedAudio.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       softDamagedAudio.begin() + static_cast<std::ptrdiff_t>(end));
+        const auto results = receiver.pushSamples(chunk);
+        softDamagedResults.insert(softDamagedResults.end(), results.begin(), results.end());
+    }
+    assert(softDamagedResults.size() == 1);
+    assert(softDamagedResults.front().crcOk);
+    assert(softDamagedResults.front().payloadValid);
+    assert(softDamagedResults.front().text == "pu5lrk streaming");
 
     receiver.reset();
     const auto secondAudio = hftext::modulateText("pu5lrk segunda", config);

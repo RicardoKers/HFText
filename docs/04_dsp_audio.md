@@ -51,19 +51,25 @@ Para cada símbolo:
 
 Testes reais via radio/SDR mostraram que a remocao de DC por janela degradou a recepcao em vez de ajudar. Por isso, o demodulador atual mede os tons diretamente na janela de simbolo, sem subtracao de media por simbolo.
 
-O demodulador tambem calcula uma confianca simples por simbolo:
+O demodulador calcula duas metricas por simbolo:
 
 ```text
-confianca = abs(energia(f1) - energia(f0)) / (energia(f1) + energia(f0))
+separacao = abs(energia(f1) - energia(f0)) / (energia(f1) + energia(f0))
+concentracao_coerente = (energia(f0) + energia(f1)) / (energia_total_da_janela * amostras_da_janela)
+qualidade = separacao * peso(concentracao_coerente)
 ```
 
-Quando as duas energias sao zero, a confianca e zero. O resultado final de recepcao pode informar a media dessa confianca nos bits do quadro detectado. Essa metrica e apenas diagnostica: nao substitui a validacao por CRC.
+Quando as duas energias de tom sao zero, as metricas sao zero.
+
+`separacao` mede qual tom venceu e com que distancia relativa; ela alimenta o Viterbi soft-decision do bloco robusto. `qualidade` reduz a confianca quando a energia nao esta concentrada de forma coerente nos tons esperados, o que ajuda a nao tratar ruido puro como bit forte. O resultado final de recepcao pode informar a media de `qualidade` nos bits do quadro detectado. Essas metricas nao substituem a validacao por CRC.
 
 Áudio restante menor que uma janela completa de símbolo deve ser ignorado.
 
 Esta versão assume que o áudio está alinhado à janela de símbolo do demodulador.
 
 Após a demodulação, o receptor procura o `START_SYNC` fisico de 32 bits no fluxo de bits e descarta preambulo, silencio demodulado, ruido demodulado ou outros bits anteriores ao quadro robusto.
+
+No RX C++, essa busca pode usar uma metrica suave: candidatos com erros duros adicionais ainda podem ser avaliados quando os bits divergentes possuem baixa qualidade. O `PHYS_LENGTH`, transmitido tres vezes, tambem pode ser recuperado por voto ponderado por qualidade. Isso aumenta tolerancia a trechos fracos do marcador fisico sem mudar o protocolo transmitido.
 
 Se um `START_SYNC` candidato aparecer em ruido antes do quadro real, o receptor deve continuar procurando outros candidatos ate encontrar um quadro completo com CRC e payload validos. Caso nenhum candidato seja valido, o primeiro erro encontrado pode ser usado como diagnostico.
 
@@ -94,7 +100,8 @@ O primeiro passo no C++ e `StreamingReceiver`, que:
 - mantém um banco limitado de fases de simbolo para nao depender do instante exato em que a captura foi iniciada;
 - demodula incrementalmente apenas janelas de simbolo novas;
 - acumula bits por fase em uma janela limitada;
-- procura `START_SYNC`, recupera `PHYS_LENGTH` e espera apenas o bloco robusto de tamanho conhecido;
+- procura `START_SYNC`, recupera `PHYS_LENGTH` com apoio opcional da qualidade por simbolo e espera apenas o bloco robusto de tamanho conhecido;
+- decodifica o `ROBUST_FRAME` com Viterbi soft-decision, usando a separacao de cada simbolo como peso de erro;
 - emite eventos diagnosticos quando encontra `START_SYNC`, recupera `PHYS_LENGTH`, acumula `ROBUST_FRAME`, rejeita um quadro ou valida CRC/payload;
 - emite `DecodeResult` quando CRC e payload sao validos;
 - descarta amostras e bits consumidos apos um quadro recuperado.
@@ -132,8 +139,8 @@ O experimento recomendado e aplicar repeticao por bit ou simbolo antes da modula
 
 A simulacao Python possui helpers experimentais para repetir bits e recuperar por voto majoritario. Eles ainda nao fazem parte dos scripts TX/RX normais nem do core C++.
 
-## Interleaving futuro
+## Interleaving e FEC robustos
 
-O interleaving deve ser avaliado primeiro em Python como experimento independente. A primeira forma experimental usa blocos retangulares completos: escreve bits por linhas e transmite por colunas, espalhando rajadas de erro no tempo. O deinterleaving faz o inverso antes do voto majoritario ou da validacao por CRC.
+O interleaving foi avaliado primeiro em Python como experimento independente. A forma adotada usa blocos retangulares completos: escreve bits por linhas e transmite por colunas, espalhando rajadas de erro no tempo. O deinterleaving faz o inverso antes do Viterbi e da validacao por CRC.
 
-O interleaving com `conv_k3` agora faz parte do modo robusto unico do HFText v0.1. Repeticao continua sendo apenas experimento futuro.
+O interleaving com `conv_k3` agora faz parte do modo robusto unico do HFText v0.1. No RX C++, o decoder usa Viterbi soft-decision quando recebe confianca por simbolo do demodulador, mantendo compatibilidade com a decodificacao hard-decision para testes e fluxos puramente binarios. Repeticao continua sendo apenas experimento futuro.

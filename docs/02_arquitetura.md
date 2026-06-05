@@ -101,9 +101,9 @@ public:
 };
 
 Essas interfaces de alto nível devem ser a entrada preferencial para ferramentas CLI, aplicação PC e futura integração Android.
-`modulateText` e `demodulateSamples` usam sempre o modo robusto atual: frame logico v0.1, `conv_k3`, interleaving deterministico, `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME` e 2-FSK. O frame logico simples continua disponivel internamente para testes e para a camada de robustez, mas nao e modo operacional desligavel.
+`modulateText` e `demodulateSamples` usam sempre o modo robusto atual: frame logico v0.1, `conv_k3`, interleaving deterministico, `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME` e 2-FSK. O frame logico simples continua disponivel internamente para testes e para a camada de robustez, mas nao e modo operacional desligavel. Quando ha confianca por simbolo vinda do demodulador, o RX C++ pode ponderar a busca de `START_SYNC`, a recuperacao de `PHYS_LENGTH` e o Viterbi do bloco robusto.
 Quando `syncSearch` está habilitado, `demodulateSamples` pode tentar múltiplos offsets iniciais de amostra dentro de um símbolo antes de escolher o primeiro quadro com CRC e payload válidos.
-`StreamingReceiver` é a base para recepção contínua: ele acumula blocos curtos de amostras, demodula simbolos novos em um banco limitado de fases, recupera quadros completos em janelas limitadas e emite resultados válidos sem depender de um WAV fechado.
+`StreamingReceiver` é a base para recepção contínua: ele acumula blocos curtos de amostras, demodula simbolos novos em um banco limitado de fases, recupera quadros completos em janelas limitadas, usa a confianca por simbolo no sincronismo fisico e no Viterbi quando disponivel, e emite resultados válidos sem depender de um WAV fechado.
 As APIs internas de encoder, frame, modulador e demodulador continuam disponíveis para testes e validações de baixo nível.
 Simulação Python
 

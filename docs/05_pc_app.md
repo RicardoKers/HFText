@@ -34,7 +34,7 @@ A primeira versão da aplicação PC deve conter:
 - mostrar progresso durante a transmissao;
 - substituir caracteres invalidos por `?` diretamente no campo de mensagem TX, antes da transmissao;
 - mostrar espectro básico;
-- mostrar waterfall futuramente;
+- mostrar waterfall;
 - salvar log de recepção.
 
 ## Arquitetura da aplicação PC
@@ -51,23 +51,34 @@ pc-app/
 ├── ModemController.cpp
 ├── ModemController.h
 └── CMakeLists.txt
-Responsabilidades
-MainWindow
-Interface gráfica.
-Botões.
-Campos.
-Exibição de mensagens.
-AudioInput
-Captura de áudio.
-Bufferização.
-Conversão para float.
-AudioOutput
-Reprodução de áudio.
-Controle de volume.
-ModemController
-Conecta UI, áudio e núcleo C++.
-Não deve implementar DSP diretamente.
-MVP PC historico
+```
+
+## Responsabilidades
+
+`MainWindow`:
+
+- interface grafica;
+- botoes;
+- campos;
+- exibicao de mensagens.
+
+`AudioInput`:
+
+- captura de audio;
+- bufferizacao;
+- conversao para float.
+
+`AudioOutput`:
+
+- reproducao de audio;
+- controle de volume.
+
+`ModemController`:
+
+- conecta UI, audio e nucleo C++;
+- nao deve implementar DSP diretamente.
+
+## MVP PC historico
 
 O primeiro MVP podia ignorar recepção em tempo real.
 
@@ -81,9 +92,9 @@ aplicação carrega WAV;
 aplicação chama demodulateSamples;
 aplicação mostra texto decodificado.
 
-## Estado atual da Fase 4
+## Estado atual da interface
 
-A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
+A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e por audio em tempo real:
 
 - campo de indicativo;
 - campo de mensagem;
@@ -99,27 +110,36 @@ A primeira fatia do `pc-app/` e uma aplicacao Qt Widgets offline:
 - estimativa TX ao vivo com simbolos de payload, bits totais e duracao aproximada;
 - sanitizacao visual da mensagem TX, preservando os acentos suportados do portugues e substituindo caracteres invalidos por `?` durante a digitacao;
 - barra de progresso durante a reproducao TX;
+- barra de progresso RX baseada no bloco robusto em acumulacao;
 - selecao de dispositivo de saida de audio;
 - selecao de dispositivo de entrada de audio;
 - indicador simples de nivel RX;
 - indicador simples de qualidade RX baseado na confianca media do demodulador;
 - waterfall RX simples para observacao visual do audio recebido;
 - area de texto recebido;
-- log simples.
+- log simples;
+- botao `Salvar Log` para gravar o log operacional em arquivo texto;
+- botao `Limpar Log` para limpar apenas o log operacional da interface;
+- persistencia local de indicativo, parametros do modem, dispositivos selecionados e estado do log detalhado;
+- icone proprio do HFText no executavel e na janela.
 
 A interface agora separa operacao e configuracao em abas:
 
-- `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso, qualidade RX, waterfall, botoes e texto recebido;
-- `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio e log.
+- `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso TX/RX, qualidade RX, waterfall, botoes e texto recebido;
+- `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio, log e botoes para salvar ou limpar o log.
 
 A area `Texto recebido` funciona como historico: novas mensagens ou resultados de decodificacao sao adicionados abaixo dos anteriores.
 O botao `Limpar RX` limpa esse historico visual sem apagar WAVs, log ou configuracoes.
+
+Ao fechar, o app salva localmente indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio selecionados, estado do `Log RX detalhado` e geometria da janela. Esses valores sao restaurados na proxima abertura. A mensagem TX digitada nao e persistida, para evitar reabrir o app com texto antigo pronto para transmissao.
 
 O app usa `ModemController` apenas como ponte entre a interface, `hftext_core` e o utilitario de leitura/escrita WAV. Ele nao implementa logica DSP.
 
 O `pc-app/` e incluido pelo CMake raiz, mas e ignorado automaticamente quando `Qt6 Widgets` nao esta instalado no ambiente.
 
-## Estado atual da Fase 5
+No Windows, o alvo `hftext_pc` deve ser gerado como aplicacao grafica, sem abrir uma janela de console junto com a interface Qt. Ferramentas CLI, testes e utilitarios WAV continuam sendo executaveis de console.
+
+## Estado atual do audio e RX continuo
 
 A reproducao de audio TX foi iniciada no `pc-app/` com `AudioOutput`.
 
@@ -131,15 +151,25 @@ A captura RX basica tambem foi iniciada com `AudioInput`.
 
 Nesta etapa, o botao `Receber` inicia escuta continua pelo dispositivo de entrada selecionado. Os blocos de audio capturados alimentam o `StreamingReceiver` em uma thread de segundo plano, enquanto a interface continua atualizando `Nivel RX`, qualidade e waterfall.
 
-Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra offset/fases testadas e confianca media no log.
+O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final.
 
-O log do app inclui timestamp em cada linha. Por padrao, o RX continuo mostra um resumo operacional com sync forte, tamanho fisico, progresso consolidado, rejeicoes agregadas e quadro valido. A opcao `Log RX detalhado` mostra a telemetria completa por fase:
+Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra o texto recebido, offset/fases testadas e confianca media no log.
+
+A barra `Progresso RX` mostra a acumulacao aproximada do `ROBUST_FRAME` depois que o receptor encontra `START_SYNC` e recupera `PHYS_LENGTH`. Ela chega a 100% quando um quadro valido e publicado e volta a zero ao iniciar ou parar RX.
+
+O log do app inclui timestamp em cada linha. Quando uma mensagem e aceita, o texto recebido tambem e registrado no log. Por padrao, o RX continuo mostra um resumo operacional compacto com sync forte, tamanho fisico, progresso consolidado, rejeicoes agregadas e quadro valido. Marcos repetidos por fases diferentes sao omitidos no modo normal para preservar legibilidade. A opcao `Log RX detalhado` mostra a telemetria completa por fase:
 
 - `START_SYNC` encontrado;
 - `PHYS_LENGTH` recuperado ou invalido;
 - progresso de acumulacao do `ROBUST_FRAME`;
 - quadro rejeitado por CRC/payload/tamanho;
 - quadro valido, com confianca e latencia estimada apos o fim do frame.
+
+O botao `Salvar Log` grava o conteudo atual do log em um arquivo `.txt`. O arquivo inclui um cabecalho com timestamp de exportacao, indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio e estado do log detalhado. Isso serve para anexar testes de campo sem depender de prints da interface.
+
+O botao `Limpar Log` limpa apenas a area de log operacional exibida na interface. Ele nao apaga o historico de `Texto recebido`, configuracoes locais, WAVs gerados ou capturas.
+
+Para manter a interface responsiva durante ruido ou muitos candidatos falsos, a fila de audio entre captura e worker RX deve ser limitada. Se o worker ficar atrasado, amostras antigas pendentes podem ser descartadas em vez de bloquear a interface. O waterfall tambem deve limitar atualizacoes pendentes, e o log detalhado pode omitir eventos por lote quando houver excesso. A validacao de mensagem continua sendo feita somente pelo core com CRC e payload validos.
 
 Ao parar RX, o app encerra a escuta e registra duracao capturada, pico de audio e a quantidade aproximada de amostras proximas de clipping, incluindo porcentagem sobre o total. Quando ha clipping, o log classifica como picos isolados, clipping ocasional ou clipping frequente. A parada do RX nao dispara mais uma decodificacao offline de toda a captura.
 

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>assets/HFText.ico</file>
+    </qresource>
+</RCC>

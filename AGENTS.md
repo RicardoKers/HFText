@@ -60,6 +60,7 @@ Símbolos de 6 bits são compactados em bytes MSB-first, com zero padding no úl
 SYNC e CRC16 são serializados em big-endian; o quadro completo vira bits MSB-first antes da modulação.
 TX usa preâmbulo alternado de 64 bits antes de START_SYNC.
 RX procura START_SYNC no fluxo de bits, recupera PHYS_LENGTH e acumula o ROBUST_FRAME de tamanho conhecido.
+Quando houver confiança por símbolo, RX pode ponderar START_SYNC, PHYS_LENGTH e Viterbi por essa confiança.
 RX em operação normal deve ser contínuo, processando blocos de áudio durante a recepção; WAV fechado é ferramenta de debug.
 RX offline pode tentar múltiplos offsets iniciais de amostra dentro do símbolo para melhorar alinhamento temporal.
 Não incluir SYNC nem LENGTH no CRC.
@@ -78,7 +79,7 @@ sem FEC;
 sem interleaving;
 sem recepção em tempo real.
 
-A implementação atual usa modo robusto único com `conv_k3 + interleaving`, `PHYS_LENGTH` físico e recepção contínua no app PC.
+A implementação atual usa modo robusto único com `conv_k3 + interleaving`, `PHYS_LENGTH` físico, recepção contínua no app PC e sincronismo/Viterbi ponderados por confiança no RX C++ quando há confiança por símbolo.
 
 ## Estilo Python
 Usar funções pequenas.

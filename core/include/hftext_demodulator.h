@@ -10,6 +10,7 @@ namespace hftext {
 struct BitDecision {
     std::uint8_t bit = 0;
     float confidence = 0.0F;
+    float quality = 0.0F;
 };
 
 double toneEnergy(const std::vector<float>& samples, int sampleRate, float frequencyHz);

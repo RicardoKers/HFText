@@ -105,11 +105,11 @@ Tarefas:
 - melhorar preâmbulo;
 - detectar início de quadro;
 - estimar offset temporal;
-- implementar 4-FSK;
-- implementar 8-FSK;
-- implementar repetição;
 - implementar interleaving;
-- implementar FEC simples.
+- implementar FEC simples;
+- avaliar 4-FSK;
+- avaliar 8-FSK;
+- avaliar repetição.
 
 Resultado esperado:
 Melhor desempenho em ruído e fading.
@@ -122,7 +122,9 @@ Refinamento operacional: a recepcao do app PC passou a usar o `StreamingReceiver
 
 Outra melhoria iniciada: o demodulador passou a calcular uma confianca media baseada na separacao relativa entre as energias dos tons 0 e 1. A confianca e diagnostica e nao altera a regra de aceitacao por CRC.
 
-A investigacao de robustez em Python apontou `conv_k3 + interleaving` como modo principal: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, Viterbi hard-decision e interleaving retangular sobre o fluxo codificado. O HFText v0.1 usa esse modo sempre; o frame simples `SYNC | LENGTH | PAYLOAD | CRC16` permanece como frame logico interno antes do FEC.
+A investigacao de robustez em Python apontou `conv_k3 + interleaving` como modo principal: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, Viterbi e interleaving retangular sobre o fluxo codificado. O HFText v0.1 usa esse modo sempre; o frame simples `SYNC | LENGTH | PAYLOAD | CRC16` permanece como frame logico interno antes do FEC. No RX C++, o Viterbi usa decisao suave quando recebe confianca por simbolo do demodulador.
+
+Nesta fase, FEC simples e interleaving deixaram de ser apenas experimento e passaram a fazer parte do modo operacional unico. Repeticao simples, 4-FSK e 8-FSK permanecem como linhas futuras de pesquisa, nao como modos atuais.
 
 ## Fase 7 — Aplicação Android TX
 
@@ -178,7 +180,7 @@ A Fase 4 foi iniciada com uma aplicacao PC offline em `pc-app/`, usando Qt Widge
 
 A Fase 5 possui os fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV`, botao `Parar TX`, `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX`, indicador simples de nivel RX, metricas basicas da captura e recepcao em fluxo via `StreamingReceiver`.
 
-O RX continuo foi integrado ao app em uma thread propria. O app nao depende mais de capturar um WAV completo para tentar decodificar; arquivos WAV permanecem apenas para debug e reproducao de casos reais.
+O RX continuo foi integrado ao app em uma thread propria. O app nao depende mais de capturar um WAV completo para tentar decodificar; arquivos WAV permanecem apenas para debug e reproducao de casos reais. A decodificacao robusta em audio usa Viterbi soft-decision no core C++.
 
 As proximas melhorias recomendadas para a Fase 5 sao incrementais e focadas em operacao:
 

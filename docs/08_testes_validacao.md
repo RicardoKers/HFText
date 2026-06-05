@@ -177,7 +177,7 @@ Cada recepção deve salvar opcionalmente:
 - texto recebido;
 - confiança estimada.
 
-No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas e latencia estimada quando um quadro valido for publicado. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
+No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
 
 ## Validacao no app PC
 
@@ -187,6 +187,7 @@ No app PC, o fluxo atual de validacao com audio real e:
 - transmitir explicitamente o WAV pelo dispositivo de saida selecionado;
 - iniciar RX pelo dispositivo de entrada selecionado;
 - aguardar a mensagem aparecer no historico de texto recebido durante a captura;
+- conferir se o texto recebido tambem aparece no log;
 - registrar offset/fase aceita, quantidade de fases testadas e confianca media estimada;
 - conferir no log a sequencia resumida `sync forte` -> `PHYS_LENGTH` -> acumulacao do `ROBUST_FRAME` -> quadro valido;
 - parar RX para encerrar a escuta;
@@ -197,6 +198,8 @@ Ao abrir um WAV manualmente no app PC, a validacao tambem deve registrar duracao
 
 Durante uma captura RX ativa, o app deve priorizar a reciclagem dos buffers de audio e enviar copias curtas para o `StreamingReceiver` em thread propria. A decodificacao deve acontecer durante a recepcao e publicar mensagens pouco depois do fim do quadro. WAV fechado deve ser usado apenas para debug e reproducao de casos de teste.
 
+O app deve permanecer responsivo mesmo quando o canal gerar muitos candidatos falsos. Para isso, a fila interna de audio RX e limitada, o worker processa blocos curtos, o waterfall pode descartar atualizacoes visuais atrasadas e o log detalhado pode resumir/omitir excesso de eventos por lote. Em teste manual, deixar RX ativo em ruido ou em uma transmissao fraca nao deve congelar a janela; se o processamento nao acompanhar o tempo real, o comportamento aceitavel e perder parte da recepcao atual e continuar operavel.
+
 Ao testar captura por placa de som, conferir no log do app:
 
 - `RX streaming iniciado` deve informar a taxa de captura RX;
@@ -205,9 +208,9 @@ Ao testar captura por placa de som, conferir no log do app:
 
 Se o WAV recebido parecer comprimido ou esticado, a primeira verificacao e comparar o sample rate RX configurado com o sample rate mostrado no log e no arquivo WAV salvo. Em Windows, usar 48000 Hz para RX e o ponto de partida recomendado.
 
-## Testes futuros de interface PC
+## Testes manuais de interface PC
 
-As proximas melhorias do app PC devem incluir validacoes manuais simples:
+A interface PC deve manter validacoes manuais simples:
 
 - ao digitar mensagem TX com letras maiusculas, o contador deve incluir os simbolos `shift`;
 - ao digitar vogais acentuadas, o contador deve incluir os modificadores `acute` ou `tilde`;
@@ -215,10 +218,17 @@ As proximas melhorias do app PC devem incluir validacoes manuais simples:
 - ao digitar caracteres invalidos, o campo TX deve mostrar `?` antes de gerar WAV;
 - ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
 - durante `Transmitir WAV`, a barra de progresso deve avancar ate o fim do arquivo ou parar corretamente ao clicar `Parar TX`;
+- durante RX, a barra `Progresso RX` deve avancar quando o receptor recuperar `PHYS_LENGTH` e acumular o `ROBUST_FRAME`;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
-- a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving.
+- a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
+- o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
+- o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
+- ao fechar e abrir novamente, o app deve restaurar indicativo, parametros do modem, dispositivos selecionados, estado do log detalhado e geometria da janela;
+- ao fechar e abrir novamente, a caixa de mensagem TX deve permanecer vazia;
+- no Windows, abrir `hftext_pc.exe` deve mostrar apenas a janela grafica do HFText, sem console adicional;
+- a janela e o executavel devem exibir o icone proprio do HFText.
 
-Na primeira versao, a waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao.
+A waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. O app deve registrar quantidade e porcentagem de amostras clipadas; picos isolados podem ser ruido impulsivo do canal, enquanto clipping frequente sugere reduzir ganho ou volume quando possivel.
 
@@ -229,6 +239,8 @@ A simulacao Python deve continuar validando a camada robusta:
 - round-trip limpo com `conv_k3` sem interleaving;
 - round-trip limpo com `conv_k3 + interleaving`;
 - Viterbi recuperando quadros com erros esparsos antes da verificacao de CRC;
+- Viterbi soft-decision recuperando bits fracos quando a decisao dura escolhe um caminho incorreto;
+- ruido puro deve produzir baixa qualidade, mesmo quando a decisao dura escolher 0 ou 1;
 - deinterleaving restaurando exatamente o fluxo codificado antes do Viterbi;
 - geometria de interleaving derivada de forma deterministica a partir do tamanho codificado;
 - rejeicao de geometrias que nao encaixem exatamente no fluxo codificado;
@@ -239,12 +251,15 @@ A simulacao Python deve continuar validando a camada robusta:
 No core C++, os testes automatizados devem cobrir:
 
 - helpers puros de `conv_k3`, Viterbi, interleaving e deinterleaving;
+- Viterbi soft-decision e parse robusto usando confianca por bit;
 - montagem e parse de frame robusto em bits;
 - deteccao de `START_SYNC` fisico em fluxo de bits com preambulo e bits extras;
-- recuperacao de `PHYS_LENGTH` repetido e rejeicao de tamanho fisico invalido;
+- deteccao de `START_SYNC` em audio com erros duros adicionais quando os bits divergentes possuem baixa qualidade;
+- recuperacao de `PHYS_LENGTH` repetido por voto duro e por voto ponderado por qualidade;
+- rejeicao de tamanho fisico invalido;
 - round-trip limpo via API publica `modulateText`/`demodulateSamples`;
 - recepcao continua por `StreamingReceiver`, incluindo atraso inicial arbitrario e mais de um quadro no mesmo fluxo;
 - round-trip WAV pelos CLIs `hftext_tx_wav` e `hftext_rx_wav`;
 - round-trip manual no app PC gerando e decodificando o mesmo WAV.
 
-O modo robusto deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC nao substitui o CRC.
+O modo robusto deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC, incluindo Viterbi soft-decision, nao substitui o CRC.

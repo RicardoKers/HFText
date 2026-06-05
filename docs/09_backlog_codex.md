@@ -304,6 +304,12 @@ Condicionamento RX removido apos teste real: a remocao da media de cada janela d
 
 Tambem foi iniciada uma metrica diagnostica de confianca no demodulador, calculada pela separacao relativa entre as energias dos dois tons. Essa metrica deve ajudar logs e interface no futuro, mas nao substitui CRC.
 
+Refinamento aplicado apos testes reais com simbolo de `0,3 s`: o core C++ passou a decodificar o bloco robusto com Viterbi soft-decision quando ha confianca por simbolo disponivel. O fluxo transmitido nao muda; o RX usa a confianca do demodulador para penalizar menos bits fracos e penalizar mais bits errados com alta confianca. A aceitacao continua dependendo de CRC e payload validos.
+
+Refinamento adicional no sincronismo fisico: `demodulateSamples` e `StreamingReceiver` passaram a usar a confianca por simbolo tambem na busca de `START_SYNC` e na recuperacao de `PHYS_LENGTH`. O receptor ainda preserva o limite duro antigo para candidatos claros, mas pode avaliar candidatos com alguns erros duros extras quando os bits divergentes sao fracos. O fluxo transmitido nao muda e a aceitacao continua dependendo de CRC, payload e consistencia de tamanho.
+
+Refinamento apos log real com duas transmissoes de `0,3 s/bit`: a transmissao fraca chegou a varios candidatos plausiveis, inclusive `LENGTH 21/21`, mas falhou em CRC; a transmissao um pouco mais forte foi aceita com `21 simbolos` e qualidade media em torno de 70%. Para reduzir falsos candidatos em ruido e nao superestimar bits de baixa energia, o demodulador passou a separar duas metricas: `confidence` como separacao relativa dos tons para o Viterbi soft-decision, e `quality` como separacao ponderada por concentracao coerente de energia para `START_SYNC`, `PHYS_LENGTH` e diagnostico.
+
 Tarefa 7.3 — Implementar 4-FSK
 
 Adicionar modo 4-FSK.
@@ -368,9 +374,9 @@ Conclusao de implementacao: o modo robusto principal e `conv_k3 + interleaving`,
 
 Algoritmo deterministico inicial criado em Python: `choose_interleave_shape(bit_count, preferred_rows=6, min_rows=2, max_rows=16)`. Ele escolhe uma geometria completa cujo numero de linhas divide exatamente o tamanho codificado, priorizando a proximidade de 6 linhas e usando o menor numero de linhas em empates. O `fec_interleaving_sweep.py` agora aceita `--auto-shape` para testar essa regra sem varrer todas as geometrias.
 
-Portabilidade para C++ iniciada: `core/include/hftext_robust.h` e `core/src/robust.cpp` implementam helpers puros para `conv_k3`, Viterbi hard-decision, interleaving/deinterleaving e escolha deterministica de geometria. A primeira etapa adicionou testes unitarios em `core/tests/test_robust.cpp`.
+Portabilidade para C++ iniciada: `core/include/hftext_robust.h` e `core/src/robust.cpp` implementam helpers puros para `conv_k3`, Viterbi hard-decision, Viterbi soft-decision, interleaving/deinterleaving e escolha deterministica de geometria. A primeira etapa adicionou testes unitarios em `core/tests/test_robust.cpp`.
 
-O core C++ agora tambem possui montagem e decodificacao de frame robusto em bits: `buildRobustFrameBits` monta o frame logico v0.1, aplica `conv_k3` e interleaving deterministico; `parseRobustFrameBits` desfaz interleaving, executa Viterbi e valida o frame logico com CRC normal.
+O core C++ agora tambem possui montagem e decodificacao de frame robusto em bits: `buildRobustFrameBits` monta o frame logico v0.1, aplica `conv_k3` e interleaving deterministico; `parseRobustFrameBits` desfaz interleaving, executa Viterbi hard-decision e valida o frame logico com CRC normal. Em recepcao por audio, `parseRobustFrameSoftBits` usa a confianca por simbolo no Viterbi soft-decision.
 
 O core C++ tambem monta uma transmissao robusta em bits com preambulo e `START_SYNC` fisico (`buildRobustTransmission`). O RX procura o `START_SYNC` no fluxo demodulado e decodifica o bloco robusto seguinte, aceitando apenas candidatos cujo frame logico recuperado tenha CRC e payload validos.
 
@@ -399,3 +405,7 @@ A tarefa 5.6 foi iniciada com a barra `Progresso TX` no app PC. Ela consulta o e
 A tarefa 5.7 foi iniciada com `WaterfallWidget` no app PC. A primeira versao e visual, mostra energia aproximada de 300 Hz a 3 kHz durante a captura RX e nao altera a decodificacao.
 
 A interface do app PC foi reorganizada em abas: `Operacao` para uso normal e `Configuracao` para parametros do modem e dispositivos. Essa separacao reduz a poluicao visual sem alterar o fluxo de TX/RX.
+
+O app PC tambem passou a permitir salvar o log operacional em arquivo `.txt`, preservando timestamps e eventos de recepcao para analise posterior dos testes de campo. O arquivo exportado inclui cabecalho com configuracao de modem, dispositivos selecionados e estado do log detalhado.
+
+O app PC passou a salvar localmente as configuracoes operacionais ao fechar e restaura-las na proxima abertura: indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos selecionados, estado do log detalhado e geometria da janela. A mensagem TX nao e persistida.

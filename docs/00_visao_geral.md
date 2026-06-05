@@ -11,7 +11,7 @@ O projeto deve funcionar inicialmente em PC e posteriormente em Android.
 ## Cenário de uso
 
 1. Usuário digita uma mensagem curta.
-2. O sistema adiciona identificação, tamanho, CRC e eventualmente FEC.
+2. O sistema adiciona identificação, tamanho, CRC, FEC e interleaving.
 3. O sistema gera uma forma de onda de áudio.
 4. O áudio é enviado ao rádio por cabo.
 5. Outro rádio recebe o sinal.
@@ -21,6 +21,8 @@ O projeto deve funcionar inicialmente em PC e posteriormente em Android.
 ## Objetivo técnico
 
 Criar um modem digital extremamente simples, robusto e de baixa taxa, adequado a sinais de HF fracos e ruidosos.
+
+O modo operacional atual e o modo robusto unico do HFText Basic v0.1: frame logico com `SYNC | LENGTH | PAYLOAD | CRC16`, codificacao convolucional `conv_k3`, interleaving deterministico e transmissao 2-FSK.
 
 ## Características desejadas
 
@@ -33,9 +35,9 @@ Criar um modem digital extremamente simples, robusto e de baixa taxa, adequado a
 - Interface simples.
 - Código portável entre PC e Android.
 
-## Primeira versão funcional
+## Primeira versão histórica
 
-A primeira versão deve implementar:
+A primeira versao funcional do projeto foi planejada como uma etapa incremental com:
 
 - codificação simples de texto;
 - modulação 2-FSK ou 4-FSK;
@@ -44,14 +46,21 @@ A primeira versão deve implementar:
 - CRC16;
 - testes com ruído simulado.
 
-## Versões futuras
+## Estado atual
+
+A implementacao atual ja inclui:
+
+- modo robusto unico com FEC `conv_k3` e interleaving;
+- transmissao e recepcao 2-FSK;
+- recepcao continua no app PC usando `StreamingReceiver`;
+- Viterbi soft-decision no RX C++ quando ha confianca por simbolo;
+- app PC Qt com TX/RX por placa de som, decodificacao WAV para debug, historico de mensagens, log com timestamp, nivel/qualidade RX e waterfall simples entre 300 Hz e 3 kHz.
+
+## Proximas evolucoes
 
 - 8-FSK ou 16-FSK;
-- preâmbulo robusto;
-- detecção automática de início de quadro;
-- interleaving;
-- FEC;
-- aplicação PC com áudio em tempo real;
 - aplicação Android;
-- waterfall;
+- rastreamento fino de clock/frequencia;
+- controle automatico de ganho ou orientacao operacional equivalente;
+- empacotamento/deploy de release para testes de campo;
 - ACK.

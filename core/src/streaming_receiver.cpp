@@ -1,5 +1,6 @@
 #include "hftext_streaming_receiver.h"
 
+#include "hftext_encoder.h"
 #include "hftext_frame.h"
 #include "hftext_robust.h"
 
@@ -20,8 +21,15 @@ constexpr int kCrcBits = 16;
 constexpr int kConvTailBits = 2;
 constexpr int kConvOutputBitsPerInputBit = 2;
 constexpr int kMaxRetainedBits = 1800;
+constexpr std::size_t kMaxEventsPerBatch = 512;
 constexpr int kPhaseDivisions = 20;
 constexpr int kPhysicalLengthBits = kBitsPerByte * kPhysicalLengthRepeat;
+
+struct SymbolMetrics {
+    double energy0 = 0.0;
+    double energy1 = 0.0;
+    double power = 0.0;
+};
 
 std::size_t packedPayloadBytes(int symbolCount) {
     if (symbolCount <= 0) {
@@ -46,6 +54,72 @@ int bitMismatchCount(
         }
     }
     return mismatches;
+}
+
+double weightedMismatchCount(
+    const std::vector<BitDecision>& decisions,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern
+) {
+    if (start + pattern.size() > decisions.size()) {
+        return static_cast<double>(pattern.size());
+    }
+
+    double mismatches = 0.0;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        if (decisions[start + index].bit != pattern[index]) {
+            mismatches += decisions[start + index].quality;
+        }
+    }
+    return mismatches;
+}
+
+bool acceptsStartSyncCandidate(
+    const std::vector<std::uint8_t>& bits,
+    const std::vector<BitDecision>& decisions,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern,
+    int maxHardMismatches
+) {
+    const int hardMismatches = bitMismatchCount(bits, start, pattern);
+    if (hardMismatches <= maxHardMismatches) {
+        return true;
+    }
+
+    const int softHardLimit = maxHardMismatches + std::max(2, static_cast<int>(pattern.size() / 8));
+    if (hardMismatches > softHardLimit) {
+        return false;
+    }
+
+    return weightedMismatchCount(decisions, start, pattern) <= static_cast<double>(maxHardMismatches);
+}
+
+int decodePhysicalLengthDecisions(const std::vector<BitDecision>& decisions, std::size_t start) {
+    const auto requiredBits = static_cast<std::size_t>(kPhysicalLengthBits);
+    if (start + requiredBits > decisions.size()) {
+        return -1;
+    }
+
+    int value = 0;
+    for (int bitIndex = 0; bitIndex < kBitsPerByte; ++bitIndex) {
+        int hardOnes = 0;
+        double score = 0.0;
+        for (int repeat = 0; repeat < kPhysicalLengthRepeat; ++repeat) {
+            const auto& decision = decisions[start + static_cast<std::size_t>(repeat * kBitsPerByte + bitIndex)];
+            hardOnes += decision.bit;
+            score += decision.bit == 1 ? decision.quality : -decision.quality;
+        }
+
+        const auto bit = static_cast<std::uint8_t>(
+            score > 0.0 || (score == 0.0 && hardOnes >= 2) ? 1 : 0
+        );
+        value = (value << 1) | bit;
+    }
+
+    if ((value & 0x80) != 0 || value > kMaxPayloadSymbols) {
+        return -1;
+    }
+    return value;
 }
 
 int logicalFrameBitCountForPayloadLength(int payloadLength) {
@@ -78,32 +152,85 @@ double toneEnergyWindow(
     return inPhase * inPhase + quadrature * quadrature;
 }
 
+SymbolMetrics symbolMetricsWindow(
+    const std::vector<float>& samples,
+    std::size_t start,
+    std::size_t count,
+    int sampleRate,
+    float frequency0Hz,
+    float frequency1Hz
+) {
+    double inPhase0 = 0.0;
+    double quadrature0 = 0.0;
+    double inPhase1 = 0.0;
+    double quadrature1 = 0.0;
+    double power = 0.0;
+
+    for (std::size_t index = 0; index < count; ++index) {
+        const double t = static_cast<double>(index) / sampleRate;
+        const double phase0 = 2.0 * kPi * frequency0Hz * t;
+        const double phase1 = 2.0 * kPi * frequency1Hz * t;
+        const double sample = samples[start + index];
+        inPhase0 += sample * std::cos(phase0);
+        quadrature0 += sample * std::sin(phase0);
+        inPhase1 += sample * std::cos(phase1);
+        quadrature1 += sample * std::sin(phase1);
+        power += sample * sample;
+    }
+
+    return {
+        inPhase0 * inPhase0 + quadrature0 * quadrature0,
+        inPhase1 * inPhase1 + quadrature1 * quadrature1,
+        power,
+    };
+}
+
+double bitSeparation(const SymbolMetrics& metrics) {
+    const double totalEnergy = metrics.energy0 + metrics.energy1;
+    if (totalEnergy <= 0.0) {
+        return 0.0;
+    }
+
+    return std::abs(metrics.energy1 - metrics.energy0) / totalEnergy;
+}
+
+double bitQuality(const SymbolMetrics& metrics, std::size_t count) {
+    if (metrics.power <= 0.0 || count == 0) {
+        return 0.0;
+    }
+
+    const double totalEnergy = metrics.energy0 + metrics.energy1;
+    if (totalEnergy <= 0.0) {
+        return 0.0;
+    }
+
+    const double separation = bitSeparation(metrics);
+    const double coherentConcentration = totalEnergy / (metrics.power * static_cast<double>(count));
+    const double coherentWeight = std::clamp(coherentConcentration / 0.05, 0.0, 1.0);
+    return separation * coherentWeight;
+}
+
 BitDecision demodulateSymbol(
     const std::vector<float>& samples,
     std::size_t start,
     std::size_t count,
     const ModemConfig& config
 ) {
-    const double energy0 = toneEnergyWindow(
+    const auto metrics = symbolMetricsWindow(
         samples,
         start,
         count,
         config.sampleRate,
-        config.frequency0Hz
-    );
-    const double energy1 = toneEnergyWindow(
-        samples,
-        start,
-        count,
-        config.sampleRate,
+        config.frequency0Hz,
         config.frequency1Hz
     );
-    const double totalEnergy = energy0 + energy1;
-    const double confidence = totalEnergy <= 0.0 ? 0.0 : std::abs(energy1 - energy0) / totalEnergy;
+    const double confidence = bitSeparation(metrics);
+    const double quality = bitQuality(metrics, count);
 
     return BitDecision{
-        static_cast<std::uint8_t>(energy1 > energy0 ? 1 : 0),
-        static_cast<float>(std::clamp(confidence, 0.0, 1.0))
+        static_cast<std::uint8_t>(metrics.energy1 > metrics.energy0 ? 1 : 0),
+        static_cast<float>(std::clamp(confidence, 0.0, 1.0)),
+        static_cast<float>(std::clamp(quality, 0.0, 1.0))
     };
 }
 
@@ -119,10 +246,24 @@ float meanConfidence(
     const auto end = std::min(decisions.size(), start + count);
     double sum = 0.0;
     for (std::size_t index = start; index < end; ++index) {
-        sum += decisions[index].confidence;
+        sum += decisions[index].quality;
     }
 
     return static_cast<float>(sum / static_cast<double>(end - start));
+}
+
+std::vector<SoftBitDecision> softBitsFromDecisions(
+    const std::vector<BitDecision>& decisions,
+    std::size_t start,
+    std::size_t count
+) {
+    std::vector<SoftBitDecision> softBits;
+    softBits.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto& decision = decisions[start + index];
+        softBits.push_back({decision.bit, decision.confidence});
+    }
+    return softBits;
 }
 
 }  // namespace
@@ -283,7 +424,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
         const std::size_t lastSyncStart = phase.bits.size() - startSync.size();
         for (std::size_t syncStart = 0; syncStart <= lastSyncStart; ++syncStart) {
             const int syncMismatches = bitMismatchCount(phase.bits, syncStart, startSync);
-            if (syncMismatches > maxSyncMismatches) {
+            if (!acceptsStartSyncCandidate(phase.bits, phase.decisions, syncStart, startSync, maxSyncMismatches)) {
                 continue;
             }
 
@@ -304,7 +445,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             syncEvent.syncMismatches = syncMismatches;
             emitEvent(syncEvent);
 
-            const int payloadLength = decodePhysicalLengthBits(phase.bits, lengthStart);
+            const int payloadLength = decodePhysicalLengthDecisions(phase.decisions, lengthStart);
             if (payloadLength < 0) {
                 StreamingReceiverEvent lengthEvent = syncEvent;
                 lengthEvent.type = StreamingReceiverEventType::PhysicalLengthInvalid;
@@ -331,12 +472,11 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
                 continue;
             }
 
-            const std::vector<std::uint8_t> candidateBits(
-                phase.bits.begin() + static_cast<std::ptrdiff_t>(robustStart),
-                phase.bits.begin() + static_cast<std::ptrdiff_t>(robustStart + robustBits)
+            const auto candidateBits = softBitsFromDecisions(phase.decisions, robustStart, robustBits);
+            auto robustResult = parseRobustFrameSoftBits(
+                candidateBits,
+                logicalFrameBitCountForPayloadLength(payloadLength)
             );
-
-            auto robustResult = parseRobustFrameBits(candidateBits, logicalFrameBitCountForPayloadLength(payloadLength));
             auto candidate = robustResult.frame;
             candidate.syncIndex = static_cast<int>(robustStart);
             candidate.startOffset = phase.offsetSamples;
@@ -395,7 +535,9 @@ void StreamingReceiver::emitEvent(const StreamingReceiverEvent& event, int bucke
         bucket,
     };
     if (reportedEvents_.insert(key).second) {
-        events_.push_back(event);
+        if (events_.size() < kMaxEventsPerBatch) {
+            events_.push_back(event);
+        }
     }
 }
 

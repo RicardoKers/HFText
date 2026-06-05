@@ -16,20 +16,30 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QFile>
+#include <QSettings>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTextCursor>
+#include <QTextDocument>
+#include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <cstddef>
 #include <exception>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace {
+
+constexpr int kMaxLogBlocks = 3000;
+constexpr int kRxPendingSeconds = 3;
+constexpr int kRxWorkerChunkMilliseconds = 500;
+constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
 
 void validateTonesBelowNyquist(const hftext::ModemConfig& config) {
     const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
@@ -88,6 +98,17 @@ QString clippingAdvice(std::size_t clippedSamples, std::size_t sampleCount) {
         return "RX: clipping ocasional detectado; observar se coincide com ruido do canal.";
     }
     return "RX: clipping frequente detectado; reduzir ganho/volume de entrada se possivel.";
+}
+
+void selectComboText(QComboBox* combo, const QString& text) {
+    if (combo == nullptr || text.isEmpty()) {
+        return;
+    }
+
+    const int index = combo->findText(text);
+    if (index >= 0) {
+        combo->setCurrentIndex(index);
+    }
 }
 
 QString formatStreamingEvent(const hftext::StreamingReceiverEvent& event) {
@@ -173,15 +194,78 @@ bool isBetterWaitingEvent(
     return candidate.syncMismatches < current->syncMismatches;
 }
 
+bool isNormalRxStatusLine(const QString& line) {
+    return line.startsWith("RX: sync forte") || line.startsWith("RX: frame ");
+}
+
+std::vector<QString> filterRepeatedNormalRxStatus(
+    std::vector<QString> lines,
+    std::vector<QString>& emittedStatusLines
+) {
+    std::vector<QString> filtered;
+    filtered.reserve(lines.size());
+
+    for (const auto& line : lines) {
+        if (!isNormalRxStatusLine(line)) {
+            filtered.push_back(line);
+            continue;
+        }
+
+        if (std::find(emittedStatusLines.begin(), emittedStatusLines.end(), line) != emittedStatusLines.end()) {
+            continue;
+        }
+
+        emittedStatusLines.push_back(line);
+        filtered.push_back(line);
+    }
+
+    return filtered;
+}
+
+int rxFrameProgressPermille(const std::vector<hftext::StreamingReceiverEvent>& events) {
+    int bestProgress = -1;
+    for (const auto& event : events) {
+        switch (event.type) {
+        case hftext::StreamingReceiverEventType::FrameDecoded:
+            return 1000;
+        case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
+            bestProgress = std::max(bestProgress, 0);
+            break;
+        case hftext::StreamingReceiverEventType::FrameWaiting:
+            if (event.bitsExpected > 0) {
+                const double ratio = static_cast<double>(event.bitsAvailable) / static_cast<double>(event.bitsExpected);
+                bestProgress = std::max(bestProgress, static_cast<int>(std::clamp(ratio, 0.0, 1.0) * 1000.0));
+            }
+            break;
+        case hftext::StreamingReceiverEventType::SyncFound:
+        case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
+        case hftext::StreamingReceiverEventType::FrameRejected:
+            break;
+        }
+    }
+
+    return bestProgress;
+}
+
 std::vector<QString> formatStreamingEvents(
     const std::vector<hftext::StreamingReceiverEvent>& events,
-    bool detailed
+    bool detailed,
+    int maxDetailedLines = -1
 ) {
     std::vector<QString> lines;
     if (detailed) {
-        lines.reserve(events.size());
-        for (const auto& event : events) {
-            lines.push_back(formatStreamingEvent(event));
+        const auto limit = maxDetailedLines < 0
+            ? events.size()
+            : std::min(events.size(), static_cast<std::size_t>(maxDetailedLines));
+        lines.reserve(limit + (limit < events.size() ? 1 : 0));
+        for (std::size_t index = 0; index < limit; ++index) {
+            lines.push_back(formatStreamingEvent(events[index]));
+        }
+        if (limit < events.size()) {
+            lines.push_back(
+                QString("RX: %1 evento(s) detalhado(s) omitido(s) para manter a interface responsiva.")
+                    .arg(static_cast<qulonglong>(events.size() - limit))
+            );
         }
         return lines;
     }
@@ -229,17 +313,15 @@ std::vector<QString> formatStreamingEvents(
 
     if (bestLength != nullptr) {
         lines.push_back(
-            QString("RX: sync forte, PHYS_LENGTH=%1 simbolos (%2 bits, erros %3, fase %4)")
+            QString("RX: sync forte, PHYS_LENGTH=%1 simbolos (%2 bits, erros %3)")
                 .arg(bestLength->payloadLength)
                 .arg(bestLength->bitsExpected)
                 .arg(bestLength->syncMismatches)
-                .arg(bestLength->phaseOffsetSamples)
         );
     } else if (bestSync != nullptr) {
         lines.push_back(
-            QString("RX: sync forte detectado (erros %1, fase %2)")
+            QString("RX: sync forte detectado (erros %1)")
                 .arg(bestSync->syncMismatches)
-                .arg(bestSync->phaseOffsetSamples)
         );
     }
 
@@ -248,11 +330,10 @@ std::vector<QString> formatStreamingEvents(
             ? 0.0
             : 100.0 * static_cast<double>(bestWaiting->bitsAvailable) / static_cast<double>(bestWaiting->bitsExpected);
         lines.push_back(
-            QString("RX: frame %1% (%2/%3 bits, fase %4)")
+            QString("RX: frame %1% (%2/%3 bits)")
                 .arg(progress, 0, 'f', 0)
                 .arg(bestWaiting->bitsAvailable)
                 .arg(bestWaiting->bitsExpected)
-                .arg(bestWaiting->phaseOffsetSamples)
         );
     }
 
@@ -369,6 +450,12 @@ MainWindow::MainWindow(QWidget* parent)
     txProgressBar_->setFormat("%p%");
     operationForm->addRow("Progresso TX", txProgressBar_);
 
+    rxFrameProgressBar_ = new QProgressBar(this);
+    rxFrameProgressBar_->setRange(0, 1000);
+    rxFrameProgressBar_->setValue(0);
+    rxFrameProgressBar_->setFormat("%p%");
+    operationForm->addRow("Progresso RX", rxFrameProgressBar_);
+
     rxQualityBar_ = new QProgressBar(this);
     rxQualityBar_->setRange(0, 1000);
     rxQualityBar_->setValue(0);
@@ -378,10 +465,19 @@ MainWindow::MainWindow(QWidget* parent)
     operationLayout->addLayout(operationForm);
     configLayout->addLayout(configForm);
 
-    configLayout->addWidget(new QLabel("Log", this));
+    auto* logHeader = new QHBoxLayout();
+    logHeader->addWidget(new QLabel("Log", this));
+    logHeader->addStretch(1);
+    saveLogButton_ = new QPushButton("Salvar Log", this);
+    clearLogButton_ = new QPushButton("Limpar Log", this);
+    logHeader->addWidget(saveLogButton_);
+    logHeader->addWidget(clearLogButton_);
+    configLayout->addLayout(logHeader);
+
     logEdit_ = new QPlainTextEdit(this);
     logEdit_->setReadOnly(true);
     logEdit_->setMinimumHeight(180);
+    logEdit_->document()->setMaximumBlockCount(kMaxLogBlocks);
     configLayout->addWidget(logEdit_);
     configLayout->addStretch(1);
 
@@ -423,6 +519,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     setCentralWidget(central);
     resize(720, 520);
+    loadSettings();
 
     connect(generateButton_, &QPushButton::clicked, this, &MainWindow::generateWav);
     connect(transmitButton_, &QPushButton::clicked, this, &MainWindow::transmitWav);
@@ -431,6 +528,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(stopReceiveButton_, &QPushButton::clicked, this, &MainWindow::stopReceive);
     connect(decodeButton_, &QPushButton::clicked, this, &MainWindow::decodeWav);
     connect(clearReceivedButton_, &QPushButton::clicked, this, &MainWindow::clearReceivedText);
+    connect(saveLogButton_, &QPushButton::clicked, this, &MainWindow::saveLog);
+    connect(clearLogButton_, &QPushButton::clicked, this, &MainWindow::clearLog);
     connect(callsignEdit_, &QLineEdit::textChanged, this, &MainWindow::updateTxEstimate);
     connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
     connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
@@ -447,6 +546,7 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    saveSettings();
     stopRxWorker();
     audioInput_.setSamplesCallback({});
     (void)audioInput_.stopAndSave({});
@@ -505,6 +605,9 @@ void MainWindow::decodeWav() {
         }
         const auto result = controller_.decodeWav(toStdString(inputPath));
         showDecodeResult(result);
+        if (result.crcOk && result.payloadValid) {
+            appendLog("RX texto: " + QString::fromStdString(result.text));
+        }
         appendLog("WAV decodificado: " + inputPath);
         appendLog("Modo RX: robust");
         appendLog(
@@ -558,17 +661,22 @@ void MainWindow::startReceive() {
         stopRxWorker();
         startRxWorker(rxConfig, detailedRxLogCheck_->isChecked());
         waterfallWidget_->clear();
+        waterfallUpdatePending_.store(false);
+        rxFrameProgressBar_->setValue(0);
         rxQualityBar_->setValue(0);
         audioInput_.setSamplesCallback([this, sampleRate = rxConfig.sampleRate](const std::vector<float>& samples) {
             enqueueRxSamples(samples);
-            auto chunk = samples;
-            QMetaObject::invokeMethod(
-                this,
-                [this, chunk = std::move(chunk), sampleRate]() {
-                    waterfallWidget_->addSamples(chunk, sampleRate);
-                },
-                Qt::QueuedConnection
-            );
+            if (!waterfallUpdatePending_.exchange(true)) {
+                auto chunk = samples;
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, chunk = std::move(chunk), sampleRate]() {
+                        waterfallUpdatePending_.store(false);
+                        waterfallWidget_->addSamples(chunk, sampleRate);
+                    },
+                    Qt::QueuedConnection
+                );
+            }
         });
         const unsigned int deviceId = inputDeviceCombo_->currentData().toUInt();
         audioInput_.start(deviceId, rxConfig.sampleRate);
@@ -594,9 +702,11 @@ void MainWindow::stopReceive() {
         controller_.setConfig(readRxConfig());
         const auto stats = audioInput_.stopAndSave({});
         audioInput_.setSamplesCallback({});
-        stopRxWorker(true);
+        waterfallUpdatePending_.store(false);
+        stopRxWorker(false);
         rxLevelTimer_->stop();
         rxLevelBar_->setValue(0);
+        rxFrameProgressBar_->setValue(0);
         const std::string error = audioInput_.lastError();
         if (!error.empty()) {
             QMessageBox::warning(this, "HFText", QString::fromStdString(error));
@@ -622,6 +732,10 @@ void MainWindow::stopReceive() {
 
 void MainWindow::clearReceivedText() {
     receivedEdit_->clear();
+}
+
+void MainWindow::clearLog() {
+    logEdit_->clear();
 }
 
 void MainWindow::updateRxLevel() {
@@ -700,9 +814,83 @@ void MainWindow::updateTxEstimate() {
     }
 }
 
+void MainWindow::saveLog() {
+    const QString defaultName = "HFText-log-"
+        + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss")
+        + ".txt";
+    const QString outputPath = QFileDialog::getSaveFileName(
+        this,
+        "Salvar Log",
+        defaultName,
+        "Texto (*.txt)"
+    );
+    if (outputPath.isEmpty()) {
+        return;
+    }
+
+    QFile file(outputPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "HFText", "Nao foi possivel salvar o log.");
+        appendLog("Erro ao salvar log: " + outputPath);
+        return;
+    }
+
+    QTextStream stream(&file);
+    stream << "HFText log\n";
+    stream << "Gerado em: " << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
+    stream << "Indicativo: " << callsignEdit_->text().trimmed() << '\n';
+    stream << "Sample rate TX/WAV: " << sampleRateSpin_->value() << " Hz\n";
+    stream << "Sample rate RX: " << rxSampleRateSpin_->value() << " Hz\n";
+    stream << "Duracao do simbolo: " << QString::number(symbolDurationSpin_->value(), 'f', 3) << " s\n";
+    stream << "Tom 0: " << QString::number(frequency0Spin_->value(), 'f', 1) << " Hz\n";
+    stream << "Tom 1: " << QString::number(frequency1Spin_->value(), 'f', 1) << " Hz\n";
+    stream << "Amplitude: " << QString::number(amplitudeSpin_->value(), 'f', 2) << '\n';
+    stream << "Preambulo: " << preambleBitsSpin_->value() << " bits\n";
+    stream << "Saida de audio: " << outputDeviceCombo_->currentText() << '\n';
+    stream << "Entrada de audio: " << inputDeviceCombo_->currentText() << '\n';
+    stream << "Log RX detalhado: " << (detailedRxLogCheck_->isChecked() ? "sim" : "nao") << "\n\n";
+    stream << "--- Log ---\n";
+    stream << logEdit_->toPlainText() << '\n';
+    appendLog("Log salvo: " + outputPath);
+}
+
 void MainWindow::appendLog(const QString& text) {
     const QString timestamp = QDateTime::currentDateTime().toString("[HH:mm:ss] ");
     logEdit_->appendPlainText(timestamp + text);
+}
+
+void MainWindow::loadSettings() {
+    QSettings settings("HFText", "HFText");
+
+    restoreGeometry(settings.value("windowGeometry").toByteArray());
+    callsignEdit_->setText(settings.value("callsign", callsignEdit_->text()).toString());
+    sampleRateSpin_->setValue(settings.value("sampleRate", sampleRateSpin_->value()).toInt());
+    rxSampleRateSpin_->setValue(settings.value("rxSampleRate", rxSampleRateSpin_->value()).toInt());
+    symbolDurationSpin_->setValue(settings.value("symbolDuration", symbolDurationSpin_->value()).toDouble());
+    frequency0Spin_->setValue(settings.value("frequency0", frequency0Spin_->value()).toDouble());
+    frequency1Spin_->setValue(settings.value("frequency1", frequency1Spin_->value()).toDouble());
+    amplitudeSpin_->setValue(settings.value("amplitude", amplitudeSpin_->value()).toDouble());
+    preambleBitsSpin_->setValue(settings.value("preambleBits", preambleBitsSpin_->value()).toInt());
+    detailedRxLogCheck_->setChecked(settings.value("detailedRxLog", detailedRxLogCheck_->isChecked()).toBool());
+    selectComboText(outputDeviceCombo_, settings.value("outputDevice").toString());
+    selectComboText(inputDeviceCombo_, settings.value("inputDevice").toString());
+}
+
+void MainWindow::saveSettings() const {
+    QSettings settings("HFText", "HFText");
+
+    settings.setValue("windowGeometry", saveGeometry());
+    settings.setValue("callsign", callsignEdit_->text());
+    settings.setValue("sampleRate", sampleRateSpin_->value());
+    settings.setValue("rxSampleRate", rxSampleRateSpin_->value());
+    settings.setValue("symbolDuration", symbolDurationSpin_->value());
+    settings.setValue("frequency0", frequency0Spin_->value());
+    settings.setValue("frequency1", frequency1Spin_->value());
+    settings.setValue("amplitude", amplitudeSpin_->value());
+    settings.setValue("preambleBits", preambleBitsSpin_->value());
+    settings.setValue("detailedRxLog", detailedRxLogCheck_->isChecked());
+    settings.setValue("outputDevice", outputDeviceCombo_->currentText());
+    settings.setValue("inputDevice", inputDeviceCombo_->currentText());
 }
 
 void MainWindow::populateInputDevices() {
@@ -737,6 +925,12 @@ void MainWindow::startRxWorker(const hftext::ModemConfig& config, bool detailedR
     {
         std::lock_guard<std::mutex> lock(rxMutex_);
         rxPendingSamples_.clear();
+        rxMaxPendingSamples_ = static_cast<std::size_t>(
+            std::max(config.sampleRate / 2, config.sampleRate * kRxPendingSeconds)
+        );
+        rxMaxWorkerChunkSamples_ = static_cast<std::size_t>(
+            std::max(config.sampleRate / 10, config.sampleRate * kRxWorkerChunkMilliseconds / 1000)
+        );
         rxWorkerStop_ = false;
     }
     rxWorker_ = std::thread(&MainWindow::rxWorkerLoop, this, config, detailedRxLog);
@@ -766,12 +960,20 @@ void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
             return;
         }
         rxPendingSamples_.insert(rxPendingSamples_.end(), samples.begin(), samples.end());
+        if (rxMaxPendingSamples_ > 0 && rxPendingSamples_.size() > rxMaxPendingSamples_) {
+            const auto excess = rxPendingSamples_.size() - rxMaxPendingSamples_;
+            rxPendingSamples_.erase(
+                rxPendingSamples_.begin(),
+                rxPendingSamples_.begin() + static_cast<std::ptrdiff_t>(excess)
+            );
+        }
     }
     rxCondition_.notify_one();
 }
 
 void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
     hftext::StreamingReceiver receiver(config);
+    std::vector<QString> emittedNormalRxStatusLines;
 
     while (true) {
         std::vector<float> chunk;
@@ -785,27 +987,55 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
                 break;
             }
 
-            chunk.swap(rxPendingSamples_);
+            const auto maxChunk = rxMaxWorkerChunkSamples_ == 0
+                ? rxPendingSamples_.size()
+                : std::min(rxPendingSamples_.size(), rxMaxWorkerChunkSamples_);
+            chunk.assign(rxPendingSamples_.begin(), rxPendingSamples_.begin() + static_cast<std::ptrdiff_t>(maxChunk));
+            rxPendingSamples_.erase(
+                rxPendingSamples_.begin(),
+                rxPendingSamples_.begin() + static_cast<std::ptrdiff_t>(maxChunk)
+            );
         }
 
         const auto results = receiver.pushSamples(chunk);
         const auto events = receiver.takeEvents();
         if (!events.empty()) {
-            QMetaObject::invokeMethod(
-                this,
-                [this, events, detailedRxLog]() {
-                    for (const auto& line : formatStreamingEvents(events, detailedRxLog)) {
-                        appendLog(line);
-                    }
-                },
-                Qt::QueuedConnection
+            const int frameProgress = rxFrameProgressPermille(events);
+            auto lines = formatStreamingEvents(
+                events,
+                detailedRxLog,
+                detailedRxLog ? kMaxDetailedRxLogLinesPerBatch : -1
             );
+            if (!detailedRxLog) {
+                lines = filterRepeatedNormalRxStatus(std::move(lines), emittedNormalRxStatusLines);
+            }
+            if (!lines.empty()) {
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, lines = std::move(lines), frameProgress]() {
+                        if (frameProgress >= 0) {
+                            rxFrameProgressBar_->setValue(frameProgress);
+                        }
+                        for (const auto& line : lines) {
+                            appendLog(line);
+                        }
+                    },
+                    Qt::QueuedConnection
+                );
+            }
+        }
+        if (!results.empty()) {
+            emittedNormalRxStatusLines.clear();
         }
         for (const auto& result : results) {
             QMetaObject::invokeMethod(
                 this,
                 [this, result]() {
+                    rxFrameProgressBar_->setValue(1000);
                     showDecodeResult(result);
+                    if (result.crcOk && result.payloadValid) {
+                        appendLog("RX texto: " + QString::fromStdString(result.text));
+                    }
                     appendLog(
                         "RX: mensagem aceita, offset " + QString::number(result.startOffset)
                         + " amostras, fases " + QString::number(result.offsetsTried)

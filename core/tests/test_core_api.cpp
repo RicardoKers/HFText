@@ -9,6 +9,8 @@
 
 namespace {
 
+constexpr double kPi = 3.141592653589793238462643383279502884;
+
 float deterministicNoise(std::uint32_t& state, float amplitude) {
     state = state * 1664525U + 1013904223U;
     const float normalized = static_cast<float>((state >> 8) & 0xFFFFU) / 32767.5F - 1.0F;
@@ -66,6 +68,46 @@ std::vector<float> clippedNoisyCaptureLikeAudio(
         trailingSeconds,
         noiseAmplitude
     );
+}
+
+void overwriteSymbolWithWeakWrongDecision(
+    std::vector<float>& audio,
+    const hftext::ModemConfig& config,
+    int bitIndex,
+    std::uint8_t expectedBit
+) {
+    const int symbolSamples = static_cast<int>(
+        std::lround(static_cast<double>(config.sampleRate) * config.symbolDurationSec)
+    );
+    const auto start = static_cast<std::size_t>(std::max(0, bitIndex) * symbolSamples);
+    if (start + static_cast<std::size_t>(symbolSamples) > audio.size()) {
+        return;
+    }
+
+    const float correctFrequency = expectedBit == 0 ? config.frequency0Hz : config.frequency1Hz;
+    const float wrongFrequency = expectedBit == 0 ? config.frequency1Hz : config.frequency0Hz;
+    for (int sample = 0; sample < symbolSamples; ++sample) {
+        const double t = static_cast<double>(sample) / config.sampleRate;
+        const double correct = 0.95 * std::sin(2.0 * kPi * correctFrequency * t);
+        const double wrong = std::sin(2.0 * kPi * wrongFrequency * t);
+        audio[start + static_cast<std::size_t>(sample)] = static_cast<float>(0.35 * (correct + wrong));
+    }
+}
+
+void damageStartSyncAndPhysicalLengthSoftly(std::vector<float>& audio, const hftext::ModemConfig& config) {
+    const auto startSync = hftext::startSyncBits();
+    for (int index = 0; index < 10; ++index) {
+        overwriteSymbolWithWeakWrongDecision(
+            audio,
+            config,
+            config.preambleBits + index,
+            startSync[static_cast<std::size_t>(index)]
+        );
+    }
+
+    const int lengthStart = config.preambleBits + static_cast<int>(startSync.size());
+    overwriteSymbolWithWeakWrongDecision(audio, config, lengthStart, 0);
+    overwriteSymbolWithWeakWrongDecision(audio, config, lengthStart + hftext::kBitsPerByte, 0);
 }
 
 std::vector<float> timeScaledAudio(const std::vector<float>& audio, double scale) {
@@ -139,6 +181,14 @@ int main() {
     assert(recordedResult.text == "pu5lrk Teste");
     assert(recordedResult.syncIndex >= config.preambleBits + static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
     assert(recordedResult.offsetsTried >= 1);
+
+    auto softDamagedAudio = audio;
+    damageStartSyncAndPhysicalLengthSoftly(softDamagedAudio, config);
+    const auto softDamagedResult = hftext::demodulateSamples(softDamagedAudio, config);
+    assert(softDamagedResult.frameDetected);
+    assert(softDamagedResult.crcOk);
+    assert(softDamagedResult.payloadValid);
+    assert(softDamagedResult.text == "pu5lrk Teste");
 
     hftext::ModemConfig captureConfig = config;
     captureConfig.symbolDurationSec = 0.3F;

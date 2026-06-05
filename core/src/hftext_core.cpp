@@ -71,6 +71,20 @@ std::vector<std::uint8_t> bitsFromDecisions(const std::vector<BitDecision>& deci
     return bits;
 }
 
+std::vector<SoftBitDecision> softBitsFromDecisions(
+    const std::vector<BitDecision>& decisions,
+    std::size_t start,
+    std::size_t count
+) {
+    std::vector<SoftBitDecision> softBits;
+    softBits.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        const auto& decision = decisions[start + index];
+        softBits.push_back({decision.bit, decision.confidence});
+    }
+    return softBits;
+}
+
 float meanConfidence(const std::vector<BitDecision>& decisions, std::size_t start, std::size_t count) {
     if (decisions.empty() || start >= decisions.size() || count == 0) {
         return 0.0F;
@@ -83,7 +97,7 @@ float meanConfidence(const std::vector<BitDecision>& decisions, std::size_t star
 
     double sum = 0.0;
     for (std::size_t index = start; index < end; ++index) {
-        sum += decisions[index].confidence;
+        sum += decisions[index].quality;
     }
     return static_cast<float>(sum / static_cast<double>(end - start));
 }
@@ -123,6 +137,72 @@ int bitMismatchCount(
     return mismatches;
 }
 
+double weightedMismatchCount(
+    const std::vector<BitDecision>& decisions,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern
+) {
+    if (start + pattern.size() > decisions.size()) {
+        return static_cast<double>(pattern.size());
+    }
+
+    double mismatches = 0.0;
+    for (std::size_t index = 0; index < pattern.size(); ++index) {
+        if (decisions[start + index].bit != pattern[index]) {
+            mismatches += decisions[start + index].quality;
+        }
+    }
+    return mismatches;
+}
+
+bool acceptsStartSyncCandidate(
+    const std::vector<std::uint8_t>& bits,
+    const std::vector<BitDecision>& decisions,
+    std::size_t start,
+    const std::vector<std::uint8_t>& pattern,
+    int maxHardMismatches
+) {
+    const int hardMismatches = bitMismatchCount(bits, start, pattern);
+    if (hardMismatches <= maxHardMismatches) {
+        return true;
+    }
+
+    const int softHardLimit = maxHardMismatches + std::max(2, static_cast<int>(pattern.size() / 8));
+    if (hardMismatches > softHardLimit) {
+        return false;
+    }
+
+    return weightedMismatchCount(decisions, start, pattern) <= static_cast<double>(maxHardMismatches);
+}
+
+int decodePhysicalLengthDecisions(const std::vector<BitDecision>& decisions, std::size_t start) {
+    const auto requiredBits = static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat);
+    if (start + requiredBits > decisions.size()) {
+        return -1;
+    }
+
+    int value = 0;
+    for (int bitIndex = 0; bitIndex < kBitsPerByte; ++bitIndex) {
+        int hardOnes = 0;
+        double score = 0.0;
+        for (int repeat = 0; repeat < kPhysicalLengthRepeat; ++repeat) {
+            const auto& decision = decisions[start + static_cast<std::size_t>(repeat * kBitsPerByte + bitIndex)];
+            hardOnes += decision.bit;
+            score += decision.bit == 1 ? decision.quality : -decision.quality;
+        }
+
+        const auto bit = static_cast<std::uint8_t>(
+            score > 0.0 || (score == 0.0 && hardOnes >= 2) ? 1 : 0
+        );
+        value = (value << 1) | bit;
+    }
+
+    if ((value & 0x80) != 0 || value > kMaxPayloadSymbols) {
+        return -1;
+    }
+    return value;
+}
+
 int alternatingPreambleScore(
     const std::vector<std::uint8_t>& bits,
     std::size_t syncStart,
@@ -158,14 +238,18 @@ struct StartSyncCandidate {
     int payloadLength = 0;
 };
 
-std::vector<StartSyncCandidate> findStartSyncFrameStarts(const std::vector<std::uint8_t>& bits, int preambleBitCount) {
+std::vector<StartSyncCandidate> findStartSyncFrameStarts(
+    const std::vector<BitDecision>& decisions,
+    int preambleBitCount
+) {
+    const auto bits = bitsFromDecisions(decisions);
     const auto startSync = startSyncBits();
     if (bits.size() < startSync.size()) {
         return {};
     }
 
     struct Candidate {
-        int score = 0;
+        double score = 0.0;
         int syncMismatches = 0;
         int frameStart = 0;
         int payloadLength = 0;
@@ -175,20 +259,23 @@ std::vector<StartSyncCandidate> findStartSyncFrameStarts(const std::vector<std::
     const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
     for (std::size_t syncStart = 0; syncStart <= lastStart; ++syncStart) {
         const int mismatches = bitMismatchCount(bits, syncStart, startSync);
-        if (mismatches <= maxSyncMismatches) {
-            const auto lengthStart = syncStart + startSync.size();
-            const int payloadLength = decodePhysicalLengthBits(bits, lengthStart);
-            if (payloadLength < 0) {
-                continue;
-            }
-            const int preambleScore = alternatingPreambleScore(bits, syncStart, preambleBitCount);
-            scoredStarts.push_back({
-                mismatches + preambleScore,
-                mismatches,
-                static_cast<int>(lengthStart + static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat)),
-                payloadLength
-            });
+        if (!acceptsStartSyncCandidate(bits, decisions, syncStart, startSync, maxSyncMismatches)) {
+            continue;
         }
+
+        const auto lengthStart = syncStart + startSync.size();
+        const int payloadLength = decodePhysicalLengthDecisions(decisions, lengthStart);
+        if (payloadLength < 0) {
+            continue;
+        }
+
+        const int preambleScore = alternatingPreambleScore(bits, syncStart, preambleBitCount);
+        scoredStarts.push_back({
+            weightedMismatchCount(decisions, syncStart, startSync) + preambleScore,
+            mismatches,
+            static_cast<int>(lengthStart + static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat)),
+            payloadLength
+        });
     }
 
     std::sort(scoredStarts.begin(), scoredStarts.end(), [](const Candidate& left, const Candidate& right) {
@@ -229,11 +316,11 @@ std::size_t encodedBitCountForLogicalFrameBits(int logicalFrameBitCount) {
 }
 
 DecodeResult parseRobustFrameAtExpectedOffset(
-    const std::vector<std::uint8_t>& bits,
+    const std::vector<BitDecision>& decisions,
     int bitOffset,
     int payloadLength
 ) {
-    if (bitOffset < 0 || static_cast<std::size_t>(bitOffset) >= bits.size()) {
+    if (bitOffset < 0 || static_cast<std::size_t>(bitOffset) >= decisions.size()) {
         DecodeResult result;
         result.error = "robust frame not found";
         return result;
@@ -248,17 +335,14 @@ DecodeResult parseRobustFrameAtExpectedOffset(
 
     const int logicalFrameBitCount = logicalFrameBitCountForPayloadLength(payloadLength);
     const std::size_t encodedBitCount = encodedBitCountForLogicalFrameBits(logicalFrameBitCount);
-    if (start + encodedBitCount > bits.size()) {
+    if (start + encodedBitCount > decisions.size()) {
         DecodeResult result;
         result.error = "robust frame not found";
         return result;
     }
 
-    const std::vector<std::uint8_t> candidateBits(
-        bits.begin() + static_cast<std::ptrdiff_t>(start),
-        bits.begin() + static_cast<std::ptrdiff_t>(start + encodedBitCount)
-    );
-    auto robustResult = parseRobustFrameBits(candidateBits, logicalFrameBitCount);
+    const auto candidateBits = softBitsFromDecisions(decisions, start, encodedBitCount);
+    auto robustResult = parseRobustFrameSoftBits(candidateBits, logicalFrameBitCount);
     robustResult.frame.syncIndex = bitOffset;
     if (
         robustResult.frame.crcOk
@@ -283,10 +367,9 @@ DecodeResult demodulateAndParse(
     int startOffset
 ) {
     const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
-    const auto bits = bitsFromDecisions(decisions);
     DecodeResult result;
-    for (const auto& candidate : findStartSyncFrameStarts(bits, config.preambleBits)) {
-        result = parseRobustFrameAtExpectedOffset(bits, candidate.frameStart, candidate.payloadLength);
+    for (const auto& candidate : findStartSyncFrameStarts(decisions, config.preambleBits)) {
+        result = parseRobustFrameAtExpectedOffset(decisions, candidate.frameStart, candidate.payloadLength);
         if (result.crcOk && result.payloadValid) {
             result.startOffset = startOffset;
             result.confidence = meanConfidence(decisions, 0, decisions.size());

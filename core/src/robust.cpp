@@ -4,6 +4,7 @@
 #include "hftext_frame.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
@@ -11,6 +12,8 @@
 
 namespace hftext {
 namespace {
+
+constexpr int kSoftMetricScale = 1000;
 
 void validateBit(std::uint8_t bit) {
     if (bit != 0 && bit != 1) {
@@ -21,6 +24,15 @@ void validateBit(std::uint8_t bit) {
 void validateBits(const std::vector<std::uint8_t>& bits) {
     for (std::uint8_t bit : bits) {
         validateBit(bit);
+    }
+}
+
+void validateSoftBitDecisions(const std::vector<SoftBitDecision>& decisions) {
+    for (const auto& decision : decisions) {
+        validateBit(decision.bit);
+        if (!std::isfinite(decision.confidence) || decision.confidence < 0.0F || decision.confidence > 1.0F) {
+            throw std::invalid_argument("invalid bit confidence");
+        }
     }
 }
 
@@ -174,6 +186,35 @@ std::vector<std::uint8_t> deinterleaveBits(const std::vector<std::uint8_t>& bits
     return output;
 }
 
+std::vector<SoftBitDecision> deinterleaveSoftBitDecisions(
+    const std::vector<SoftBitDecision>& decisions,
+    int rows,
+    int columns
+) {
+    validateDimensions(rows, columns);
+    validateSoftBitDecisions(decisions);
+
+    const std::size_t blockSize = static_cast<std::size_t>(rows) * static_cast<std::size_t>(columns);
+    if (decisions.size() % blockSize != 0) {
+        throw std::invalid_argument("bit count must be a multiple of rows * columns");
+    }
+
+    std::vector<SoftBitDecision> output;
+    output.reserve(decisions.size());
+    for (std::size_t blockStart = 0; blockStart < decisions.size(); blockStart += blockSize) {
+        std::vector<SoftBitDecision> restored(blockSize);
+        std::size_t index = 0;
+        for (int column = 0; column < columns; ++column) {
+            for (int row = 0; row < rows; ++row) {
+                restored[static_cast<std::size_t>(row * columns + column)] = decisions[blockStart + index];
+                ++index;
+            }
+        }
+        output.insert(output.end(), restored.begin(), restored.end());
+    }
+    return output;
+}
+
 std::vector<std::uint8_t> convolutionalK3EncodeBits(const std::vector<std::uint8_t>& bits, bool tail) {
     validateBits(bits);
 
@@ -259,6 +300,81 @@ ViterbiResult convolutionalK3DecodeBits(const std::vector<std::uint8_t>& bits, i
     return {bestPath.bits, bestPath.distance};
 }
 
+ViterbiResult convolutionalK3DecodeSoftBits(
+    const std::vector<SoftBitDecision>& decisions,
+    int originalBitCount,
+    bool tail
+) {
+    validateSoftBitDecisions(decisions);
+    if (decisions.size() % 2 != 0) {
+        throw std::invalid_argument("bit count must be a multiple of 2");
+    }
+    if (originalBitCount < -1) {
+        throw std::invalid_argument("original_bit_count must be non-negative");
+    }
+
+    std::vector<Path> paths(4);
+    paths[0].distance = 0;
+    paths[0].valid = true;
+
+    for (std::size_t offset = 0; offset < decisions.size(); offset += 2) {
+        std::vector<Path> nextPaths(4);
+        for (int state = 0; state < 4; ++state) {
+            if (!paths[state].valid) {
+                continue;
+            }
+            for (std::uint8_t bit : {std::uint8_t{0}, std::uint8_t{1}}) {
+                const auto step = convolutionalK3EncodeStep(state, bit);
+                const int nextState = step.first;
+                int branchDistance = 0;
+                for (std::size_t index = 0; index < 2; ++index) {
+                    if (decisions[offset + index].bit != step.second[index]) {
+                        branchDistance += static_cast<int>(
+                            std::lround(decisions[offset + index].confidence * kSoftMetricScale)
+                        );
+                    }
+                }
+                const int candidateDistance = paths[state].distance + branchDistance;
+                if (!nextPaths[nextState].valid || candidateDistance < nextPaths[nextState].distance) {
+                    nextPaths[nextState].distance = candidateDistance;
+                    nextPaths[nextState].bits = paths[state].bits;
+                    nextPaths[nextState].bits.push_back(bit);
+                    nextPaths[nextState].valid = true;
+                }
+            }
+        }
+        paths = std::move(nextPaths);
+    }
+
+    Path bestPath;
+    if (tail && paths[0].valid) {
+        bestPath = paths[0];
+    } else {
+        const auto best = std::min_element(paths.begin(), paths.end(), [](const Path& left, const Path& right) {
+            if (!left.valid) {
+                return false;
+            }
+            if (!right.valid) {
+                return true;
+            }
+            return left.distance < right.distance;
+        });
+        if (best == paths.end() || !best->valid) {
+            throw std::invalid_argument("no valid viterbi path");
+        }
+        bestPath = *best;
+    }
+
+    if (tail && bestPath.bits.size() >= 2) {
+        bestPath.bits.resize(bestPath.bits.size() - 2);
+    }
+    if (originalBitCount >= 0 && static_cast<std::size_t>(originalBitCount) < bestPath.bits.size()) {
+        bestPath.bits.resize(static_cast<std::size_t>(originalBitCount));
+    }
+
+    return {bestPath.bits, bestPath.distance};
+}
+
 std::vector<std::uint8_t> buildRobustFrameBits(const std::string& payloadText) {
     const auto frameBits = buildFrame(payloadText);
     const auto encodedBits = convolutionalK3EncodeBits(frameBits);
@@ -296,6 +412,26 @@ RobustDecodeResult parseRobustFrameBits(const std::vector<std::uint8_t>& bits, i
     const auto shape = chooseInterleaveShape(bits.size());
     const auto deinterleaved = deinterleaveBits(bits, shape.rows, shape.columns);
     const auto decoded = convolutionalK3DecodeBits(deinterleaved, originalFrameBitCount);
+
+    RobustDecodeResult result;
+    result.frame = parseFrame(decoded.bits);
+    result.shape = shape;
+    result.viterbiDistance = decoded.distance;
+    return result;
+}
+
+RobustDecodeResult parseRobustFrameSoftBits(
+    const std::vector<SoftBitDecision>& decisions,
+    int originalFrameBitCount
+) {
+    if (originalFrameBitCount < 0) {
+        throw std::invalid_argument("original_frame_bit_count must be non-negative");
+    }
+
+    validateSoftBitDecisions(decisions);
+    const auto shape = chooseInterleaveShape(decisions.size());
+    const auto deinterleaved = deinterleaveSoftBitDecisions(decisions, shape.rows, shape.columns);
+    const auto decoded = convolutionalK3DecodeSoftBits(deinterleaved, originalFrameBitCount);
 
     RobustDecodeResult result;
     result.frame = parseFrame(decoded.bits);

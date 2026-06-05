@@ -8,7 +8,9 @@
 
 #include <QMainWindow>
 
+#include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -39,13 +41,17 @@ private slots:
     void startReceive();
     void stopReceive();
     void clearReceivedText();
+    void clearLog();
     void updateRxLevel();
     void updateTxProgress();
     void sanitizeTxMessage();
     void updateTxEstimate();
+    void saveLog();
 
 private:
     void appendLog(const QString& text);
+    void loadSettings();
+    void saveSettings() const;
     void populateInputDevices();
     void populateOutputDevices();
     hftext::ModemConfig readConfig() const;
@@ -63,6 +69,9 @@ private:
     std::mutex rxMutex_;
     std::condition_variable rxCondition_;
     std::vector<float> rxPendingSamples_;
+    std::size_t rxMaxPendingSamples_ = 0;
+    std::size_t rxMaxWorkerChunkSamples_ = 0;
+    std::atomic<bool> waterfallUpdatePending_{false};
     bool rxWorkerStop_ = false;
     QString lastWavPath_;
     QString lastRxWavPath_;
@@ -80,6 +89,7 @@ private:
     QLabel* txEstimateLabel_ = nullptr;
     QProgressBar* txProgressBar_ = nullptr;
     QProgressBar* rxLevelBar_ = nullptr;
+    QProgressBar* rxFrameProgressBar_ = nullptr;
     QProgressBar* rxQualityBar_ = nullptr;
     WaterfallWidget* waterfallWidget_ = nullptr;
     QCheckBox* detailedRxLogCheck_ = nullptr;
@@ -92,6 +102,8 @@ private:
     QPushButton* startReceiveButton_ = nullptr;
     QPushButton* stopReceiveButton_ = nullptr;
     QPushButton* clearReceivedButton_ = nullptr;
+    QPushButton* saveLogButton_ = nullptr;
+    QPushButton* clearLogButton_ = nullptr;
     QTimer* rxLevelTimer_ = nullptr;
     QTimer* txProgressTimer_ = nullptr;
 };

@@ -7,8 +7,9 @@ if(NOT Qt6_FOUND)
 endif()
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
-add_executable(hftext_pc
+add_executable(hftext_pc WIN32
     AudioInput.cpp
     AudioInput.h
     AudioOutput.cpp
@@ -19,7 +20,9 @@ add_executable(hftext_pc
     ModemController.h
     WaterfallWidget.cpp
     WaterfallWidget.h
+    hftext_pc.rc
     main.cpp
+    resources.qrc
 )
 
 target_compile_features(hftext_pc PRIVATE cxx_std_17)

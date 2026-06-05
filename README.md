@@ -13,7 +13,20 @@ O projeto deve priorizar robustez em sinais fracos e ruidosos, mesmo que a taxa 
 - Começar com uma versão para PC para simulação, teste e validação.
 - Reaproveitar o núcleo DSP em uma futura versão Android.
 - Manter o núcleo do modem independente da interface gráfica.
-- Permitir evolução futura para FEC, interleaving, ACK e modos mais robustos.
+- Usar FEC e interleaving no modo robusto atual, mantendo espaço para ACK e modos futuros.
+
+## Estado atual
+
+O sistema atual usa sempre o modo robusto HFText v0.1:
+
+- frame logico `SYNC | LENGTH | PAYLOAD | CRC16`;
+- FEC `conv_k3` rate 1/2 com interleaving deterministico;
+- fluxo fisico `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
+- modulacao 2-FSK;
+- recepcao continua no app PC por `StreamingReceiver`;
+- busca de `START_SYNC`, recuperacao de `PHYS_LENGTH` e Viterbi soft-decision no RX C++ usando confianca por simbolo quando disponivel.
+
+O app PC em Qt ja permite gerar/transmitir WAV, receber audio continuamente pela placa de som, visualizar nivel/qualidade/waterfall e registrar logs de RX.
 
 ## Estratégia de desenvolvimento
 
