@@ -26,7 +26,9 @@ O sistema atual usa sempre o modo robusto HFText v0.1:
 - recepcao continua no app PC por `StreamingReceiver`;
 - busca de `START_SYNC`, recuperacao de `PHYS_LENGTH` e Viterbi soft-decision no RX C++ usando confianca por simbolo quando disponivel.
 
-O app PC em Qt ja permite gerar/transmitir WAV, receber audio continuamente pela placa de som, visualizar nivel/qualidade/waterfall e registrar logs de RX.
+Este modo v0.1 e o baseline operacional para validacao de campo. Mudancas incompativeis de protocolo ou modulacao, como repeticao operacional, 4-FSK, 8-FSK, ACK ou novos campos de quadro, devem ser tratadas como v0.2 ou posterior.
+
+O app PC em Qt ja permite gerar/transmitir WAV, receber audio continuamente pela placa de som, visualizar nivel/qualidade/waterfall, acompanhar estado/sessao RX e registrar logs/evidencias de campo.
 
 ## Estratégia de desenvolvimento
 

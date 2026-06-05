@@ -126,6 +126,8 @@ A investigacao de robustez em Python apontou `conv_k3 + interleaving` como modo 
 
 Nesta fase, FEC simples e interleaving deixaram de ser apenas experimento e passaram a fazer parte do modo operacional unico. Repeticao simples, 4-FSK e 8-FSK permanecem como linhas futuras de pesquisa, nao como modos atuais.
 
+Baseline congelado para campo: o HFText Basic v0.1 operacional atual e `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Mudancas incompativeis, como repeticao operacional, ACK ou MFSK, devem ser tratadas como v0.2 ou posterior.
+
 ## Fase 7 — Aplicação Android TX
 
 Objetivo:
@@ -203,3 +205,5 @@ A primeira waterfall RX tambem foi adicionada ao app PC como visualizacao leve. 
 A interface do app PC foi reorganizada em abas para reduzir poluicao visual: `Operacao` concentra o fluxo normal de TX/RX, enquanto `Configuracao` concentra parametros do modem, dispositivos de audio e log. A area de texto recebido acumula novas mensagens em formato de historico.
 
 Como o texto recebido agora e um historico, a interface tambem possui `Limpar RX` para limpar somente a area de mensagens recebidas, preservando log, WAVs e configuracoes.
+
+O app PC tambem possui recursos de apoio a validacao de campo: `Salvar Evidencia RX`, linha `Estado RX` e linha `Sessao RX`, permitindo exportar audio/log e acompanhar candidatos aceitos, rejeitados, syncs e `PHYS_LENGTH` durante a recepcao.

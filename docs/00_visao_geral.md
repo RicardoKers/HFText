@@ -24,6 +24,8 @@ Criar um modem digital extremamente simples, robusto e de baixa taxa, adequado a
 
 O modo operacional atual e o modo robusto unico do HFText Basic v0.1: frame logico com `SYNC | LENGTH | PAYLOAD | CRC16`, codificacao convolucional `conv_k3`, interleaving deterministico e transmissao 2-FSK.
 
+Esse modo v0.1 e o baseline para validacao de campo. Mudancas incompativeis, como novos modos de modulacao, repeticao operacional, ACK ou campos adicionais de quadro, devem ser planejadas como v0.2 ou posterior.
+
 ## Características desejadas
 
 - Baixa taxa de transmissão.
@@ -54,11 +56,11 @@ A implementacao atual ja inclui:
 - transmissao e recepcao 2-FSK;
 - recepcao continua no app PC usando `StreamingReceiver`;
 - Viterbi soft-decision no RX C++ quando ha confianca por simbolo;
-- app PC Qt com TX/RX por placa de som, decodificacao WAV para debug, historico de mensagens, log com timestamp, nivel/qualidade RX e waterfall simples entre 300 Hz e 3 kHz.
+- app PC Qt com TX/RX por placa de som, decodificacao WAV para debug, historico de mensagens, log com timestamp, estado/sessao RX, evidencia de campo, nivel/qualidade RX e waterfall simples entre 300 Hz e 3 kHz.
 
 ## Proximas evolucoes
 
-- 8-FSK ou 16-FSK;
+- v0.2 experimental para repeticao, ACK, 4-FSK, 8-FSK ou 16-FSK;
 - aplicação Android;
 - rastreamento fino de clock/frequencia;
 - controle automatico de ganho ou orientacao operacional equivalente;

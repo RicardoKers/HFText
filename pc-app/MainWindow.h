@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <deque>
 #include <mutex>
+#include <QString>
 #include <thread>
 #include <vector>
 
@@ -54,6 +55,12 @@ private slots:
 private:
     void appendLog(const QString& text);
     void writeLogHeader(QTextStream& stream, const char* title) const;
+    void resetRxDiagnostic(const QString& state);
+    void updateRxDiagnosticFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
+    void setRxDiagnosticText(const QString& state);
+    void resetRxSessionCounters();
+    void updateRxSessionFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
+    void setRxSessionText();
     void loadSettings();
     void saveSettings() const;
     void populateInputDevices();
@@ -100,6 +107,8 @@ private:
     QProgressBar* rxLevelBar_ = nullptr;
     QProgressBar* rxFrameProgressBar_ = nullptr;
     QProgressBar* rxQualityBar_ = nullptr;
+    QLabel* rxDiagnosticLabel_ = nullptr;
+    QLabel* rxSessionLabel_ = nullptr;
     WaterfallWidget* waterfallWidget_ = nullptr;
     QCheckBox* detailedRxLogCheck_ = nullptr;
     QPlainTextEdit* receivedEdit_ = nullptr;
@@ -116,4 +125,11 @@ private:
     QPushButton* saveEvidenceButton_ = nullptr;
     QTimer* rxLevelTimer_ = nullptr;
     QTimer* txProgressTimer_ = nullptr;
+    QString lastRxPhysicalLengthText_ = "--";
+    QString lastRxQualityText_ = "--";
+    QString lastRxRejectText_ = "--";
+    int rxSessionSyncCount_ = 0;
+    int rxSessionLengthCount_ = 0;
+    int rxSessionRejectedCount_ = 0;
+    int rxSessionAcceptedCount_ = 0;
 };

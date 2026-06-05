@@ -10,6 +10,8 @@ Nome: HFText v0.1
 
 O modo de transmissao unico e robusto. Nao existe modo operacional sem FEC/interleaving.
 
+Status: baseline operacional para validacao de campo. Alteracoes incompativeis de quadro, FEC, interleaving, modulacao ou semantica de campos devem ser documentadas como HFText v0.2 ou posterior, nao como variacao silenciosa da v0.1.
+
 O frame logico antes da camada de robustez continua sendo:
 
 ```text
@@ -21,7 +23,8 @@ Antes da modulacao, esse frame logico deve passar por:
 ```text
 codigo convolucional rate 1/2, K=3, geradores 111 e 101
 -> interleaving retangular deterministico
--> preambulo + START_SYNC + 2-FSK
+-> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
+-> 2-FSK
 ```
 
 ## Alfabeto inicial
@@ -380,6 +383,8 @@ Regra deterministica de interleaving:
 - colunas = tamanho codificado / linhas.
 
 ## Versões futuras
+
+As ideias abaixo nao fazem parte do HFText v0.1. Se forem promovidas de experimento para operacao real, devem definir uma versao nova do protocolo, inicialmente v0.2, para evitar ambiguidade entre transmissores e receptores.
 
 ### 4-FSK
 

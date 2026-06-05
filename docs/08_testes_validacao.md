@@ -221,6 +221,8 @@ A interface PC deve manter validacoes manuais simples:
 - ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
 - durante `Transmitir WAV`, a barra de progresso deve avancar ate o fim do arquivo ou parar corretamente ao clicar `Parar TX`;
 - durante RX, a barra `Progresso RX` deve avancar quando o receptor recuperar `PHYS_LENGTH` e acumular o `ROBUST_FRAME`;
+- durante RX, a linha `Estado RX` deve mostrar estado recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao;
+- durante RX, a linha `Sessao RX` deve acumular contadores da recepcao atual e reiniciar ao clicar `Receber`;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
 - o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
