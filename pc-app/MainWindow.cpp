@@ -1,8 +1,10 @@
 #include "MainWindow.h"
 
 #include "hftext_encoder.h"
+#include "wav_io.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -40,6 +42,7 @@ constexpr int kMaxLogBlocks = 3000;
 constexpr int kRxPendingSeconds = 3;
 constexpr int kRxWorkerChunkMilliseconds = 500;
 constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
+constexpr int kRxEvidenceSeconds = 300;
 
 void validateTonesBelowNyquist(const hftext::ModemConfig& config) {
     const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
@@ -470,6 +473,8 @@ MainWindow::MainWindow(QWidget* parent)
     logHeader->addStretch(1);
     saveLogButton_ = new QPushButton("Salvar Log", this);
     clearLogButton_ = new QPushButton("Limpar Log", this);
+    saveEvidenceButton_ = new QPushButton("Salvar Evidencia RX", this);
+    logHeader->addWidget(saveEvidenceButton_);
     logHeader->addWidget(saveLogButton_);
     logHeader->addWidget(clearLogButton_);
     configLayout->addLayout(logHeader);
@@ -530,6 +535,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(clearReceivedButton_, &QPushButton::clicked, this, &MainWindow::clearReceivedText);
     connect(saveLogButton_, &QPushButton::clicked, this, &MainWindow::saveLog);
     connect(clearLogButton_, &QPushButton::clicked, this, &MainWindow::clearLog);
+    connect(saveEvidenceButton_, &QPushButton::clicked, this, &MainWindow::saveFieldEvidence);
     connect(callsignEdit_, &QLineEdit::textChanged, this, &MainWindow::updateTxEstimate);
     connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
     connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
@@ -660,11 +666,13 @@ void MainWindow::startReceive() {
         const auto rxConfig = readRxConfig();
         stopRxWorker();
         startRxWorker(rxConfig, detailedRxLogCheck_->isChecked());
+        clearRxEvidenceSamples(rxConfig.sampleRate);
         waterfallWidget_->clear();
         waterfallUpdatePending_.store(false);
         rxFrameProgressBar_->setValue(0);
         rxQualityBar_->setValue(0);
         audioInput_.setSamplesCallback([this, sampleRate = rxConfig.sampleRate](const std::vector<float>& samples) {
+            appendRxEvidenceSamples(samples, sampleRate);
             enqueueRxSamples(samples);
             if (!waterfallUpdatePending_.exchange(true)) {
                 auto chunk = samples;
@@ -836,7 +844,81 @@ void MainWindow::saveLog() {
     }
 
     QTextStream stream(&file);
-    stream << "HFText log\n";
+    writeLogHeader(stream, "HFText log");
+    stream << '\n';
+    stream << "--- Log ---\n";
+    stream << logEdit_->toPlainText() << '\n';
+    appendLog("Log salvo: " + outputPath);
+}
+
+void MainWindow::saveFieldEvidence() {
+    std::vector<float> samples;
+    int sampleRate = 48000;
+    {
+        std::lock_guard<std::mutex> lock(rxEvidenceMutex_);
+        samples.assign(rxEvidenceSamples_.begin(), rxEvidenceSamples_.end());
+        sampleRate = rxEvidenceSampleRate_;
+    }
+
+    if (samples.empty()) {
+        QMessageBox::information(this, "HFText", "Nao ha audio RX recente para salvar.");
+        appendLog("Evidencia RX nao salva: sem audio recente.");
+        return;
+    }
+
+    const QString outputDir = QFileDialog::getExistingDirectory(
+        this,
+        "Salvar Evidencia RX"
+    );
+    if (outputDir.isEmpty()) {
+        return;
+    }
+
+    const QString stem = "HFText-rx-evidence-"
+        + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+    const QDir dir(outputDir);
+    const QString wavPath = dir.filePath(stem + ".wav");
+    const QString logPath = dir.filePath(stem + ".txt");
+
+    try {
+        hftext::tools::writeMonoPcm16Wav(toStdString(wavPath), samples, sampleRate);
+    } catch (const std::exception& exc) {
+        QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
+        appendLog("Erro ao salvar WAV de evidencia RX: " + QString::fromUtf8(exc.what()));
+        return;
+    }
+
+    QFile file(logPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "HFText", "Nao foi possivel salvar o log de evidencia.");
+        appendLog("Erro ao salvar log de evidencia: " + logPath);
+        return;
+    }
+
+    QTextStream stream(&file);
+    writeLogHeader(stream, "HFText evidencia RX");
+    stream << "WAV RX recente: " << wavPath << '\n';
+    stream << "Janela RX recente: ate " << kRxEvidenceSeconds << " s\n";
+    stream << "Amostras RX salvas: " << static_cast<qulonglong>(samples.size()) << '\n';
+    stream << "Duracao RX salva: "
+           << QString::number(static_cast<double>(samples.size()) / static_cast<double>(sampleRate), 'f', 2)
+           << " s\n\n";
+    stream << "--- Texto recebido ---\n";
+    stream << receivedEdit_->toPlainText() << "\n\n";
+    stream << "--- Log ---\n";
+    stream << logEdit_->toPlainText() << '\n';
+
+    lastRxWavPath_ = wavPath;
+    appendLog("Evidencia RX salva: " + wavPath + " | " + logPath);
+}
+
+void MainWindow::appendLog(const QString& text) {
+    const QString timestamp = QDateTime::currentDateTime().toString("[HH:mm:ss] ");
+    logEdit_->appendPlainText(timestamp + text);
+}
+
+void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
+    stream << title << '\n';
     stream << "Gerado em: " << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
     stream << "Indicativo: " << callsignEdit_->text().trimmed() << '\n';
     stream << "Sample rate TX/WAV: " << sampleRateSpin_->value() << " Hz\n";
@@ -848,15 +930,7 @@ void MainWindow::saveLog() {
     stream << "Preambulo: " << preambleBitsSpin_->value() << " bits\n";
     stream << "Saida de audio: " << outputDeviceCombo_->currentText() << '\n';
     stream << "Entrada de audio: " << inputDeviceCombo_->currentText() << '\n';
-    stream << "Log RX detalhado: " << (detailedRxLogCheck_->isChecked() ? "sim" : "nao") << "\n\n";
-    stream << "--- Log ---\n";
-    stream << logEdit_->toPlainText() << '\n';
-    appendLog("Log salvo: " + outputPath);
-}
-
-void MainWindow::appendLog(const QString& text) {
-    const QString timestamp = QDateTime::currentDateTime().toString("[HH:mm:ss] ");
-    logEdit_->appendPlainText(timestamp + text);
+    stream << "Log RX detalhado: " << (detailedRxLogCheck_->isChecked() ? "sim" : "nao") << '\n';
 }
 
 void MainWindow::loadSettings() {
@@ -969,6 +1043,34 @@ void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
         }
     }
     rxCondition_.notify_one();
+}
+
+void MainWindow::clearRxEvidenceSamples(int sampleRate) {
+    std::lock_guard<std::mutex> lock(rxEvidenceMutex_);
+    rxEvidenceSamples_.clear();
+    rxEvidenceSampleRate_ = sampleRate;
+}
+
+void MainWindow::appendRxEvidenceSamples(const std::vector<float>& samples, int sampleRate) {
+    if (samples.empty()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(rxEvidenceMutex_);
+    if (sampleRate != rxEvidenceSampleRate_) {
+        rxEvidenceSamples_.clear();
+        rxEvidenceSampleRate_ = sampleRate;
+    }
+
+    rxEvidenceSamples_.insert(rxEvidenceSamples_.end(), samples.begin(), samples.end());
+    const auto maxSamples = static_cast<std::size_t>(std::max(1, sampleRate * kRxEvidenceSeconds));
+    if (rxEvidenceSamples_.size() > maxSamples) {
+        const auto excess = rxEvidenceSamples_.size() - maxSamples;
+        rxEvidenceSamples_.erase(
+            rxEvidenceSamples_.begin(),
+            rxEvidenceSamples_.begin() + static_cast<std::ptrdiff_t>(excess)
+        );
+    }
 }
 
 void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {

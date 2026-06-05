@@ -35,7 +35,8 @@ A primeira versão da aplicação PC deve conter:
 - substituir caracteres invalidos por `?` diretamente no campo de mensagem TX, antes da transmissao;
 - mostrar espectro básico;
 - mostrar waterfall;
-- salvar log de recepção.
+- salvar log de recepção;
+- salvar pacote manual de evidencia de campo com log e audio RX recente.
 
 ## Arquitetura da aplicação PC
 
@@ -118,6 +119,7 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e
 - waterfall RX simples para observacao visual do audio recebido;
 - area de texto recebido;
 - log simples;
+- botao `Salvar Evidencia RX` para gravar um WAV do audio RX recente e um TXT com configuracao, texto recebido e log;
 - botao `Salvar Log` para gravar o log operacional em arquivo texto;
 - botao `Limpar Log` para limpar apenas o log operacional da interface;
 - persistencia local de indicativo, parametros do modem, dispositivos selecionados e estado do log detalhado;
@@ -126,7 +128,7 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e
 A interface agora separa operacao e configuracao em abas:
 
 - `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso TX/RX, qualidade RX, waterfall, botoes e texto recebido;
-- `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio, log e botoes para salvar ou limpar o log.
+- `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio, log e botoes para salvar evidencia RX, salvar log ou limpar o log.
 
 A area `Texto recebido` funciona como historico: novas mensagens ou resultados de decodificacao sao adicionados abaixo dos anteriores.
 O botao `Limpar RX` limpa esse historico visual sem apagar WAVs, log ou configuracoes.
@@ -168,6 +170,8 @@ O log do app inclui timestamp em cada linha. Quando uma mensagem e aceita, o tex
 O botao `Salvar Log` grava o conteudo atual do log em um arquivo `.txt`. O arquivo inclui um cabecalho com timestamp de exportacao, indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio e estado do log detalhado. Isso serve para anexar testes de campo sem depender de prints da interface.
 
 O botao `Limpar Log` limpa apenas a area de log operacional exibida na interface. Ele nao apaga o historico de `Texto recebido`, configuracoes locais, WAVs gerados ou capturas.
+
+O botao `Salvar Evidencia RX` grava manualmente, na pasta escolhida pelo operador, dois arquivos com o mesmo prefixo: um `.wav` contendo a janela circular de audio RX recente e um `.txt` contendo cabecalho de configuracao, caminho do WAV, duracao salva, historico de `Texto recebido` e log atual. A janela inicial e limitada aos ultimos 300 segundos para evitar crescimento indefinido durante escutas longas. Esse recurso e voltado para depurar falhas de campo e reproduzir capturas depois, sem alterar o protocolo nem a decodificacao em tempo real.
 
 Para manter a interface responsiva durante ruido ou muitos candidatos falsos, a fila de audio entre captura e worker RX deve ser limitada. Se o worker ficar atrasado, amostras antigas pendentes podem ser descartadas em vez de bloquear a interface. O waterfall tambem deve limitar atualizacoes pendentes, e o log detalhado pode omitir eventos por lote quando houver excesso. A validacao de mensagem continua sendo feita somente pelo core com CRC e payload validos.
 

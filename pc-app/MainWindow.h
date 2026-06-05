@@ -11,6 +11,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -24,6 +25,7 @@ class QComboBox;
 class QDoubleSpinBox;
 class QProgressBar;
 class QSpinBox;
+class QTextStream;
 class QTimer;
 
 class MainWindow : public QMainWindow {
@@ -47,9 +49,11 @@ private slots:
     void sanitizeTxMessage();
     void updateTxEstimate();
     void saveLog();
+    void saveFieldEvidence();
 
 private:
     void appendLog(const QString& text);
+    void writeLogHeader(QTextStream& stream, const char* title) const;
     void loadSettings();
     void saveSettings() const;
     void populateInputDevices();
@@ -60,6 +64,8 @@ private:
     void startRxWorker(const hftext::ModemConfig& config, bool detailedRxLog);
     void stopRxWorker(bool drainPending = false);
     void enqueueRxSamples(const std::vector<float>& samples);
+    void clearRxEvidenceSamples(int sampleRate);
+    void appendRxEvidenceSamples(const std::vector<float>& samples, int sampleRate);
     void rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog);
 
     AudioInput audioInput_;
@@ -71,6 +77,9 @@ private:
     std::vector<float> rxPendingSamples_;
     std::size_t rxMaxPendingSamples_ = 0;
     std::size_t rxMaxWorkerChunkSamples_ = 0;
+    std::mutex rxEvidenceMutex_;
+    std::deque<float> rxEvidenceSamples_;
+    int rxEvidenceSampleRate_ = 48000;
     std::atomic<bool> waterfallUpdatePending_{false};
     bool rxWorkerStop_ = false;
     QString lastWavPath_;
@@ -104,6 +113,7 @@ private:
     QPushButton* clearReceivedButton_ = nullptr;
     QPushButton* saveLogButton_ = nullptr;
     QPushButton* clearLogButton_ = nullptr;
+    QPushButton* saveEvidenceButton_ = nullptr;
     QTimer* rxLevelTimer_ = nullptr;
     QTimer* txProgressTimer_ = nullptr;
 };

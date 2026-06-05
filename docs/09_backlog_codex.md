@@ -409,3 +409,5 @@ A interface do app PC foi reorganizada em abas: `Operacao` para uso normal e `Co
 O app PC tambem passou a permitir salvar o log operacional em arquivo `.txt`, preservando timestamps e eventos de recepcao para analise posterior dos testes de campo. O arquivo exportado inclui cabecalho com configuracao de modem, dispositivos selecionados e estado do log detalhado.
 
 O app PC passou a salvar localmente as configuracoes operacionais ao fechar e restaura-las na proxima abertura: indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos selecionados, estado do log detalhado e geometria da janela. A mensagem TX nao e persistida.
+
+O app PC tambem passou a ter um recurso manual de evidencia de campo: `Salvar Evidencia RX` grava um WAV com a janela circular de audio RX recente e um TXT com configuracao, texto recebido e log. A primeira janela e limitada aos ultimos 300 segundos para permitir depuracao de recepcao real sem crescimento indefinido durante RX continuo.
