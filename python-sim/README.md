@@ -53,6 +53,18 @@ python noise_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Test
 O script salva exemplos WAV, `summary.csv` agregado e `trials.csv` por tentativa em `generated\noise_sweep\`, medindo BER, CRC e validade do payload para cada SNR.
 Os CSVs tambem registram a confianca media estimada pelo demodulador.
 
+## Resumo de evidencias de campo
+
+Depois de salvar evidencias pelo app PC em `logs\`, e possivel consolidar os blocos `Resumo CSV` em uma unica tabela:
+
+```powershell
+python field_summary.py --input-dir ..\logs --output ..\logs\field_summary.csv
+```
+
+Sem `--output`, o script grava `field_summary.csv` dentro da pasta informada por `--input-dir`. Use `--stdout` para imprimir o CSV agregado no terminal.
+
+Quando grava em arquivo, o script tambem cria `field_summary_groups.csv`, agrupando por duracao de simbolo, tons, amplitude, preambulo e estado do log detalhado. Esse resumo inclui quantidade de evidencias, quadros aceitos, taxa de aceite, qualidade media/minima e medias dos contadores RX. Use `--group-by` para escolher outras colunas de agrupamento, `--group-output` para escolher outro caminho ou `--no-groups` para gerar apenas a tabela linha a linha.
+
 ## Varredura experimental de repeticao
 
 ```powershell
