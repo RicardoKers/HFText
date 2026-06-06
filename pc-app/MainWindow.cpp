@@ -88,6 +88,15 @@ QString formatElapsedTime(std::int64_t elapsedMsecs) {
         .arg(seconds, 2, 10, QChar('0'));
 }
 
+QString csvCell(QString value) {
+    value.replace('"', "\"\"");
+    return "\"" + value + "\"";
+}
+
+QString csvBool(bool value) {
+    return value ? "1" : "0";
+}
+
 double clippingPercent(std::size_t clippedSamples, std::size_t sampleCount) {
     if (sampleCount == 0) {
         return 0.0;
@@ -1013,6 +1022,8 @@ void MainWindow::saveFieldEvidence() {
     stream << "Duracao RX salva: "
            << QString::number(static_cast<double>(samples.size()) / static_cast<double>(sampleRate), 'f', 2)
            << " s\n\n";
+    writeFieldSummaryCsv(stream, wavPath, samples.size(), sampleRate);
+    stream << '\n';
     stream << "--- Texto recebido ---\n";
     stream << receivedEdit_->toPlainText() << "\n\n";
     stream << "--- Log ---\n";
@@ -1047,6 +1058,65 @@ void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
     if (rxSessionLabel_ != nullptr) {
         stream << "Sessao RX atual: " << rxSessionLabel_->text() << '\n';
     }
+}
+
+void MainWindow::writeFieldSummaryCsv(
+    QTextStream& stream,
+    const QString& wavPath,
+    std::size_t sampleCount,
+    int sampleRate
+) const {
+    const auto elapsedMsecs = rxSessionStartedAtMsecs_ <= 0
+        ? 0
+        : QDateTime::currentMSecsSinceEpoch() - rxSessionStartedAtMsecs_;
+    const double elapsedSeconds = static_cast<double>(elapsedMsecs) / 1000.0;
+    const double savedSeconds = sampleRate <= 0
+        ? 0.0
+        : static_cast<double>(sampleCount) / static_cast<double>(sampleRate);
+    const QString receivedText = receivedEdit_ == nullptr ? QString() : receivedEdit_->toPlainText().trimmed();
+    const int receivedLines = receivedText.isEmpty()
+        ? 0
+        : receivedText.split('\n', Qt::SkipEmptyParts).size();
+
+    stream << "--- Resumo CSV ---\n";
+    stream
+        << "generated_at,callsign,symbol_duration_s,tx_sample_rate_hz,rx_sample_rate_hz,"
+        << "f0_hz,f1_hz,amplitude,preamble_bits,detailed_log,"
+        << "rx_elapsed_s,rx_accepted,rx_rejected_strong,rx_phys_length,rx_sync,"
+        << "rx_quality,last_phys_length,last_reject,received_lines,received_text,"
+        << "accepted_length,accepted_offset_samples,accepted_offsets_tried,"
+        << "saved_audio_s,saved_samples,wav_path\n";
+    const QString summaryQuality = hasLastAcceptedRx_ ? lastAcceptedRxQualityText_ : lastRxQualityText_;
+    const QString summaryPhysicalLength = hasLastAcceptedRx_
+        ? QString("%1 simbolos").arg(lastAcceptedRxLength_)
+        : lastRxPhysicalLengthText_;
+    stream
+        << csvCell(QDateTime::currentDateTime().toString(Qt::ISODate)) << ','
+        << csvCell(callsignEdit_->text().trimmed()) << ','
+        << QString::number(symbolDurationSpin_->value(), 'f', 3) << ','
+        << sampleRateSpin_->value() << ','
+        << rxSampleRateSpin_->value() << ','
+        << QString::number(frequency0Spin_->value(), 'f', 1) << ','
+        << QString::number(frequency1Spin_->value(), 'f', 1) << ','
+        << QString::number(amplitudeSpin_->value(), 'f', 2) << ','
+        << preambleBitsSpin_->value() << ','
+        << csvBool(detailedRxLogCheck_->isChecked()) << ','
+        << QString::number(elapsedSeconds, 'f', 2) << ','
+        << rxSessionAcceptedCount_ << ','
+        << rxSessionRejectedCount_ << ','
+        << rxSessionLengthCount_ << ','
+        << rxSessionSyncCount_ << ','
+        << csvCell(summaryQuality) << ','
+        << csvCell(summaryPhysicalLength) << ','
+        << csvCell(lastRxRejectText_) << ','
+        << receivedLines << ','
+        << csvCell(receivedText) << ','
+        << lastAcceptedRxLength_ << ','
+        << lastAcceptedRxOffsetSamples_ << ','
+        << lastAcceptedRxOffsetsTried_ << ','
+        << QString::number(savedSeconds, 'f', 2) << ','
+        << static_cast<qulonglong>(sampleCount) << ','
+        << csvCell(wavPath) << '\n';
 }
 
 void MainWindow::resetRxDiagnostic(const QString& state) {
@@ -1243,6 +1313,11 @@ void MainWindow::resetRxSessionCounters() {
     rxSessionRejectedCount_ = 0;
     rxSessionAcceptedCount_ = 0;
     rxSessionStartedAtMsecs_ = 0;
+    hasLastAcceptedRx_ = false;
+    lastAcceptedRxQualityText_ = "--";
+    lastAcceptedRxLength_ = -1;
+    lastAcceptedRxOffsetSamples_ = 0;
+    lastAcceptedRxOffsetsTried_ = 0;
     setRxSessionText();
 }
 
@@ -1270,6 +1345,18 @@ void MainWindow::setRxSessionText() {
             .arg(rxSessionLengthCount_)
             .arg(rxSessionSyncCount_)
     );
+}
+
+void MainWindow::rememberAcceptedRx(const hftext::DecodeResult& result) {
+    if (!(result.frameDetected && result.crcOk && result.payloadValid)) {
+        return;
+    }
+
+    hasLastAcceptedRx_ = true;
+    lastAcceptedRxQualityText_ = formatConfidence(result.confidence);
+    lastAcceptedRxLength_ = result.length;
+    lastAcceptedRxOffsetSamples_ = result.startOffset;
+    lastAcceptedRxOffsetsTried_ = result.offsetsTried;
 }
 
 void MainWindow::loadSettings() {
@@ -1536,5 +1623,6 @@ void MainWindow::showDecodeResult(const hftext::DecodeResult& result) {
         receivedEdit_->appendPlainText("Quadro detectado, CRC valido, mas payload invalido.");
         return;
     }
+    rememberAcceptedRx(result);
     receivedEdit_->appendPlainText(QString::fromStdString(result.text));
 }

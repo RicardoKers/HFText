@@ -418,4 +418,6 @@ O app PC tambem passou a mostrar `Sessao RX`, um resumo com duracao e contadores
 
 Foi adotada uma pasta local `logs/` para evidencias manuais de campo. Ela e ignorada pelo Git e pode ser limpa entre rodadas, pois os arquivos `.wav` e `.txt` gerados ali sao material temporario de depuracao. O roteiro atual de testes de campo foi documentado em `docs/08_testes_validacao.md`, com preferencia por log simples e uso de log detalhado apenas para falhas ou analise por fase.
 
+O TXT gerado por `Salvar Evidencia RX` passou a incluir uma secao `Resumo CSV`, com uma linha de cabecalho e uma linha de valores contendo configuracao, duracao da sessao, contadores RX, ultimo diagnostico, texto recebido e caminho do WAV. O CSV tambem preserva tamanho, qualidade, offset e fases/tentativas do ultimo quadro aceito da sessao, para que uma evidencia salva depois do aceite continue mantendo os dados uteis do quadro valido. A intencao e facilitar comparar varias rodadas de campo em planilha sem alterar a captura de audio nem o protocolo.
+
 O protocolo HFText Basic v0.1 foi consolidado como baseline operacional para validacao de campo: `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Novos modos incompativeis, como repeticao operacional, ACK, 4-FSK ou 8-FSK, devem ser tratados como v0.2 ou posterior.

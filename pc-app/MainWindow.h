@@ -56,6 +56,7 @@ private slots:
 private:
     void appendLog(const QString& text);
     void writeLogHeader(QTextStream& stream, const char* title) const;
+    void writeFieldSummaryCsv(QTextStream& stream, const QString& wavPath, std::size_t sampleCount, int sampleRate) const;
     void resetRxDiagnostic(const QString& state);
     void resetRxFrameProgress();
     void updateRxFrameProgressFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
@@ -64,6 +65,7 @@ private:
     void resetRxSessionCounters();
     void updateRxSessionFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
     void setRxSessionText();
+    void rememberAcceptedRx(const hftext::DecodeResult& result);
     void loadSettings();
     void saveSettings() const;
     void populateInputDevices();
@@ -131,6 +133,11 @@ private:
     QString lastRxPhysicalLengthText_ = "--";
     QString lastRxQualityText_ = "--";
     QString lastRxRejectText_ = "--";
+    bool hasLastAcceptedRx_ = false;
+    QString lastAcceptedRxQualityText_ = "--";
+    int lastAcceptedRxLength_ = -1;
+    int lastAcceptedRxOffsetSamples_ = 0;
+    int lastAcceptedRxOffsetsTried_ = 0;
     int rxSessionSyncCount_ = 0;
     int rxSessionLengthCount_ = 0;
     int rxSessionRejectedCount_ = 0;

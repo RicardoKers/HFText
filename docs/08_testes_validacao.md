@@ -212,7 +212,7 @@ Cada recepção deve salvar opcionalmente:
 - texto recebido;
 - confiança estimada.
 
-Para testes de campo, o app PC deve permitir salvar manualmente um pacote de evidencia RX contendo o audio recente em WAV e um TXT com configuracao, historico de texto recebido e log. Esse pacote deve ser acionado pelo operador e servir como material reproduzivel para investigar falhas de sincronismo, `PHYS_LENGTH`, CRC ou nivel de sinal.
+Para testes de campo, o app PC deve permitir salvar manualmente um pacote de evidencia RX contendo o audio recente em WAV e um TXT com configuracao, resumo CSV, historico de texto recebido e log. Esse pacote deve ser acionado pelo operador e servir como material reproduzivel para investigar falhas de sincronismo, `PHYS_LENGTH`, CRC ou nivel de sinal. O resumo CSV deve ter uma linha de cabecalho e uma linha de valores para facilitar copiar varios testes para uma planilha. Quando houver quadro aceito na sessao, o CSV deve preservar os diagnosticos desse ultimo aceite, incluindo qualidade, tamanho aceito, offset em amostras e quantidade de fases/tentativas, mesmo que a linha visual `Estado RX` ja tenha voltado a outro estado.
 
 No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
 
@@ -262,7 +262,7 @@ A interface PC deve manter validacoes manuais simples:
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
 - o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
 - o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
-- o botao `Salvar Evidencia RX` deve criar um `.wav` com audio RX recente e um `.txt` associado, sem parar automaticamente a recepcao;
+- o botao `Salvar Evidencia RX` deve criar um `.wav` com audio RX recente e um `.txt` associado com resumo CSV, sem parar automaticamente a recepcao, preservando os dados do ultimo quadro aceito quando houver;
 - ao fechar e abrir novamente, o app deve restaurar indicativo, parametros do modem, dispositivos selecionados, estado do log detalhado e geometria da janela;
 - ao fechar e abrir novamente, a caixa de mensagem TX deve permanecer vazia;
 - no Windows, abrir `hftext_pc.exe` deve mostrar apenas a janela grafica do HFText, sem console adicional;
