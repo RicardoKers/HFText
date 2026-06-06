@@ -117,7 +117,7 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e
 - indicador simples de nivel RX;
 - indicador simples de qualidade RX baseado na confianca media do demodulador;
 - linha `Estado RX` com resumo operacional de sincronismo, ultimo `PHYS_LENGTH`, qualidade e ultimo motivo de rejeicao;
-- linha `Sessao RX` com contadores da recepcao atual;
+- linha `Sessao RX` com duracao e contadores consolidados da recepcao atual;
 - waterfall RX simples para observacao visual do audio recebido;
 - area de texto recebido;
 - log simples;
@@ -159,11 +159,11 @@ O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece con
 
 Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra o texto recebido, offset/fases testadas e confianca media no log.
 
-A barra `Progresso RX` mostra a acumulacao aproximada do `ROBUST_FRAME` depois que o receptor encontra `START_SYNC` e recupera `PHYS_LENGTH`. Ela chega a 100% quando um quadro valido e publicado e volta a zero ao iniciar ou parar RX.
+A barra `Progresso RX` mostra a acumulacao aproximada do `ROBUST_FRAME` depois que o receptor encontra `START_SYNC` e recupera `PHYS_LENGTH`. No modo normal, ela acompanha um candidato forte por vez e so avanca dentro do mesmo candidato, evitando oscilacao visual causada por eventos internos de fases diferentes. Ela chega a 100% quando um quadro valido e publicado, volta a zero ao iniciar ou parar RX e tambem volta a zero quando um candidato forte completo e rejeitado.
 
-A linha `Estado RX` resume o estado operacional mais recente sem exigir que o operador leia todo o log: parado ou escutando, sync detectado, `PHYS_LENGTH` recuperado, progresso do frame, candidato rejeitado ou mensagem aceita. Ela tambem preserva o ultimo tamanho fisico recuperado, a qualidade do ultimo candidato completo e o ultimo motivo de rejeicao, como CRC, payload ou divergencia entre `LENGTH` logico e fisico.
+A linha `Estado RX` resume o estado operacional mais util do lote recente de eventos sem exigir que o operador leia todo o log: parado ou escutando, sync detectado, `PHYS_LENGTH` recuperado, progresso do frame, candidato rejeitado ou mensagem aceita. A prioridade visual e: quadro valido, frame em recebimento, `PHYS_LENGTH`, sync e, por ultimo, rejeicao isolada. Assim uma rejeicao nao rouba a linha principal quando o receptor tambem esta acumulando um frame. No modo normal, rejeicoes fracas sem sync forte sao omitidas dessa linha e do resumo da sessao; elas continuam disponiveis no `Log RX detalhado`. A linha preserva o ultimo tamanho fisico recuperado, a qualidade do ultimo candidato completo e o ultimo motivo de rejeicao, como CRC, payload ou divergencia entre `LENGTH` logico e fisico.
 
-A linha `Sessao RX` e resetada ao iniciar uma nova recepcao e acumula contadores operacionais simples: quadros aceitos, candidatos rejeitados, `PHYS_LENGTH` recuperados e candidatos de sync. Esses numeros ajudam a comparar testes de campo, por exemplo quando ha muitos syncs falsos, muitos tamanhos fisicos recuperados ou muitos candidatos rejeitados por CRC/payload.
+A linha `Sessao RX` e resetada ao iniciar uma nova recepcao e acumula a duracao da escuta e contadores operacionais consolidados: quadros aceitos, candidatos fortes rejeitados, `PHYS_LENGTH` recuperados e candidatos de sync forte. Esses numeros seguem a mesma consolidacao do log operacional normal, evitando contar todas as fases internas e candidatos fracos como eventos separados. O log detalhado continua sendo a fonte para telemetria bruta por fase. Ao parar RX, o app tambem registra esse resumo no log.
 
 O log do app inclui timestamp em cada linha. Quando uma mensagem e aceita, o texto recebido tambem e registrado no log. Por padrao, o RX continuo mostra um resumo operacional compacto com sync forte, tamanho fisico, progresso consolidado, rejeicoes agregadas e quadro valido. Marcos repetidos por fases diferentes sao omitidos no modo normal para preservar legibilidade. A opcao `Log RX detalhado` mostra a telemetria completa por fase:
 

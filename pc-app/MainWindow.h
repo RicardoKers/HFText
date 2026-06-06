@@ -11,6 +11,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <QString>
@@ -56,6 +57,8 @@ private:
     void appendLog(const QString& text);
     void writeLogHeader(QTextStream& stream, const char* title) const;
     void resetRxDiagnostic(const QString& state);
+    void resetRxFrameProgress();
+    void updateRxFrameProgressFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
     void updateRxDiagnosticFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
     void setRxDiagnosticText(const QString& state);
     void resetRxSessionCounters();
@@ -132,4 +135,7 @@ private:
     int rxSessionLengthCount_ = 0;
     int rxSessionRejectedCount_ = 0;
     int rxSessionAcceptedCount_ = 0;
+    std::int64_t rxSessionStartedAtMsecs_ = 0;
+    std::int64_t rxProgressSyncSample_ = -1;
+    int rxDisplayedFrameProgressPermille_ = 0;
 };

@@ -165,6 +165,41 @@ Etapas:
 - teste em HF/SSB;
 - teste com sinal fraco.
 
+## Roteiro atual de testes de campo
+
+Durante a validacao do RX continuo, salvar evidencias em uma pasta local `logs/`.
+Essa pasta e material temporario de campo e nao deve ser versionada.
+
+Usar log simples por padrao. O log detalhado deve ser ligado apenas quando:
+
+- uma transmissao audivelmente boa nao for decodificada;
+- a interface indicar muitos candidatos rejeitados;
+- houver demora anormal depois do fim audivel do pacote;
+- for necessario comparar fases internas do receptor.
+
+Sequencia recomendada para cada rodada:
+
+1. Alto-falante para microfone, simbolo 0.300 s, amplitude normal.
+   Esperado: uma mensagem aceita, pouca latencia apos o fim do TX, sem clipping.
+2. Alto-falante para microfone, mesma configuracao, amplitude menor.
+   Esperado: aceitar se o sinal ainda estiver claro; se falhar, salvar evidencia com log simples.
+3. Radio para SDR ou segundo computador, simbolo 0.300 s, amplitude normal.
+   Esperado: decodificacao logo apos o fim do pacote e `Sessao RX` com poucos candidatos fortes consolidados.
+4. Radio para SDR com sinal fraco ou ruido maior.
+   Esperado: mensagem aceita ou rejeicao limpa por CRC/payload, sem travar a interface.
+5. Pacote parcial: iniciar RX depois do inicio da transmissao ou interromper TX antes do fim.
+   Esperado: nenhuma mensagem falsa deve aparecer; a interface deve continuar responsiva.
+6. Repetir qualquer falha com `Log RX detalhado` ligado.
+   Esperado: salvar evidencia completa para analise de sync, `PHYS_LENGTH`, progresso e CRC.
+
+Em cada evidencia, registrar tambem:
+
+- duracao de simbolo;
+- amplitude aproximada usada no transmissor;
+- se foi alto-falante/microfone, cabo, radio local ou radio/SDR remoto;
+- se o sinal estava forte, medio ou fraco visualmente/auditivamente;
+- se houve ruido impulsivo, fading ou clipping aparente.
+
 ## Logs
 
 Cada recepção deve salvar opcionalmente:
@@ -220,9 +255,9 @@ A interface PC deve manter validacoes manuais simples:
 - ao digitar caracteres invalidos, o campo TX deve mostrar `?` antes de gerar WAV;
 - ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
 - durante `Transmitir WAV`, a barra de progresso deve avancar ate o fim do arquivo ou parar corretamente ao clicar `Parar TX`;
-- durante RX, a barra `Progresso RX` deve avancar quando o receptor recuperar `PHYS_LENGTH` e acumular o `ROBUST_FRAME`;
-- durante RX, a linha `Estado RX` deve mostrar estado recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao;
-- durante RX, a linha `Sessao RX` deve acumular contadores da recepcao atual e reiniciar ao clicar `Receber`;
+- durante RX, a barra `Progresso RX` deve avancar de forma monotona dentro de um candidato forte, sem oscilar com candidatos fracos ou fases internas, e voltar a zero apos rejeicao forte completa;
+- durante RX, a linha `Estado RX` deve mostrar o estado consolidado mais util do lote recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao forte;
+- durante RX, a linha `Sessao RX` deve acumular duracao e contadores consolidados da recepcao atual, contando rejeicoes fortes no modo normal, reiniciar ao clicar `Receber` e aparecer no log ao parar RX;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
 - o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
