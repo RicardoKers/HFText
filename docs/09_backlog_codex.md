@@ -422,4 +422,6 @@ O TXT gerado por `Salvar Evidencia RX` passou a incluir uma secao `Resumo CSV`, 
 
 Foi adicionado o utilitario `python-sim/field_summary.py` para consolidar os blocos `Resumo CSV` de varios TXT de evidencia em um unico CSV agregado. Ele preserva o caminho de origem em `source_txt` e permite comparar rapidamente taxas de aceite, qualidade e parametros de campo entre rodadas salvas em `logs/`. O mesmo script tambem pode gerar `field_summary_groups.csv`, agrupado por parametros de modem, com taxa de aceite, qualidade media/minima e medias dos contadores RX.
 
+Foi adicionado tambem o utilitario `python-sim/field_replay.py` para reproduzir WAVs de evidencias aceitas pelo CLI C++ `hftext_rx_wav`, usando os parametros registrados no `Resumo CSV`. Ele gera `field_replay.csv` com esperado, decodificado, codigo de retorno e status, permitindo reaproveitar capturas reais como regressao manual do decoder offline.
+
 O protocolo HFText Basic v0.1 foi consolidado como baseline operacional para validacao de campo: `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Novos modos incompativeis, como repeticao operacional, ACK, 4-FSK ou 8-FSK, devem ser tratados como v0.2 ou posterior.

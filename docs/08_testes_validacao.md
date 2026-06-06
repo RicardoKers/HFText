@@ -216,6 +216,8 @@ Para testes de campo, o app PC deve permitir salvar manualmente um pacote de evi
 
 O utilitario `python-sim/field_summary.py` deve consolidar varios TXT de evidencia em um unico CSV agregado, preservando o caminho do arquivo original em `source_txt`. Isso permite comparar rodadas de campo por duracao de simbolo, contadores RX, qualidade, texto recebido e diagnosticos do ultimo quadro aceito. Quando gravar em arquivo, ele tambem deve gerar um CSV agrupado por parametros de modem para comparar taxa de aceite, qualidade media/minima e medias dos contadores RX entre configuracoes.
 
+O utilitario `python-sim/field_replay.py` deve reproduzir os WAVs de evidencias aceitas usando o CLI C++ `hftext_rx_wav`, com duracao de simbolo e tons extraidos do `Resumo CSV`, e gravar `field_replay.csv` com texto esperado, texto decodificado, codigo de retorno e status. Esse replay nao substitui o RX continuo, mas permite verificar se capturas reais continuam decodificaveis pelo decoder offline apos alteracoes futuras.
+
 No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
 
 ## Validacao no app PC
@@ -266,6 +268,7 @@ A interface PC deve manter validacoes manuais simples:
 - o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
 - o botao `Salvar Evidencia RX` deve criar um `.wav` com audio RX recente e um `.txt` associado com resumo CSV, sem parar automaticamente a recepcao, preservando os dados do ultimo quadro aceito quando houver;
 - `python-sim/field_summary.py` deve ler os TXT de evidencia e gerar um CSV agregado com uma linha por evidencia valida, alem de um CSV agrupado por parametros quando solicitado ou usado no modo padrao de arquivo;
+- `python-sim/field_replay.py` deve rodar os WAVs das evidencias aceitas pelo `hftext_rx_wav` e gerar um CSV de replay com passa/falha;
 - ao fechar e abrir novamente, o app deve restaurar indicativo, parametros do modem, dispositivos selecionados, estado do log detalhado e geometria da janela;
 - ao fechar e abrir novamente, a caixa de mensagem TX deve permanecer vazia;
 - no Windows, abrir `hftext_pc.exe` deve mostrar apenas a janela grafica do HFText, sem console adicional;

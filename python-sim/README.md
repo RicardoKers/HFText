@@ -65,6 +65,14 @@ Sem `--output`, o script grava `field_summary.csv` dentro da pasta informada por
 
 Quando grava em arquivo, o script tambem cria `field_summary_groups.csv`, agrupando por duracao de simbolo, tons, amplitude, preambulo e estado do log detalhado. Esse resumo inclui quantidade de evidencias, quadros aceitos, taxa de aceite, qualidade media/minima e medias dos contadores RX. Use `--group-by` para escolher outras colunas de agrupamento, `--group-output` para escolher outro caminho ou `--no-groups` para gerar apenas a tabela linha a linha.
 
+Para reproduzir os WAVs das evidencias aceitas pelo decoder C++ de linha de comando:
+
+```powershell
+python field_replay.py --input-dir ..\logs --output ..\logs\field_replay.csv
+```
+
+O script procura `hftext_rx_wav` nos builds conhecidos, usa os parametros registrados na evidencia e compara a primeira linha decodificada com o texto recebido salvo no TXT. Use `--rx-exe` se o executavel estiver em outro caminho. O resultado `field_replay.csv` permite transformar capturas reais em casos de regressao manual para o decoder offline.
+
 ## Varredura experimental de repeticao
 
 ```powershell
