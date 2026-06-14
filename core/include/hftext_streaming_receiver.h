@@ -59,6 +59,8 @@ private:
 
     struct PhaseState {
         int offsetSamples = 0;
+        float frequencyOffsetHz = 0.0F;
+        ModemConfig config;
         std::size_t nextStartSample = 0;
         std::size_t firstBitSample = 0;
         std::vector<BitDecision> decisions;
@@ -66,6 +68,7 @@ private:
     };
 
     int samplesPerSymbol() const;
+    int samplesPerSymbol(const ModemConfig& config) const;
     std::size_t frameBitCount(const DecodeResult& result) const;
     std::vector<int> phaseOffsets() const;
     void resetPhaseStates();

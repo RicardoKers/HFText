@@ -649,6 +649,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(callsignEdit_, &QLineEdit::textChanged, this, &MainWindow::updateTxEstimate);
     connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
     connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
+    connect(frequency0Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateWaterfallMarkers);
+    connect(frequency1Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateWaterfallMarkers);
     connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
 
     rxLevelTimer_ = new QTimer(this);
@@ -659,6 +661,7 @@ MainWindow::MainWindow(QWidget* parent)
     txProgressTimer_->setInterval(100);
     connect(txProgressTimer_, &QTimer::timeout, this, &MainWindow::updateTxProgress);
     updateTxEstimate();
+    updateWaterfallMarkers();
 }
 
 MainWindow::~MainWindow() {
@@ -939,6 +942,14 @@ void MainWindow::updateTxEstimate() {
         txEstimateLabel_->setStyleSheet("color: #b00020;");
         txEstimateLabel_->setText(QString::fromUtf8(exc.what()));
     }
+}
+
+void MainWindow::updateWaterfallMarkers() {
+    if (waterfallWidget_ == nullptr || frequency0Spin_ == nullptr || frequency1Spin_ == nullptr) {
+        return;
+    }
+
+    waterfallWidget_->setMarkerFrequencies(frequency0Spin_->value(), frequency1Spin_->value());
 }
 
 void MainWindow::saveLog() {

@@ -88,6 +88,8 @@ O passo padrão da busca offline é `samples_per_symbol / 20`, com mínimo de 1 
 
 O núcleo C++ também usa busca de offset inicial no caminho offline quando `syncSearch` está habilitado. O resultado de decodificação informa o offset aceito e quantos offsets foram testados. A CLI C++ `hftext_rx_wav` pode exibir esses dados com `--verbose`.
 
+A CLI C++ `hftext_stream_wav` alimenta um WAV salvo ao `StreamingReceiver` em blocos curtos. Ela deve ser usada para depurar o mesmo caminho de recepcao continua do app PC a partir de capturas reais, sem acionar a busca offline de WAV fechado.
+
 Sincronismo temporal fino contínuo e rastreamento de clock ainda ficam para etapa posterior.
 
 ## Recepcao em fluxo
@@ -98,6 +100,7 @@ O primeiro passo no C++ e `StreamingReceiver`, que:
 
 - recebe blocos de amostras por `pushSamples`;
 - mantém um banco limitado de fases de simbolo para nao depender do instante exato em que a captura foi iniciada;
+- mantem variantes pequenas de deslocamento comum de frequencia dos dois tons, para tolerar erro leve de sintonia/BFO/SDR no RX continuo;
 - demodula incrementalmente apenas janelas de simbolo novas;
 - acumula bits por fase em uma janela limitada;
 - procura `START_SYNC`, recupera `PHYS_LENGTH` com apoio opcional da qualidade por simbolo e espera apenas o bloco robusto de tamanho conhecido;

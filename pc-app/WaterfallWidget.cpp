@@ -91,15 +91,39 @@ void WaterfallWidget::clear() {
     }
 }
 
+void WaterfallWidget::setMarkerFrequencies(double frequency0Hz, double frequency1Hz) {
+    if (markerFrequency0Hz_ == frequency0Hz && markerFrequency1Hz_ == frequency1Hz) {
+        return;
+    }
+
+    markerFrequency0Hz_ = frequency0Hz;
+    markerFrequency1Hz_ = frequency1Hz;
+    update();
+}
+
 void WaterfallWidget::paintEvent(QPaintEvent* event) {
     (void)event;
     QPainter painter(this);
     painter.fillRect(rect(), Qt::black);
+    const QRect waterfallRect = dataRect();
     if (!image_.isNull()) {
-        painter.drawImage(dataRect(), image_);
+        painter.drawImage(waterfallRect, image_);
     }
 
-    const QRect axisRect(0, dataRect().bottom() + 1, width(), kAxisHeight);
+    painter.save();
+    painter.setClipRect(waterfallRect);
+    QPen markerPen(QColor(255, 220, 0, 210), 2);
+    painter.setPen(markerPen);
+    for (const double frequency : {markerFrequency0Hz_, markerFrequency1Hz_}) {
+        if (frequency < kMinFrequencyHz || frequency > kMaxFrequencyHz) {
+            continue;
+        }
+        const int x = frequencyToX(frequency, waterfallRect);
+        painter.drawLine(x, waterfallRect.top(), x, waterfallRect.bottom());
+    }
+    painter.restore();
+
+    const QRect axisRect(0, waterfallRect.bottom() + 1, width(), kAxisHeight);
     painter.fillRect(axisRect, QColor(18, 18, 18));
     painter.setPen(QColor(190, 190, 190));
     painter.drawLine(axisRect.left(), axisRect.top(), axisRect.right(), axisRect.top());
@@ -116,6 +140,15 @@ void WaterfallWidget::paintEvent(QPaintEvent* event) {
         const int labelWidth = metrics.horizontalAdvance(label);
         const int labelX = std::clamp(x - labelWidth / 2, 0, (std::max)(0, width() - labelWidth));
         painter.drawText(labelX, axisRect.top() + 18, label);
+    }
+
+    painter.setPen(QPen(QColor(255, 220, 0), 2));
+    for (const double frequency : {markerFrequency0Hz_, markerFrequency1Hz_}) {
+        if (frequency < kMinFrequencyHz || frequency > kMaxFrequencyHz) {
+            continue;
+        }
+        const int x = frequencyToX(frequency, axisRect);
+        painter.drawLine(x, axisRect.top(), x, axisRect.top() + 7);
     }
 }
 
@@ -143,6 +176,17 @@ void WaterfallWidget::ensureImage() {
 
 QRect WaterfallWidget::dataRect() const {
     return QRect(0, 0, (std::max)(1, width()), (std::max)(1, height() - kAxisHeight));
+}
+
+int WaterfallWidget::frequencyToX(double frequencyHz, const QRect& targetRect) const {
+    const double ratio = std::clamp(
+        (frequencyHz - kMinFrequencyHz) / (kMaxFrequencyHz - kMinFrequencyHz),
+        0.0,
+        1.0
+    );
+    return targetRect.left() + static_cast<int>(
+        std::round(ratio * static_cast<double>((std::max)(1, targetRect.width() - 1)))
+    );
 }
 
 QRgb WaterfallWidget::colorForLevel(double level) const {

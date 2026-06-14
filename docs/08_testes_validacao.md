@@ -263,6 +263,7 @@ A interface PC deve manter validacoes manuais simples:
 - durante RX, a linha `Estado RX` deve mostrar o estado consolidado mais util do lote recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao forte;
 - durante RX, a linha `Sessao RX` deve acumular duracao e contadores consolidados da recepcao atual, contando rejeicoes fortes no modo normal, reiniciar ao clicar `Receber` e aparecer no log ao parar RX;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
+- a waterfall RX deve mostrar duas linhas verticais amarelas nos tons `Tom 0` e `Tom 1`, atualizando quando esses valores forem alterados;
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
 - o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
 - o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
@@ -274,7 +275,7 @@ A interface PC deve manter validacoes manuais simples:
 - no Windows, abrir `hftext_pc.exe` deve mostrar apenas a janela grafica do HFText, sem console adicional;
 - a janela e o executavel devem exibir o icone proprio do HFText.
 
-A waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao.
+A waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao. As trilhas devem ficar proximas das linhas amarelas quando a sintonia estiver correta; deslocamentos visiveis indicam erro leve de sintonia, BFO ou SDR.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. O app deve registrar quantidade e porcentagem de amostras clipadas; picos isolados podem ser ruido impulsivo do canal, enquanto clipping frequente sugere reduzir ganho ou volume quando possivel.
 
@@ -304,8 +305,9 @@ No core C++, os testes automatizados devem cobrir:
 - recuperacao de `PHYS_LENGTH` repetido por voto duro e por voto ponderado por qualidade;
 - rejeicao de tamanho fisico invalido;
 - round-trip limpo via API publica `modulateText`/`demodulateSamples`;
-- recepcao continua por `StreamingReceiver`, incluindo atraso inicial arbitrario e mais de um quadro no mesmo fluxo;
+- recepcao continua por `StreamingReceiver`, incluindo atraso inicial arbitrario, pequeno deslocamento comum dos tons e mais de um quadro no mesmo fluxo;
 - round-trip WAV pelos CLIs `hftext_tx_wav` e `hftext_rx_wav`;
+- replay de WAV salvo pelo CLI `hftext_stream_wav`, validando o mesmo caminho incremental do `StreamingReceiver`;
 - round-trip manual no app PC gerando e decodificando o mesmo WAV.
 
 O modo robusto deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC, incluindo Viterbi soft-decision, nao substitui o CRC.

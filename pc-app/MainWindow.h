@@ -50,6 +50,7 @@ private slots:
     void updateTxProgress();
     void sanitizeTxMessage();
     void updateTxEstimate();
+    void updateWaterfallMarkers();
     void saveLog();
     void saveFieldEvidence();
 

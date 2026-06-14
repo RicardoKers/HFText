@@ -402,7 +402,7 @@ A tarefa 5.5 foi iniciada com sanitizacao visual da mensagem TX: caracteres inva
 
 A tarefa 5.6 foi iniciada com a barra `Progresso TX` no app PC. Ela consulta o estado de `AudioOutput`, acompanha a posicao aproximada do WAV em reproducao e retorna ao inicio quando `Parar TX` interrompe a transmissao.
 
-A tarefa 5.7 foi iniciada com `WaterfallWidget` no app PC. A primeira versao e visual, mostra energia aproximada de 300 Hz a 3 kHz durante a captura RX e nao altera a decodificacao.
+A tarefa 5.7 foi iniciada com `WaterfallWidget` no app PC. A primeira versao e visual, mostra energia aproximada de 300 Hz a 3 kHz durante a captura RX e nao altera a decodificacao. A waterfall tambem passou a mostrar linhas verticais amarelas nos tons RX configurados, permitindo comparar visualmente as trilhas recebidas com `Tom 0` e `Tom 1` para ajuste de sintonia.
 
 A interface do app PC foi reorganizada em abas: `Operacao` para uso normal e `Configuracao` para parametros do modem e dispositivos. Essa separacao reduz a poluicao visual sem alterar o fluxo de TX/RX.
 
@@ -423,5 +423,9 @@ O TXT gerado por `Salvar Evidencia RX` passou a incluir uma secao `Resumo CSV`, 
 Foi adicionado o utilitario `python-sim/field_summary.py` para consolidar os blocos `Resumo CSV` de varios TXT de evidencia em um unico CSV agregado. Ele preserva o caminho de origem em `source_txt` e permite comparar rapidamente taxas de aceite, qualidade e parametros de campo entre rodadas salvas em `logs/`. O mesmo script tambem pode gerar `field_summary_groups.csv`, agrupado por parametros de modem, com taxa de aceite, qualidade media/minima e medias dos contadores RX.
 
 Foi adicionado tambem o utilitario `python-sim/field_replay.py` para reproduzir WAVs de evidencias aceitas pelo CLI C++ `hftext_rx_wav`, usando os parametros registrados no `Resumo CSV`. Ele gera `field_replay.csv` com esperado, decodificado, codigo de retorno e status, permitindo reaproveitar capturas reais como regressao manual do decoder offline.
+
+Analise dos primeiros logs radio-SDR de 2026-06-07 mostrou que WAVs rejeitados durante RX continuo eram decodificaveis pelo `hftext_rx_wav` offline quando este usava sua pequena busca de deslocamento comum dos tons. O `StreamingReceiver` foi alinhado com essa estrategia e passou a manter variantes de frequencia em torno dos tons configurados, sem alterar o protocolo ou a regra de aceitacao por CRC.
+
+Foi adicionado o CLI C++ `hftext_stream_wav` para alimentar WAVs salvos ao `StreamingReceiver` em blocos, permitindo reproduzir capturas reais pelo mesmo caminho incremental usado pelo app PC. Ele complementa `hftext_rx_wav`, que continua sendo o decoder offline com busca mais ampla de WAV fechado.
 
 O protocolo HFText Basic v0.1 foi consolidado como baseline operacional para validacao de campo: `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Novos modos incompativeis, como repeticao operacional, ACK, 4-FSK ou 8-FSK, devem ser tratados como v0.2 ou posterior.

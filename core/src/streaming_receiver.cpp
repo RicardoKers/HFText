@@ -24,6 +24,7 @@ constexpr int kMaxRetainedBits = 1800;
 constexpr std::size_t kMaxEventsPerBatch = 512;
 constexpr int kPhaseDivisions = 20;
 constexpr int kPhysicalLengthBits = kBitsPerByte * kPhysicalLengthRepeat;
+constexpr float kStreamingFrequencyOffsetsHz[] = {0.0F, 5.0F, -5.0F, 10.0F, -10.0F, 15.0F, -15.0F};
 
 struct SymbolMetrics {
     double energy0 = 0.0;
@@ -234,6 +235,14 @@ BitDecision demodulateSymbol(
     };
 }
 
+bool isValidTonePair(const ModemConfig& config) {
+    const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
+    return config.frequency0Hz > 0.0F
+        && config.frequency1Hz > 0.0F
+        && config.frequency0Hz < nyquistHz
+        && config.frequency1Hz < nyquistHz;
+}
+
 float meanConfidence(
     const std::vector<BitDecision>& decisions,
     std::size_t start,
@@ -345,8 +354,12 @@ std::vector<StreamingReceiverEvent> StreamingReceiver::takeEvents() {
 }
 
 int StreamingReceiver::samplesPerSymbol() const {
+    return samplesPerSymbol(config_);
+}
+
+int StreamingReceiver::samplesPerSymbol(const ModemConfig& config) const {
     const auto samples = static_cast<int>(
-        std::lround(static_cast<double>(config_.sampleRate) * config_.symbolDurationSec)
+        std::lround(static_cast<double>(config.sampleRate) * config.symbolDurationSec)
     );
     if (samples <= 0) {
         throw std::invalid_argument("symbol duration is too short for sample_rate");
@@ -374,17 +387,29 @@ std::vector<int> StreamingReceiver::phaseOffsets() const {
 
 void StreamingReceiver::resetPhaseStates() {
     phases_.clear();
-    for (const int offset : phaseOffsets()) {
-        PhaseState phase;
-        phase.offsetSamples = offset;
-        phase.nextStartSample = sampleCursor_ + static_cast<std::size_t>(offset);
-        phase.firstBitSample = phase.nextStartSample;
-        phases_.push_back(std::move(phase));
+    const auto offsets = phaseOffsets();
+    for (const float frequencyOffsetHz : kStreamingFrequencyOffsetsHz) {
+        ModemConfig phaseConfig = config_;
+        phaseConfig.frequency0Hz += frequencyOffsetHz;
+        phaseConfig.frequency1Hz += frequencyOffsetHz;
+        if (!isValidTonePair(phaseConfig)) {
+            continue;
+        }
+
+        for (const int offset : offsets) {
+            PhaseState phase;
+            phase.offsetSamples = offset;
+            phase.frequencyOffsetHz = frequencyOffsetHz;
+            phase.config = phaseConfig;
+            phase.nextStartSample = sampleCursor_ + static_cast<std::size_t>(offset);
+            phase.firstBitSample = phase.nextStartSample;
+            phases_.push_back(std::move(phase));
+        }
     }
 }
 
 void StreamingReceiver::processPhase(PhaseState& phase) {
-    const std::size_t symbolSamples = static_cast<std::size_t>(samplesPerSymbol());
+    const std::size_t symbolSamples = static_cast<std::size_t>(samplesPerSymbol(phase.config));
     const std::size_t sampleEnd = sampleCursor_ + buffer_.size();
 
     if (phase.nextStartSample < sampleCursor_) {
@@ -400,7 +425,7 @@ void StreamingReceiver::processPhase(PhaseState& phase) {
             phase.firstBitSample = phase.nextStartSample;
         }
 
-        const auto decision = demodulateSymbol(buffer_, localStart, symbolSamples, config_);
+        const auto decision = demodulateSymbol(buffer_, localStart, symbolSamples, phase.config);
         phase.decisions.push_back(decision);
         phase.bits.push_back(decision.bit);
         phase.nextStartSample += symbolSamples;
@@ -434,7 +459,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             }
 
             const auto syncSample = static_cast<std::int64_t>(
-                phase.firstBitSample + syncStart * static_cast<std::size_t>(samplesPerSymbol())
+                phase.firstBitSample + syncStart * static_cast<std::size_t>(samplesPerSymbol(phase.config))
             );
 
             StreamingReceiverEvent syncEvent;
@@ -484,7 +509,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             candidate.confidence = meanConfidence(phase.decisions, robustStart, robustBits);
 
             const auto candidateEndSample = phase.firstBitSample
-                + (robustStart + robustBits) * static_cast<std::size_t>(samplesPerSymbol());
+                + (robustStart + robustBits) * static_cast<std::size_t>(samplesPerSymbol(phase.config));
 
             StreamingReceiverEvent frameEvent = lengthEvent;
             frameEvent.payloadLength = payloadLength;
@@ -591,7 +616,7 @@ void StreamingReceiver::trimBitBuffers() {
             phase.decisions.begin(),
             phase.decisions.begin() + static_cast<std::ptrdiff_t>(std::min(excess, phase.decisions.size()))
         );
-        phase.firstBitSample += excess * static_cast<std::size_t>(samplesPerSymbol());
+        phase.firstBitSample += excess * static_cast<std::size_t>(samplesPerSymbol(phase.config));
     }
 }
 

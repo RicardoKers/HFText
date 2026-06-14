@@ -11,6 +11,9 @@ logs/
 *.wav
 *.log
 
+# Release staging folders
+dist/HFText-win64-release-*/
+
 # C/C++ build
 build/
 build*/

@@ -118,7 +118,7 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e
 - indicador simples de qualidade RX baseado na confianca media do demodulador;
 - linha `Estado RX` com resumo operacional de sincronismo, ultimo `PHYS_LENGTH`, qualidade e ultimo motivo de rejeicao;
 - linha `Sessao RX` com duracao e contadores consolidados da recepcao atual;
-- waterfall RX simples para observacao visual do audio recebido;
+- waterfall RX simples para observacao visual do audio recebido, com marcadores amarelos nos tons RX configurados;
 - area de texto recebido;
 - log simples;
 - botao `Salvar Evidencia RX` para gravar um WAV do audio RX recente e um TXT com configuracao, texto recebido e log;
@@ -129,7 +129,7 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e
 
 A interface agora separa operacao e configuracao em abas:
 
-- `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso TX/RX, qualidade RX, waterfall, botoes e texto recebido;
+- `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso TX/RX, qualidade RX, waterfall com marcadores de tons, botoes e texto recebido;
 - `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio, log e botoes para salvar evidencia RX, salvar log ou limpar o log.
 
 A area `Texto recebido` funciona como historico: novas mensagens ou resultados de decodificacao sao adicionados abaixo dos anteriores.
@@ -155,7 +155,9 @@ A captura RX basica tambem foi iniciada com `AudioInput`.
 
 Nesta etapa, o botao `Receber` inicia escuta continua pelo dispositivo de entrada selecionado. Os blocos de audio capturados alimentam o `StreamingReceiver` em uma thread de segundo plano, enquanto a interface continua atualizando `Nivel RX`, qualidade e waterfall.
 
-O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final.
+O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final. O receptor em fluxo tambem testa pequenos deslocamentos comuns de frequencia nos dois tons, alinhando a escuta continua com a tolerancia do decoder WAV offline para erro leve de sintonia/BFO/SDR.
+
+Na waterfall, duas linhas verticais amarelas indicam os tons `Tom 0` e `Tom 1` configurados para recepcao. Elas sao referencias visuais para sintonia: se as trilhas recebidas aparecerem deslocadas para um lado das linhas, o operador pode ajustar a sintonia do radio/SDR ou os tons configurados. As linhas nao alteram a decodificacao.
 
 Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra o texto recebido, offset/fases testadas e confianca media no log.
 
@@ -199,4 +201,4 @@ As proximas melhorias de interface devem ajudar o operador a prever e acompanhar
 - estender a sanitizacao visual futuramente para outros campos de texto transmitidos, como indicativo, se necessario;
 - manter a barra de progresso TX sincronizada com pausas/interrupcoes futuras quando houver controle mais avancado de audio.
 
-A primeira waterfall RX foi adicionada ao app. Ela e apenas visual, usa blocos capturados de audio para mostrar energia aproximada entre 300 Hz e 3 kHz, possui escala horizontal de frequencia em passos de 300 Hz, nao altera a decodificacao e roda no thread da UI para nao bloquear a reciclagem dos buffers de captura.
+A primeira waterfall RX foi adicionada ao app. Ela e apenas visual, usa blocos capturados de audio para mostrar energia aproximada entre 300 Hz e 3 kHz, possui escala horizontal de frequencia em passos de 300 Hz, mostra marcadores amarelos nos tons RX configurados, nao altera a decodificacao e roda no thread da UI para nao bloquear a reciclagem dos buffers de captura.

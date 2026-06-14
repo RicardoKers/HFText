@@ -42,15 +42,19 @@ add_executable(hftext_tx_wav
 add_executable(hftext_rx_wav
     tools/hftext_rx_wav.cpp
 )
+add_executable(hftext_stream_wav
+    tools/hftext_stream_wav.cpp
+)
 
 target_link_libraries(hftext_tx_wav PRIVATE hftext_core hftext_wav_io)
 target_link_libraries(hftext_rx_wav PRIVATE hftext_core hftext_wav_io)
+target_link_libraries(hftext_stream_wav PRIVATE hftext_core hftext_wav_io)
 
 if(MSVC)
     set_target_properties(hftext_core PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
-    set_target_properties(hftext_wav_io hftext_tx_wav hftext_rx_wav PROPERTIES
+    set_target_properties(hftext_wav_io hftext_tx_wav hftext_rx_wav hftext_stream_wav PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
 endif()
@@ -154,10 +158,23 @@ if(HFTEXT_CORE_BUILD_TESTS)
             --f1 2000
             "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip.wav"
     )
+    add_test(
+        NAME hftext_cli_stream_wav_test
+        COMMAND hftext_stream_wav
+            --verbose
+            --symbol-duration 0.01
+            --f0 1000
+            --f1 2000
+            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip.wav"
+    )
     set_tests_properties(hftext_cli_tx_wav_test PROPERTIES
         PASS_REGULAR_EXPRESSION "Modo: robust"
     )
     set_tests_properties(hftext_cli_rx_wav_test PROPERTIES
+        DEPENDS hftext_cli_tx_wav_test
+        PASS_REGULAR_EXPRESSION "pu5lrk Teste"
+    )
+    set_tests_properties(hftext_cli_stream_wav_test PROPERTIES
         DEPENDS hftext_cli_tx_wav_test
         PASS_REGULAR_EXPRESSION "pu5lrk Teste"
     )

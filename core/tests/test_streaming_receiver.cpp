@@ -121,6 +121,27 @@ int main() {
     assert(delayedResults.size() == 1);
     assert(delayedResults.front().text == "pu5lrk streaming");
 
+    hftext::ModemConfig shiftedRxConfig = config;
+    shiftedRxConfig.symbolDurationSec = 0.03F;
+    hftext::ModemConfig shiftedTxConfig = shiftedRxConfig;
+    shiftedTxConfig.frequency0Hz += 15.0F;
+    shiftedTxConfig.frequency1Hz += 15.0F;
+    const auto shiftedAudio = hftext::modulateText("pu5lrk shifted", shiftedTxConfig);
+    hftext::StreamingReceiver shiftedReceiver(shiftedRxConfig);
+    std::vector<hftext::DecodeResult> shiftedResults;
+    const std::size_t shiftedChunkSize = 997;
+    for (std::size_t offset = 0; offset < shiftedAudio.size(); offset += shiftedChunkSize) {
+        const auto end = std::min(shiftedAudio.size(), offset + shiftedChunkSize);
+        const std::vector<float> chunk(shiftedAudio.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       shiftedAudio.begin() + static_cast<std::ptrdiff_t>(end));
+        const auto results = shiftedReceiver.pushSamples(chunk);
+        shiftedResults.insert(shiftedResults.end(), results.begin(), results.end());
+    }
+    assert(shiftedResults.size() == 1);
+    assert(shiftedResults.front().crcOk);
+    assert(shiftedResults.front().payloadValid);
+    assert(shiftedResults.front().text == "pu5lrk shifted");
+
     receiver.reset();
     auto softDamagedAudio = audio;
     damageStartSyncAndPhysicalLengthSoftly(softDamagedAudio, config);
