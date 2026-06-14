@@ -81,6 +81,7 @@ Os testes de canal iniciais devem cobrir recuperação em condições moderadas 
 - offset DC;
 - clipping leve;
 - pequeno desvio de frequência;
+- desvio comum intermediario de frequencia entre os tons configurados e recebidos, como `7,5 Hz`;
 - fading leve por blocos.
 
 Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes por nível de ruído e registrar:
@@ -217,6 +218,10 @@ Para testes de campo, o app PC deve permitir salvar manualmente um pacote de evi
 O utilitario `python-sim/field_summary.py` deve consolidar varios TXT de evidencia em um unico CSV agregado, preservando o caminho do arquivo original em `source_txt`. Isso permite comparar rodadas de campo por duracao de simbolo, contadores RX, qualidade, texto recebido e diagnosticos do ultimo quadro aceito. Quando gravar em arquivo, ele tambem deve gerar um CSV agrupado por parametros de modem para comparar taxa de aceite, qualidade media/minima e medias dos contadores RX entre configuracoes.
 
 O utilitario `python-sim/field_replay.py` deve reproduzir os WAVs de evidencias aceitas usando o CLI C++ `hftext_rx_wav`, com duracao de simbolo e tons extraidos do `Resumo CSV`, e gravar `field_replay.csv` com texto esperado, texto decodificado, codigo de retorno e status. Esse replay nao substitui o RX continuo, mas permite verificar se capturas reais continuam decodificaveis pelo decoder offline apos alteracoes futuras.
+
+Quando uma evidencia de campo falhar no RX continuo mas for recuperada por `hftext_rx_wav`, ela deve ser tratada como caso de regressao para aproximar o `StreamingReceiver` do caminho offline sem alterar o protocolo. Nos testes de 2026-06-14 com simbolo de `0,5 s`, uma captura no limite de sinal exigiu o deslocamento comum intermediario de frequencia, reforcando a necessidade de manter essa tolerancia no RX em fluxo.
+
+Rodada posterior em 2026-06-14 com simbolo de `0,5 s` confirmou a melhoria: a condicao que falhava antes passou a receber, uma condicao ainda mais fraca foi recebida com qualidade baixa, e uma terceira condicao com muito ruido branco falhou tambem no decoder WAV offline. Esse tipo de falha deve ser interpretado inicialmente como limite real de SNR/canal, nao como problema especifico do RX continuo.
 
 No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
 

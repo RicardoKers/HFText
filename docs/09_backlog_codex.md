@@ -426,6 +426,10 @@ Foi adicionado tambem o utilitario `python-sim/field_replay.py` para reproduzir 
 
 Analise dos primeiros logs radio-SDR de 2026-06-07 mostrou que WAVs rejeitados durante RX continuo eram decodificaveis pelo `hftext_rx_wav` offline quando este usava sua pequena busca de deslocamento comum dos tons. O `StreamingReceiver` foi alinhado com essa estrategia e passou a manter variantes de frequencia em torno dos tons configurados, sem alterar o protocolo ou a regra de aceitacao por CRC.
 
+Teste real de 2026-06-14 com simbolos de `0,5 s` confirmou boa sensibilidade do RX, inclusive com sinais progressivamente mais fracos. Uma evidencia no limite ainda era decodificavel pelo caminho offline quando os tons recebidos eram tratados como cerca de `+7,5 Hz` acima do configurado, entao o `StreamingReceiver` passou a incluir esse passo intermediario de deslocamento comum. Tambem foi corrigida a contagem de quadros aceitos na interface para usar o resultado decodificado, nao apenas eventos diagnosticos limitados por lote.
+
+Nova rodada de campo no mesmo dia validou a correcao: a condicao anterior foi recebida, uma condicao quase inaudivel ao ouvido humano tambem foi recebida, e a falha com ruido branco forte nao foi recuperada nem pelo decoder WAV offline. O comportamento atual parece coerente com limite de SNR, mantendo a proxima prioridade em coleta comparativa e nao em mudanca imediata de protocolo.
+
 Foi adicionado o CLI C++ `hftext_stream_wav` para alimentar WAVs salvos ao `StreamingReceiver` em blocos, permitindo reproduzir capturas reais pelo mesmo caminho incremental usado pelo app PC. Ele complementa `hftext_rx_wav`, que continua sendo o decoder offline com busca mais ampla de WAV fechado.
 
 O protocolo HFText Basic v0.1 foi consolidado como baseline operacional para validacao de campo: `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Novos modos incompativeis, como repeticao operacional, ACK, 4-FSK ou 8-FSK, devem ser tratados como v0.2 ou posterior.

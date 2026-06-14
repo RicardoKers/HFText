@@ -292,12 +292,10 @@ struct RxSessionEventCounts {
     int sync = 0;
     int length = 0;
     int rejected = 0;
-    int accepted = 0;
 };
 
 RxSessionEventCounts rxSessionEventCounts(const std::vector<hftext::StreamingReceiverEvent>& events) {
     RxSessionEventCounts counts;
-    const hftext::StreamingReceiverEvent* bestDecoded = nullptr;
     const hftext::StreamingReceiverEvent* bestLength = nullptr;
     const hftext::StreamingReceiverEvent* bestSync = nullptr;
     const hftext::StreamingReceiverEvent* bestRejected = nullptr;
@@ -305,9 +303,6 @@ RxSessionEventCounts rxSessionEventCounts(const std::vector<hftext::StreamingRec
     for (const auto& event : events) {
         switch (event.type) {
         case hftext::StreamingReceiverEventType::FrameDecoded:
-            if (bestDecoded == nullptr || event.confidence > bestDecoded->confidence) {
-                bestDecoded = &event;
-            }
             break;
         case hftext::StreamingReceiverEventType::FrameRejected:
             if (isStrongSyncEvent(event) && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
@@ -328,11 +323,6 @@ RxSessionEventCounts rxSessionEventCounts(const std::vector<hftext::StreamingRec
         case hftext::StreamingReceiverEventType::FrameWaiting:
             break;
         }
-    }
-
-    if (bestDecoded != nullptr) {
-        counts.accepted = 1;
-        return counts;
     }
 
     if (bestLength != nullptr) {
@@ -1337,7 +1327,6 @@ void MainWindow::updateRxSessionFromEvents(const std::vector<hftext::StreamingRe
     rxSessionSyncCount_ += counts.sync;
     rxSessionLengthCount_ += counts.length;
     rxSessionRejectedCount_ += counts.rejected;
-    rxSessionAcceptedCount_ += counts.accepted;
     setRxSessionText();
 }
 
@@ -1581,6 +1570,8 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
                     rxFrameProgressBar_->setValue(rxDisplayedFrameProgressPermille_);
                     showDecodeResult(result);
                     if (result.crcOk && result.payloadValid) {
+                        ++rxSessionAcceptedCount_;
+                        setRxSessionText();
                         appendLog("RX texto: " + QString::fromStdString(result.text));
                     }
                     lastRxQualityText_ = formatConfidence(result.confidence);

@@ -100,7 +100,7 @@ O primeiro passo no C++ e `StreamingReceiver`, que:
 
 - recebe blocos de amostras por `pushSamples`;
 - mantém um banco limitado de fases de simbolo para nao depender do instante exato em que a captura foi iniciada;
-- mantem variantes pequenas de deslocamento comum de frequencia dos dois tons, para tolerar erro leve de sintonia/BFO/SDR no RX continuo;
+- mantem variantes pequenas de deslocamento comum de frequencia dos dois tons, incluindo passos intermediarios como `7,5 Hz`, para tolerar erro leve de sintonia/BFO/SDR no RX continuo;
 - demodula incrementalmente apenas janelas de simbolo novas;
 - acumula bits por fase em uma janela limitada;
 - procura `START_SYNC`, recupera `PHYS_LENGTH` com apoio opcional da qualidade por simbolo e espera apenas o bloco robusto de tamanho conhecido;

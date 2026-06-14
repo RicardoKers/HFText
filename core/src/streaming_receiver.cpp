@@ -24,7 +24,17 @@ constexpr int kMaxRetainedBits = 1800;
 constexpr std::size_t kMaxEventsPerBatch = 512;
 constexpr int kPhaseDivisions = 20;
 constexpr int kPhysicalLengthBits = kBitsPerByte * kPhysicalLengthRepeat;
-constexpr float kStreamingFrequencyOffsetsHz[] = {0.0F, 5.0F, -5.0F, 10.0F, -10.0F, 15.0F, -15.0F};
+constexpr float kStreamingFrequencyOffsetsHz[] = {
+    0.0F,
+    5.0F,
+    -5.0F,
+    7.5F,
+    -7.5F,
+    10.0F,
+    -10.0F,
+    15.0F,
+    -15.0F,
+};
 
 struct SymbolMetrics {
     double energy0 = 0.0;

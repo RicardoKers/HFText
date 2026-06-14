@@ -155,7 +155,7 @@ A captura RX basica tambem foi iniciada com `AudioInput`.
 
 Nesta etapa, o botao `Receber` inicia escuta continua pelo dispositivo de entrada selecionado. Os blocos de audio capturados alimentam o `StreamingReceiver` em uma thread de segundo plano, enquanto a interface continua atualizando `Nivel RX`, qualidade e waterfall.
 
-O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final. O receptor em fluxo tambem testa pequenos deslocamentos comuns de frequencia nos dois tons, alinhando a escuta continua com a tolerancia do decoder WAV offline para erro leve de sintonia/BFO/SDR.
+O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final. O receptor em fluxo tambem testa pequenos deslocamentos comuns de frequencia nos dois tons, incluindo um passo intermediario de `7,5 Hz`, alinhando a escuta continua com a tolerancia do decoder WAV offline para erro leve de sintonia/BFO/SDR.
 
 Na waterfall, duas linhas verticais amarelas indicam os tons `Tom 0` e `Tom 1` configurados para recepcao. Elas sao referencias visuais para sintonia: se as trilhas recebidas aparecerem deslocadas para um lado das linhas, o operador pode ajustar a sintonia do radio/SDR ou os tons configurados. As linhas nao alteram a decodificacao.
 
