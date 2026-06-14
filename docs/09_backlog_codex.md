@@ -430,6 +430,8 @@ Teste real de 2026-06-14 com simbolos de `0,5 s` confirmou boa sensibilidade do 
 
 Nova rodada de campo no mesmo dia validou a correcao: a condicao anterior foi recebida, uma condicao quase inaudivel ao ouvido humano tambem foi recebida, e a falha com ruido branco forte nao foi recuperada nem pelo decoder WAV offline. O comportamento atual parece coerente com limite de SNR, mantendo a proxima prioridade em coleta comparativa e nao em mudanca imediata de protocolo.
 
+Comparativo posterior com simbolos de `0,8 s`, `0,5 s` e `0,3 s` mostrou que `0,8 s` pode ajudar como referencia de robustez, mas e operacionalmente longo demais para uso normal em HF. `0,5 s` permanece como baseline mais equilibrado, e `0,3 s` aparenta ser promissor quando o canal esta razoavel. Falhas repetidas de `0,5 s` no conjunto mais ruidoso tambem falharam no decoder WAV offline, sugerindo limite real de SNR/canal em vez de bug especifico de streaming.
+
 Foi adicionado o CLI C++ `hftext_stream_wav` para alimentar WAVs salvos ao `StreamingReceiver` em blocos, permitindo reproduzir capturas reais pelo mesmo caminho incremental usado pelo app PC. Ele complementa `hftext_rx_wav`, que continua sendo o decoder offline com busca mais ampla de WAV fechado.
 
 O protocolo HFText Basic v0.1 foi consolidado como baseline operacional para validacao de campo: `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Novos modos incompativeis, como repeticao operacional, ACK, 4-FSK ou 8-FSK, devem ser tratados como v0.2 ou posterior.

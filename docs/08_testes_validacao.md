@@ -223,6 +223,8 @@ Quando uma evidencia de campo falhar no RX continuo mas for recuperada por `hfte
 
 Rodada posterior em 2026-06-14 com simbolo de `0,5 s` confirmou a melhoria: a condicao que falhava antes passou a receber, uma condicao ainda mais fraca foi recebida com qualidade baixa, e uma terceira condicao com muito ruido branco falhou tambem no decoder WAV offline. Esse tipo de falha deve ser interpretado inicialmente como limite real de SNR/canal, nao como problema especifico do RX continuo.
 
+Outra rodada de campo em 2026-06-14 comparou simbolos de `0,8 s`, `0,5 s` e `0,3 s` em sinal razoavel, sinal baixo e ruido. Os dois primeiros conjuntos foram recebidos; no conjunto com mais ruido, duas tentativas em `0,5 s` falharam tambem no decoder WAV offline, indicando perda real por canal/ruido e nao apenas falha do RX continuo. O teste tambem confirmou que simbolos muito longos ocupam o canal por tempo excessivo; portanto `0,8 s` deve permanecer como referencia de teste/robustez extrema, enquanto `0,5 s` continua como baseline operacional e `0,3 s` merece mais coleta como modo rapido em canal bom.
+
 No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
 
 ## Validacao no app PC
