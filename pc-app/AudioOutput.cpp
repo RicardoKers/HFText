@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 #ifdef _WIN32
 #include <limits>
@@ -79,6 +80,24 @@ void AudioOutput::playWavAsync(const std::string& path, unsigned int deviceId) {
     thread_ = std::thread(&AudioOutput::playThread, this, path, deviceId);
 }
 
+void AudioOutput::playSamplesAsync(std::vector<float> samples, int sampleRate, unsigned int deviceId) {
+    if (sampleRate <= 0 || samples.empty()) {
+        throw std::invalid_argument("audio TX vazio");
+    }
+
+    stop();
+    durationSeconds_ = 0.0;
+    positionSeconds_ = 0.0;
+    playing_ = false;
+    thread_ = std::thread(
+        &AudioOutput::playSamplesThread,
+        this,
+        std::move(samples),
+        sampleRate,
+        deviceId
+    );
+}
+
 void AudioOutput::stop() {
 #ifdef _WIN32
     {
@@ -109,6 +128,20 @@ double AudioOutput::positionSeconds() const {
 }
 
 void AudioOutput::playThread(std::string path, unsigned int deviceId) {
+    try {
+        const auto wav = hftext::tools::readPcm16Wav(path);
+        playSamplesBlocking(wav.samples, wav.sampleRate, deviceId);
+    } catch (...) {
+        playing_ = false;
+        positionSeconds_ = 0.0;
+    }
+}
+
+void AudioOutput::playSamplesThread(std::vector<float> samples, int sampleRate, unsigned int deviceId) {
+    playSamplesBlocking(std::move(samples), sampleRate, deviceId);
+}
+
+void AudioOutput::playSamplesBlocking(std::vector<float> samples, int sampleRate, unsigned int deviceId) {
 #ifdef _WIN32
     HWAVEOUT handle = nullptr;
     HANDLE event = nullptr;
@@ -116,23 +149,22 @@ void AudioOutput::playThread(std::string path, unsigned int deviceId) {
     bool headerPrepared = false;
 
     try {
-        const auto wav = hftext::tools::readPcm16Wav(path);
-        if (wav.sampleRate <= 0 || wav.samples.empty()) {
-            throw std::runtime_error("WAV sem audio valido");
+        if (sampleRate <= 0 || samples.empty()) {
+            throw std::runtime_error("audio sem amostras validas");
         }
-        durationSeconds_ = static_cast<double>(wav.samples.size()) / static_cast<double>(wav.sampleRate);
+        durationSeconds_ = static_cast<double>(samples.size()) / static_cast<double>(sampleRate);
         positionSeconds_ = 0.0;
 
         std::vector<std::int16_t> pcm;
-        pcm.reserve(wav.samples.size());
-        for (float sample : wav.samples) {
+        pcm.reserve(samples.size());
+        for (float sample : samples) {
             pcm.push_back(floatToPcm16(sample));
         }
 
         WAVEFORMATEX format = {};
         format.wFormatTag = WAVE_FORMAT_PCM;
         format.nChannels = 1;
-        format.nSamplesPerSec = static_cast<DWORD>(wav.sampleRate);
+        format.nSamplesPerSec = static_cast<DWORD>(sampleRate);
         format.wBitsPerSample = 16;
         format.nBlockAlign = static_cast<WORD>(format.nChannels * format.wBitsPerSample / 8);
         format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
@@ -195,7 +227,8 @@ void AudioOutput::playThread(std::string path, unsigned int deviceId) {
         currentHandle_ = nullptr;
     }
 #else
-    (void)path;
+    (void)samples;
+    (void)sampleRate;
     (void)deviceId;
     throw std::runtime_error("reproducao de audio ainda nao suportada nesta plataforma");
 #endif

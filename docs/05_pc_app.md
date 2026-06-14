@@ -95,22 +95,24 @@ aplicação mostra texto decodificado.
 
 ## Estado atual da interface
 
-A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e por audio em tempo real:
+A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao normal em formato de chat e recursos de debug por WAV:
 
-- campo de indicativo;
-- campo de mensagem;
-- botao `Gerar WAV`;
-- botao `Transmitir WAV`;
-- botao `Parar TX`;
-- botao `Receber`;
-- botao `Parar RX`;
-- botao `Decodificar WAV`;
-- botao `Limpar RX` para limpar apenas o historico visual de texto recebido;
+- historico de mensagens recebidas no topo da aba `Operacao`;
+- waterfall RX no centro da aba `Operacao`, com marcadores amarelos nos tons configurados;
+- campo curto de mensagem na parte inferior;
+- botao iconografico de envio ao lado da mensagem;
+- o mesmo botao de envio passa a parar/cancelar o TX enquanto houver audio em transmissao;
+- barra discreta de progresso TX, sem texto;
+- limpeza do historico RX por menu de contexto no historico de mensagens;
+- indicativo e parametros do modem na aba `Configuracao`;
+- botoes `Receber` e `Parar RX` na aba `Configuracao`;
+- botoes `Gerar WAV` e `Decodificar WAV` mantidos na aba `Configuracao` como ferramentas de debug;
 - configuracao de sample rate TX/WAV, sample rate RX, duracao de simbolo, tom 0, tom 1, amplitude e preambulo;
+- recepcao continua iniciada automaticamente ao abrir o app quando ha dispositivo de entrada disponivel;
+- reinicio automatico do RX ativo quando parametros de recepcao mudam, como sample rate RX, duracao de simbolo, tons, preambulo, entrada de audio ou log detalhado;
 - opcao `Log RX detalhado` para alternar entre log operacional resumido e telemetria completa de debug;
 - estimativa TX ao vivo com simbolos de payload, bits totais e duracao aproximada;
 - sanitizacao visual da mensagem TX, preservando os acentos suportados do portugues e substituindo caracteres invalidos por `?` durante a digitacao;
-- barra de progresso durante a reproducao TX;
 - barra de progresso RX baseada no bloco robusto em acumulacao;
 - selecao de dispositivo de saida de audio;
 - selecao de dispositivo de entrada de audio;
@@ -129,11 +131,11 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao por WAV e
 
 A interface agora separa operacao e configuracao em abas:
 
-- `Operacao`: indicativo, mensagem, estimativa TX, niveis/progresso TX/RX, qualidade RX, waterfall com marcadores de tons, botoes e texto recebido;
-- `Configuracao`: sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio, log e botoes para salvar evidencia RX, salvar log ou limpar o log.
+- `Operacao`: historico de mensagens recebidas, waterfall, progresso TX, estimativa curta e campo de mensagem com botao de enviar/parar;
+- `Configuracao`: indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio, metricas RX, controles RX, debug WAV, log e botoes para salvar evidencia RX, salvar log ou limpar o log.
 
 A area `Texto recebido` funciona como historico: novas mensagens ou resultados de decodificacao sao adicionados abaixo dos anteriores.
-O botao `Limpar RX` limpa esse historico visual sem apagar WAVs, log ou configuracoes.
+O comando `Limpar RX`, no menu de contexto desse historico, limpa o historico visual sem apagar WAVs, log ou configuracoes.
 
 Ao fechar, o app salva localmente indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio selecionados, estado do `Log RX detalhado` e geometria da janela. Esses valores sao restaurados na proxima abertura. A mensagem TX digitada nao e persistida, para evitar reabrir o app com texto antigo pronto para transmissao.
 
@@ -145,19 +147,25 @@ No Windows, o alvo `hftext_pc` deve ser gerado como aplicacao grafica, sem abrir
 
 ## Estado atual do audio e RX continuo
 
-A reproducao de audio TX foi iniciada no `pc-app/` com `AudioOutput`.
+A reproducao de audio TX no `pc-app/` usa `AudioOutput`.
 
-Nesta etapa, o botao `Transmitir WAV` reproduz explicitamente o ultimo WAV gerado no dispositivo de saida selecionado, ou permite escolher um WAV se nenhum arquivo tiver sido gerado na sessao. O botao `Parar TX` interrompe a reproducao.
+Na operacao normal, o botao de envio gera o audio diretamente a partir do texto atual e transmite pelo dispositivo de saida selecionado, sem exigir salvar WAV antes. Enquanto a transmissao esta em andamento, o mesmo botao muda para a funcao de parar/cancelar TX. O audio so e transmitido apos acao explicita do operador no botao de envio.
 
 Ainda nao ha selecao avancada de formato de audio ou controle automatico de ganho.
 
 A captura RX basica tambem foi iniciada com `AudioInput`.
 
-Nesta etapa, o botao `Receber` inicia escuta continua pelo dispositivo de entrada selecionado. Os blocos de audio capturados alimentam o `StreamingReceiver` em uma thread de segundo plano, enquanto a interface continua atualizando `Nivel RX`, qualidade e waterfall.
+Nesta etapa, a escuta continua e iniciada automaticamente ao abrir o app quando ha dispositivo de entrada disponivel. O botao `Receber` permanece como controle manual para religar a escuta depois de uma parada, e `Parar RX` interrompe a recepcao. Os blocos de audio capturados alimentam o `StreamingReceiver` em uma thread de segundo plano, enquanto a interface continua atualizando `Nivel RX`, qualidade e waterfall.
+
+O RX foi projetado para permanecer ligado por horas. Para isso, a fila entre captura e worker e limitada, o historico interno recente de `AudioInput` e limitado, a evidencia manual usa uma janela circular recente e o contador total de amostras fica separado do audio armazenado. Assim a duracao registrada continua correta sem crescimento indefinido de memoria.
+
+Quando o operador altera parametros que afetam a recepcao enquanto o RX esta ativo, o app reinicia a escuta automaticamente para recriar o `StreamingReceiver` com a nova configuracao. Isso evita a necessidade de parar e iniciar manualmente depois de mudar tons, sample rate RX, duracao de simbolo, preambulo, dispositivo de entrada ou o estado do log detalhado.
 
 O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final. O receptor em fluxo tambem testa pequenos deslocamentos comuns de frequencia nos dois tons, incluindo um passo intermediario de `7,5 Hz`, alinhando a escuta continua com a tolerancia do decoder WAV offline para erro leve de sintonia/BFO/SDR.
 
 Na waterfall, duas linhas verticais amarelas indicam os tons `Tom 0` e `Tom 1` configurados para recepcao. Elas sao referencias visuais para sintonia: se as trilhas recebidas aparecerem deslocadas para um lado das linhas, o operador pode ajustar a sintonia do radio/SDR ou os tons configurados. As linhas nao alteram a decodificacao.
+
+A paleta da waterfall tambem ajuda no ajuste de nivel: trilhas fracas ou normais tendem ao verde, trilhas proximas de saturacao puxam para amarelo e blocos de entrada no fundo de escala fazem as trilhas daquele instante aparecerem em vermelho. O amarelo/vermelho e aviso visual de possivel saturacao/clipping da entrada de audio; a aceitacao da mensagem continua dependendo apenas do core e do CRC.
 
 Quando o `StreamingReceiver` encontra um quadro com CRC e payload validos, o app adiciona a mensagem ao historico de `Texto recebido` e registra o texto recebido, offset/fases testadas e confianca media no log.
 

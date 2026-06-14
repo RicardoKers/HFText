@@ -180,7 +180,7 @@ Fases 1, 2 e 3 possuem implementacao inicial validada por testes automatizados.
 
 A Fase 4 foi iniciada com uma aplicacao PC offline em `pc-app/`, usando Qt Widgets, `hftext_core`, geracao de WAV e decodificacao de WAV. O alvo do app e ignorado pelo CMake quando Qt6 Widgets nao esta instalado.
 
-A Fase 5 possui os fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, botao `Transmitir WAV`, botao `Parar TX`, `AudioInput`, selecao de dispositivo de entrada, botao `Receber`, botao `Parar RX`, indicador simples de nivel RX, metricas basicas da captura e recepcao em fluxo via `StreamingReceiver`.
+A Fase 5 possui os fluxos basicos de audio: o `pc-app/` possui `AudioOutput`, selecao de dispositivo de saida, transmissao direta pelo botao de envio, `AudioInput`, selecao de dispositivo de entrada, RX continuo iniciado automaticamente ao abrir, botoes manuais `Receber`/`Parar RX`, indicador simples de nivel RX, metricas basicas da captura e recepcao em fluxo via `StreamingReceiver`.
 
 O RX continuo foi integrado ao app em uma thread propria. O app nao depende mais de capturar um WAV completo para tentar decodificar; arquivos WAV permanecem apenas para debug e reproducao de casos reais. A decodificacao robusta em audio usa Viterbi soft-decision no core C++.
 

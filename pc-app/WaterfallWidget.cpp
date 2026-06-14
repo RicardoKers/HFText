@@ -52,6 +52,14 @@ double toneLevel(const std::vector<float>& samples, int sampleRate, double frequ
     return std::clamp((db + 60.0) / 60.0, 0.0, 1.0);
 }
 
+double peakLevel(const std::vector<float>& samples) {
+    double peak = 0.0;
+    for (float sample : samples) {
+        peak = (std::max)(peak, std::abs(static_cast<double>(sample)));
+    }
+    return peak;
+}
+
 }  // namespace
 
 WaterfallWidget::WaterfallWidget(QWidget* parent)
@@ -73,11 +81,12 @@ void WaterfallWidget::addSamples(const std::vector<float>& samples, int sampleRa
         std::memcpy(image_.scanLine(y), image_.constScanLine(y + 1), static_cast<std::size_t>(image_.bytesPerLine()));
     }
 
+    const double inputPeak = peakLevel(samples);
     auto* row = reinterpret_cast<QRgb*>(image_.scanLine(image_.height() - 1));
     for (int x = 0; x < image_.width(); ++x) {
         const double ratio = image_.width() <= 1 ? 0.0 : static_cast<double>(x) / static_cast<double>(image_.width() - 1);
         const double frequency = kMinFrequencyHz + ratio * (kMaxFrequencyHz - kMinFrequencyHz);
-        row[x] = colorForLevel(toneLevel(samples, sampleRate, frequency));
+        row[x] = colorForLevel(toneLevel(samples, sampleRate, frequency), inputPeak);
     }
 
     update();
@@ -189,10 +198,26 @@ int WaterfallWidget::frequencyToX(double frequencyHz, const QRect& targetRect) c
     );
 }
 
-QRgb WaterfallWidget::colorForLevel(double level) const {
+QRgb WaterfallWidget::colorForLevel(double level, double inputPeak) const {
     const double clamped = std::clamp(level, 0.0, 1.0);
-    const int red = static_cast<int>(std::clamp((clamped - 0.55) * 2.2, 0.0, 1.0) * 255.0);
-    const int green = static_cast<int>(std::clamp(clamped * 1.25, 0.0, 1.0) * 255.0);
-    const int blue = static_cast<int>(std::clamp(0.25 + clamped * 1.6, 0.0, 1.0) * 255.0);
+    if (clamped <= 0.03) {
+        return qRgb(0, 0, 18);
+    }
+
+    if (inputPeak >= 0.98 && clamped > 0.08) {
+        const int green = static_cast<int>(std::clamp((1.0 - clamped) * 90.0, 20.0, 90.0));
+        return qRgb(255, green, 0);
+    }
+
+    int red = static_cast<int>(std::clamp((clamped - 0.72) * 0.70, 0.0, 1.0) * 90.0);
+    int green = static_cast<int>(std::clamp((clamped - 0.02) * 1.55, 0.0, 1.0) * 235.0);
+    int blue = static_cast<int>(std::clamp(0.05 + clamped * 0.22, 0.0, 0.24) * 255.0);
+
+    if (inputPeak >= 0.85 && clamped > 0.08) {
+        red = (std::max)(red, 240);
+        green = (std::max)(green, 190);
+        blue = (std::min)(blue, 24);
+    }
+
     return qRgb(red, green, blue);
 }

@@ -23,7 +23,7 @@ private:
     QRect dataRect() const;
     void ensureImage();
     int frequencyToX(double frequencyHz, const QRect& targetRect) const;
-    QRgb colorForLevel(double level) const;
+    QRgb colorForLevel(double level, double inputPeak) const;
 
     QImage image_;
     double markerFrequency0Hz_ = 1200.0;

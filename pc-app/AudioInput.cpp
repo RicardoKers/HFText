@@ -15,6 +15,7 @@ constexpr int kChannelCount = 1;
 constexpr int kBitsPerSample = 16;
 constexpr int kBufferCount = 4;
 constexpr int kBufferMilliseconds = 100;
+constexpr int kRecentCaptureSeconds = 30;
 
 std::string wideToUtf8(const wchar_t* text) {
     const int required = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
@@ -91,6 +92,7 @@ void AudioInput::start(unsigned int deviceId, int sampleRate) {
         samples_.clear();
         lastError_.clear();
         sampleRate_ = sampleRate;
+        sampleCount_ = 0;
         peak_ = 0.0F;
         clippedSamples_ = 0;
     }
@@ -122,7 +124,7 @@ AudioInput::CaptureStats AudioInput::stopAndSave(const std::string& path) {
         int savedSampleRate = 48000;
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            samples = samples_;
+            samples.assign(samples_.begin(), samples_.end());
             savedSampleRate = sampleRate_;
         }
         hftext::tools::writeMonoPcm16Wav(path, samples, savedSampleRate);
@@ -131,7 +133,7 @@ AudioInput::CaptureStats AudioInput::stopAndSave(const std::string& path) {
     std::lock_guard<std::mutex> lock(mutex_);
     return CaptureStats{
         sampleRate_,
-        samples_.size(),
+        sampleCount_,
         peak_,
         clippedSamples_,
     };
@@ -213,6 +215,14 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     samples_.insert(samples_.end(), chunk.begin(), chunk.end());
+                    const auto maxStoredSamples = static_cast<std::size_t>(
+                        (std::max)(1, sampleRate * kRecentCaptureSeconds)
+                    );
+                    if (samples_.size() > maxStoredSamples) {
+                        const auto excess = samples_.size() - maxStoredSamples;
+                        samples_.erase(samples_.begin(), samples_.begin() + static_cast<std::ptrdiff_t>(excess));
+                    }
+                    sampleCount_ += chunk.size();
                     peak_ = (std::max)(peak_, peak);
                     clippedSamples_ += clippedSamples;
                 }

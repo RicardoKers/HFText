@@ -89,9 +89,13 @@ void ModemController::generateWav(
     const std::string& message,
     const std::string& outputPath
 ) const {
-    const std::string payload = buildPayload(callsign, message);
-    const auto audio = hftext::modulateText(payload, config_);
+    const auto audio = generateAudio(callsign, message);
     hftext::tools::writeMonoPcm16Wav(outputPath, audio, config_.sampleRate);
+}
+
+std::vector<float> ModemController::generateAudio(const std::string& callsign, const std::string& message) const {
+    const std::string payload = buildPayload(callsign, message);
+    return hftext::modulateText(payload, config_);
 }
 
 ModemController::WavStats ModemController::analyzeWav(const std::string& inputPath) const {

@@ -26,6 +26,7 @@ public:
 
     std::vector<DeviceInfo> devices() const;
     void playWavAsync(const std::string& path, unsigned int deviceId);
+    void playSamplesAsync(std::vector<float> samples, int sampleRate, unsigned int deviceId);
     void stop();
     bool isPlaying() const;
     double durationSeconds() const;
@@ -33,6 +34,8 @@ public:
 
 private:
     void playThread(std::string path, unsigned int deviceId);
+    void playSamplesThread(std::vector<float> samples, int sampleRate, unsigned int deviceId);
+    void playSamplesBlocking(std::vector<float> samples, int sampleRate, unsigned int deviceId);
 
     std::mutex mutex_;
     std::thread thread_;

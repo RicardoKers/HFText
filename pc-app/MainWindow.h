@@ -51,6 +51,7 @@ private slots:
     void sanitizeTxMessage();
     void updateTxEstimate();
     void updateWaterfallMarkers();
+    void restartReceiveIfActive();
     void saveLog();
     void saveFieldEvidence();
 
@@ -67,6 +68,8 @@ private:
     void updateRxSessionFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
     void setRxSessionText();
     void rememberAcceptedRx(const hftext::DecodeResult& result);
+    void setTransmitButtonTransmitting(bool transmitting);
+    void setReceiveControlsRecording(bool recording);
     void loadSettings();
     void saveSettings() const;
     void populateInputDevices();

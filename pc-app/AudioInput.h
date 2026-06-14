@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -51,9 +52,10 @@ private:
     mutable std::mutex mutex_;
     SamplesCallback samplesCallback_;
     std::thread thread_;
-    std::vector<float> samples_;
+    std::deque<float> samples_;
     std::string lastError_;
     int sampleRate_ = 48000;
+    std::size_t sampleCount_ = 0;
     float peak_ = 0.0F;
     std::size_t clippedSamples_ = 0;
     std::atomic<bool> stopRequested_{false};

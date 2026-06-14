@@ -225,15 +225,17 @@ Rodada posterior em 2026-06-14 com simbolo de `0,5 s` confirmou a melhoria: a co
 
 Outra rodada de campo em 2026-06-14 comparou simbolos de `0,8 s`, `0,5 s` e `0,3 s` em sinal razoavel, sinal baixo e ruido. Os dois primeiros conjuntos foram recebidos; no conjunto com mais ruido, duas tentativas em `0,5 s` falharam tambem no decoder WAV offline, indicando perda real por canal/ruido e nao apenas falha do RX continuo. O teste tambem confirmou que simbolos muito longos ocupam o canal por tempo excessivo; portanto `0,8 s` deve permanecer como referencia de teste/robustez extrema, enquanto `0,5 s` continua como baseline operacional e `0,3 s` merece mais coleta como modo rapido em canal bom.
 
+Testes posteriores em 2026-06-14 com simbolo de `0,3 s`, variando nivel de sinal e ruido, mostraram recepcao muito boa; falhas isoladas tambem falharam no decoder WAV offline. Uma transmissao curta com simbolo de `0,1 s` e bastante ruido tambem foi recebida. A conclusao operacional provisoria e que `0,3 s` e candidato forte para modo normal/rapido, `0,5 s` permanece referencia robusta, e duracoes muito longas devem ser evitadas por ocuparem demais o canal.
+
 No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
 
 ## Validacao no app PC
 
 No app PC, o fluxo atual de validacao com audio real e:
 
-- gerar um WAV TX com a configuracao desejada;
-- transmitir explicitamente o WAV pelo dispositivo de saida selecionado;
-- iniciar RX pelo dispositivo de entrada selecionado;
+- digitar a mensagem na aba `Operacao`;
+- transmitir explicitamente pelo botao de envio, sem salvar WAV manualmente;
+- confirmar que o RX iniciou automaticamente ao abrir o app ou clicar `Receber` se ele tiver sido parado;
 - aguardar a mensagem aparecer no historico de texto recebido durante a captura;
 - conferir se o texto recebido tambem aparece no log;
 - registrar offset/fase aceita, quantidade de fases testadas e confianca media estimada;
@@ -265,15 +267,19 @@ A interface PC deve manter validacoes manuais simples:
 - ao digitar `ç`, o contador deve tratar como um simbolo, e `Ç` como `shift` + `ç`;
 - ao digitar caracteres invalidos, o campo TX deve mostrar `?` antes de gerar WAV;
 - ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
-- durante `Transmitir WAV`, a barra de progresso deve avancar ate o fim do arquivo ou parar corretamente ao clicar `Parar TX`;
+- ao abrir o app com dispositivo de entrada disponivel, o RX deve iniciar automaticamente sem acao manual do operador;
+- ao alterar sample rate RX, duracao de simbolo, tom 0, tom 1, preambulo, dispositivo de entrada ou `Log RX detalhado` durante RX ativo, a escuta deve reiniciar sozinha e registrar o reinicio no log;
+- durante envio direto, a barra de progresso TX deve avancar ate o fim do audio gerado ou parar corretamente quando o mesmo botao for usado para cancelar TX;
 - durante RX, a barra `Progresso RX` deve avancar de forma monotona dentro de um candidato forte, sem oscilar com candidatos fracos ou fases internas, e voltar a zero apos rejeicao forte completa;
 - durante RX, a linha `Estado RX` deve mostrar o estado consolidado mais util do lote recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao forte;
 - durante RX, a linha `Sessao RX` deve acumular duracao e contadores consolidados da recepcao atual, contando rejeicoes fortes no modo normal, reiniciar ao clicar `Receber` e aparecer no log ao parar RX;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
 - a waterfall RX deve mostrar duas linhas verticais amarelas nos tons `Tom 0` e `Tom 1`, atualizando quando esses valores forem alterados;
+- a waterfall RX deve mostrar trilhas de sinal fraco/normal em verde, puxar para amarelo quando o bloco de entrada estiver proximo de saturacao e ficar vermelha quando saturar;
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
 - o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
 - o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
+- o menu de contexto do historico RX deve oferecer `Limpar RX`;
 - o botao `Salvar Evidencia RX` deve criar um `.wav` com audio RX recente e um `.txt` associado com resumo CSV, sem parar automaticamente a recepcao, preservando os dados do ultimo quadro aceito quando houver;
 - `python-sim/field_summary.py` deve ler os TXT de evidencia e gerar um CSV agregado com uma linha por evidencia valida, alem de um CSV agrupado por parametros quando solicitado ou usado no modo padrao de arquivo;
 - `python-sim/field_replay.py` deve rodar os WAVs das evidencias aceitas pelo `hftext_rx_wav` e gerar um CSV de replay com passa/falha;
@@ -283,6 +289,8 @@ A interface PC deve manter validacoes manuais simples:
 - a janela e o executavel devem exibir o icone proprio do HFText.
 
 A waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao. As trilhas devem ficar proximas das linhas amarelas quando a sintonia estiver correta; deslocamentos visiveis indicam erro leve de sintonia, BFO ou SDR.
+
+Para validar o aviso visual de saturacao na waterfall, aumentar temporariamente o ganho de entrada ou reproduzir um sinal forte e observar se as trilhas passam de verde para amarelo perto de saturar e ficam vermelhas nos instantes em que o pico do bloco se aproxima do fundo de escala. Em nivel normal, as trilhas devem permanecer verdes.
 
 O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. O app deve registrar quantidade e porcentagem de amostras clipadas; picos isolados podem ser ruido impulsivo do canal, enquanto clipping frequente sugere reduzir ganho ou volume quando possivel.
 

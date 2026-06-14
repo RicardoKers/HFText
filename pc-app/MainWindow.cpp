@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QPlainTextEdit>
@@ -22,6 +23,7 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QStringList>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -449,30 +451,56 @@ MainWindow::MainWindow(QWidget* parent)
     auto* tabs = new QTabWidget(this);
     auto* operationPage = new QWidget(this);
     auto* operationLayout = new QVBoxLayout(operationPage);
-    auto* operationForm = new QFormLayout();
     auto* configPage = new QWidget(this);
     auto* configLayout = new QVBoxLayout(configPage);
     auto* configForm = new QFormLayout();
 
-    callsignEdit_ = new QLineEdit(this);
-    callsignEdit_->setText("pu5lrk");
-    operationForm->addRow("Indicativo", callsignEdit_);
+    receivedEdit_ = new QPlainTextEdit(this);
+    receivedEdit_->setReadOnly(true);
+    receivedEdit_->setPlaceholderText("Mensagens recebidas");
+    receivedEdit_->setMinimumHeight(180);
+    receivedEdit_->setContextMenuPolicy(Qt::CustomContextMenu);
+    operationLayout->addWidget(receivedEdit_, 3);
 
-    messageEdit_ = new QPlainTextEdit(this);
-    messageEdit_->setPlaceholderText("Mensagem");
-    messageEdit_->setMinimumHeight(90);
-    operationForm->addRow("Mensagem", messageEdit_);
+    operationLayout->addWidget(new QLabel("Waterfall RX", this));
+    waterfallWidget_ = new WaterfallWidget(this);
+    operationLayout->addWidget(waterfallWidget_, 2);
+
+    txProgressBar_ = new QProgressBar(this);
+    txProgressBar_->setRange(0, 1000);
+    txProgressBar_->setValue(0);
+    txProgressBar_->setTextVisible(false);
+    txProgressBar_->setMaximumHeight(10);
+    operationLayout->addWidget(txProgressBar_);
 
     txEstimateLabel_ = new QLabel(this);
     txEstimateLabel_->setWordWrap(true);
-    operationForm->addRow("Estimativa TX", txEstimateLabel_);
+    operationLayout->addWidget(txEstimateLabel_);
+
+    auto* composerLayout = new QHBoxLayout();
+    messageEdit_ = new QPlainTextEdit(this);
+    messageEdit_->setPlaceholderText("Mensagem");
+    messageEdit_->setMinimumHeight(44);
+    messageEdit_->setMaximumHeight(64);
+    composerLayout->addWidget(messageEdit_, 1);
+
+    transmitButton_ = new QPushButton(this);
+    transmitButton_->setFixedSize(44, 44);
+    transmitButton_->setIcon(style()->standardIcon(QStyle::SP_ArrowForward));
+    transmitButton_->setToolTip("Enviar");
+    composerLayout->addWidget(transmitButton_);
+    operationLayout->addLayout(composerLayout);
+
+    callsignEdit_ = new QLineEdit(this);
+    callsignEdit_->setText("pu5lrk");
+    configForm->addRow("Indicativo", callsignEdit_);
 
     sampleRateSpin_ = new QSpinBox(this);
     sampleRateSpin_->setRange(8000, 192000);
     sampleRateSpin_->setSingleStep(1000);
     sampleRateSpin_->setSuffix(" Hz");
     sampleRateSpin_->setValue(controller_.config().sampleRate);
-    configForm->addRow("Sample rate TX/WAV", sampleRateSpin_);
+    configForm->addRow("Sample rate TX", sampleRateSpin_);
 
     rxSampleRateSpin_ = new QSpinBox(this);
     rxSampleRateSpin_->setRange(8000, 192000);
@@ -535,38 +563,47 @@ MainWindow::MainWindow(QWidget* parent)
     rxLevelBar_->setRange(0, 100);
     rxLevelBar_->setValue(0);
     rxLevelBar_->setTextVisible(false);
-    operationForm->addRow("Nivel RX", rxLevelBar_);
-
-    txProgressBar_ = new QProgressBar(this);
-    txProgressBar_->setRange(0, 1000);
-    txProgressBar_->setValue(0);
-    txProgressBar_->setFormat("%p%");
-    operationForm->addRow("Progresso TX", txProgressBar_);
+    configForm->addRow("Nivel RX", rxLevelBar_);
 
     rxFrameProgressBar_ = new QProgressBar(this);
     rxFrameProgressBar_->setRange(0, 1000);
     rxFrameProgressBar_->setValue(0);
     rxFrameProgressBar_->setFormat("%p%");
-    operationForm->addRow("Progresso RX", rxFrameProgressBar_);
+    configForm->addRow("Progresso RX", rxFrameProgressBar_);
 
     rxQualityBar_ = new QProgressBar(this);
     rxQualityBar_->setRange(0, 1000);
     rxQualityBar_->setValue(0);
     rxQualityBar_->setFormat("%p%");
-    operationForm->addRow("Qualidade RX", rxQualityBar_);
+    configForm->addRow("Qualidade RX", rxQualityBar_);
 
     rxDiagnosticLabel_ = new QLabel(this);
     rxDiagnosticLabel_->setWordWrap(true);
-    operationForm->addRow("Estado RX", rxDiagnosticLabel_);
+    configForm->addRow("Estado RX", rxDiagnosticLabel_);
     resetRxDiagnostic("Parado");
 
     rxSessionLabel_ = new QLabel(this);
     rxSessionLabel_->setWordWrap(true);
-    operationForm->addRow("Sessao RX", rxSessionLabel_);
+    configForm->addRow("Sessao RX", rxSessionLabel_);
     resetRxSessionCounters();
 
-    operationLayout->addLayout(operationForm);
     configLayout->addLayout(configForm);
+
+    auto* rxButtons = new QHBoxLayout();
+    startReceiveButton_ = new QPushButton("Receber", this);
+    stopReceiveButton_ = new QPushButton("Parar RX", this);
+    rxButtons->addWidget(startReceiveButton_);
+    rxButtons->addWidget(stopReceiveButton_);
+    rxButtons->addStretch(1);
+    configLayout->addLayout(rxButtons);
+
+    auto* wavButtons = new QHBoxLayout();
+    generateButton_ = new QPushButton("Gerar WAV", this);
+    decodeButton_ = new QPushButton("Decodificar WAV", this);
+    wavButtons->addWidget(generateButton_);
+    wavButtons->addWidget(decodeButton_);
+    wavButtons->addStretch(1);
+    configLayout->addLayout(wavButtons);
 
     auto* logHeader = new QHBoxLayout();
     logHeader->addWidget(new QLabel("Log", this));
@@ -586,38 +623,6 @@ MainWindow::MainWindow(QWidget* parent)
     configLayout->addWidget(logEdit_);
     configLayout->addStretch(1);
 
-    operationLayout->addWidget(new QLabel("Waterfall RX", this));
-    waterfallWidget_ = new WaterfallWidget(this);
-    operationLayout->addWidget(waterfallWidget_);
-
-    auto* buttons = new QHBoxLayout();
-    generateButton_ = new QPushButton("Gerar WAV", this);
-    transmitButton_ = new QPushButton("Transmitir WAV", this);
-    stopTransmitButton_ = new QPushButton("Parar TX", this);
-    startReceiveButton_ = new QPushButton("Receber", this);
-    stopReceiveButton_ = new QPushButton("Parar RX", this);
-    decodeButton_ = new QPushButton("Decodificar WAV", this);
-    buttons->addWidget(generateButton_);
-    buttons->addWidget(transmitButton_);
-    buttons->addWidget(stopTransmitButton_);
-    buttons->addWidget(startReceiveButton_);
-    buttons->addWidget(stopReceiveButton_);
-    buttons->addWidget(decodeButton_);
-    buttons->addStretch(1);
-    operationLayout->addLayout(buttons);
-
-    auto* receivedHeader = new QHBoxLayout();
-    receivedHeader->addWidget(new QLabel("Texto recebido", this));
-    receivedHeader->addStretch(1);
-    clearReceivedButton_ = new QPushButton("Limpar RX", this);
-    receivedHeader->addWidget(clearReceivedButton_);
-    operationLayout->addLayout(receivedHeader);
-
-    receivedEdit_ = new QPlainTextEdit(this);
-    receivedEdit_->setReadOnly(true);
-    receivedEdit_->setMinimumHeight(80);
-    operationLayout->addWidget(receivedEdit_);
-
     tabs->addTab(operationPage, "Operacao");
     tabs->addTab(configPage, "Configuracao");
     root->addWidget(tabs);
@@ -628,20 +633,33 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(generateButton_, &QPushButton::clicked, this, &MainWindow::generateWav);
     connect(transmitButton_, &QPushButton::clicked, this, &MainWindow::transmitWav);
-    connect(stopTransmitButton_, &QPushButton::clicked, this, &MainWindow::stopTransmit);
     connect(startReceiveButton_, &QPushButton::clicked, this, &MainWindow::startReceive);
     connect(stopReceiveButton_, &QPushButton::clicked, this, &MainWindow::stopReceive);
     connect(decodeButton_, &QPushButton::clicked, this, &MainWindow::decodeWav);
-    connect(clearReceivedButton_, &QPushButton::clicked, this, &MainWindow::clearReceivedText);
     connect(saveLogButton_, &QPushButton::clicked, this, &MainWindow::saveLog);
     connect(clearLogButton_, &QPushButton::clicked, this, &MainWindow::clearLog);
     connect(saveEvidenceButton_, &QPushButton::clicked, this, &MainWindow::saveFieldEvidence);
+    connect(receivedEdit_, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        QMenu menu(this);
+        QAction* clearAction = menu.addAction("Limpar RX");
+        QAction* selected = menu.exec(receivedEdit_->mapToGlobal(pos));
+        if (selected == clearAction) {
+            clearReceivedText();
+        }
+    });
     connect(callsignEdit_, &QLineEdit::textChanged, this, &MainWindow::updateTxEstimate);
     connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
     connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
+    connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
     connect(frequency0Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateWaterfallMarkers);
+    connect(frequency0Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
     connect(frequency1Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateWaterfallMarkers);
+    connect(frequency1Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
     connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
+    connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
+    connect(rxSampleRateSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
+    connect(inputDeviceCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::restartReceiveIfActive);
+    connect(detailedRxLogCheck_, &QCheckBox::toggled, this, &MainWindow::restartReceiveIfActive);
 
     rxLevelTimer_ = new QTimer(this);
     rxLevelTimer_->setInterval(100);
@@ -652,6 +670,14 @@ MainWindow::MainWindow(QWidget* parent)
     connect(txProgressTimer_, &QTimer::timeout, this, &MainWindow::updateTxProgress);
     updateTxEstimate();
     updateWaterfallMarkers();
+    setReceiveControlsRecording(false);
+    QTimer::singleShot(0, this, [this]() {
+        if (inputDeviceCombo_ != nullptr && inputDeviceCombo_->isEnabled() && inputDeviceCombo_->count() > 0) {
+            startReceive();
+        } else {
+            appendLog("RX automatico nao iniciado: sem dispositivo de entrada.");
+        }
+    });
 }
 
 MainWindow::~MainWindow() {
@@ -674,7 +700,8 @@ void MainWindow::generateWav() {
     }
 
     try {
-        controller_.setConfig(readConfig());
+        const auto config = readConfig();
+        controller_.setConfig(config);
         const std::string callsign = toStdString(callsignEdit_->text().trimmed());
         const std::string message = toStdString(messageEdit_->toPlainText());
         controller_.generateWav(callsign, message, toStdString(outputPath));
@@ -731,40 +758,56 @@ void MainWindow::decodeWav() {
 }
 
 void MainWindow::transmitWav() {
-    QString wavPath = lastWavPath_;
-    if (wavPath.isEmpty()) {
-        wavPath = QFileDialog::getOpenFileName(
-            this,
-            "Transmitir WAV",
-            QString(),
-            "WAV (*.wav)"
-        );
-    }
-    if (wavPath.isEmpty()) {
+    if (audioOutput_.isPlaying()) {
+        stopTransmit();
         return;
     }
 
     try {
+        const auto config = readConfig();
+        controller_.setConfig(config);
+        const std::string callsign = toStdString(callsignEdit_->text().trimmed());
+        const std::string message = toStdString(messageEdit_->toPlainText());
+        const auto estimate = controller_.estimateTransmission(callsign, message);
+        if (estimate.messageEmpty) {
+            throw std::invalid_argument("mensagem vazia");
+        }
+        if (estimate.payloadTooLong) {
+            throw std::invalid_argument("mensagem excede 127 simbolos");
+        }
+
+        auto audio = controller_.generateAudio(callsign, message);
         const unsigned int deviceId = outputDeviceCombo_->currentData().toUInt();
-        audioOutput_.playWavAsync(toStdString(wavPath), deviceId);
-        lastWavPath_ = wavPath;
+        audioOutput_.playSamplesAsync(std::move(audio), config.sampleRate, deviceId);
         txProgressBar_->setValue(0);
+        setTransmitButtonTransmitting(true);
         txProgressTimer_->start();
-        appendLog("TX iniciado: " + wavPath);
+        appendLog("TX iniciado.");
+        appendLog("Modo TX: robust");
+        appendLog("Payload TX: " + QString::fromStdString(estimate.payload));
     } catch (const std::exception& exc) {
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
-        appendLog("Erro ao transmitir WAV: " + QString::fromUtf8(exc.what()));
+        appendLog("Erro ao transmitir: " + QString::fromUtf8(exc.what()));
     }
 }
 
 void MainWindow::stopTransmit() {
+    const bool wasPlaying = audioOutput_.isPlaying();
     audioOutput_.stop();
     txProgressTimer_->stop();
     txProgressBar_->setValue(0);
-    appendLog("TX interrompido.");
+    setTransmitButtonTransmitting(false);
+    if (wasPlaying) {
+        appendLog("TX interrompido.");
+    }
 }
 
 void MainWindow::startReceive() {
+    if (audioInput_.isRecording()) {
+        restartReceiveIfActive();
+        return;
+    }
+
     try {
         const auto rxConfig = readRxConfig();
         stopRxWorker();
@@ -797,11 +840,13 @@ void MainWindow::startReceive() {
         audioInput_.start(deviceId, rxConfig.sampleRate);
         lastRxWavPath_.clear();
         rxLevelTimer_->start();
+        setReceiveControlsRecording(true);
         appendLog(
             QStringLiteral("RX streaming iniciado")
             + " (captura " + QString::number(rxConfig.sampleRate) + " Hz)"
         );
     } catch (const std::exception& exc) {
+        setReceiveControlsRecording(false);
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Erro ao iniciar RX: " + QString::fromUtf8(exc.what()));
     }
@@ -809,18 +854,19 @@ void MainWindow::startReceive() {
 
 void MainWindow::stopReceive() {
     if (!audioInput_.isRecording()) {
+        setReceiveControlsRecording(false);
         appendLog("RX nao iniciado.");
         return;
     }
 
     try {
-        controller_.setConfig(readRxConfig());
         const auto stats = audioInput_.stopAndSave({});
         audioInput_.setSamplesCallback({});
         waterfallUpdatePending_.store(false);
         stopRxWorker(false);
         rxLevelTimer_->stop();
         rxLevelBar_->setValue(0);
+        setReceiveControlsRecording(false);
         resetRxFrameProgress();
         resetRxDiagnostic("Parado");
         const std::string error = audioInput_.lastError();
@@ -842,6 +888,7 @@ void MainWindow::stopReceive() {
             appendLog(advice);
         }
     } catch (const std::exception& exc) {
+        setReceiveControlsRecording(audioInput_.isRecording());
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Erro ao parar RX: " + QString::fromUtf8(exc.what()));
     }
@@ -867,6 +914,7 @@ void MainWindow::updateTxProgress() {
     const double duration = audioOutput_.durationSeconds();
     if (duration <= 0.0) {
         txProgressBar_->setValue(0);
+        setTransmitButtonTransmitting(false);
         return;
     }
 
@@ -877,6 +925,7 @@ void MainWindow::updateTxProgress() {
     if (!audioOutput_.isPlaying() && position >= duration) {
         txProgressTimer_->stop();
         txProgressBar_->setValue(1000);
+        setTransmitButtonTransmitting(false);
         appendLog("TX concluido.");
     }
 }
@@ -908,17 +957,15 @@ void MainWindow::updateTxEstimate() {
         if (estimate.messageEmpty) {
             txEstimateLabel_->setStyleSheet({});
             txEstimateLabel_->setText(
-                QString("0/%1 simbolos | robust | TX: --")
+                QString("0/%1 simbolos | TX: --")
                     .arg(estimate.maxPayloadSymbols)
             );
             return;
         }
 
-        QString text = QString("%1/%2 simbolos | %3 | %4 bits | TX: %5 s")
+        QString text = QString("%1/%2 simbolos | TX: %3 s")
             .arg(estimate.payloadSymbols)
             .arg(estimate.maxPayloadSymbols)
-            .arg("robust")
-            .arg(estimate.transmissionBits)
             .arg(estimate.durationSeconds, 0, 'f', 2);
 
         if (estimate.payloadTooLong) {
@@ -940,6 +987,18 @@ void MainWindow::updateWaterfallMarkers() {
     }
 
     waterfallWidget_->setMarkerFrequencies(frequency0Spin_->value(), frequency1Spin_->value());
+}
+
+void MainWindow::restartReceiveIfActive() {
+    if (!audioInput_.isRecording()) {
+        return;
+    }
+
+    appendLog("RX reiniciado para aplicar configuracao.");
+    stopReceive();
+    if (inputDeviceCombo_ != nullptr && inputDeviceCombo_->isEnabled() && inputDeviceCombo_->count() > 0) {
+        startReceive();
+    }
 }
 
 void MainWindow::saveLog() {
@@ -1357,6 +1416,25 @@ void MainWindow::rememberAcceptedRx(const hftext::DecodeResult& result) {
     lastAcceptedRxLength_ = result.length;
     lastAcceptedRxOffsetSamples_ = result.startOffset;
     lastAcceptedRxOffsetsTried_ = result.offsetsTried;
+}
+
+void MainWindow::setTransmitButtonTransmitting(bool transmitting) {
+    if (transmitButton_ == nullptr) {
+        return;
+    }
+
+    transmitButton_->setIcon(style()->standardIcon(transmitting ? QStyle::SP_MediaStop : QStyle::SP_ArrowForward));
+    transmitButton_->setToolTip(transmitting ? "Parar TX" : "Enviar");
+}
+
+void MainWindow::setReceiveControlsRecording(bool recording) {
+    if (startReceiveButton_ != nullptr) {
+        const bool hasInputDevice = inputDeviceCombo_ != nullptr && inputDeviceCombo_->isEnabled();
+        startReceiveButton_->setEnabled(!recording && hasInputDevice);
+    }
+    if (stopReceiveButton_ != nullptr) {
+        stopReceiveButton_->setEnabled(recording);
+    }
 }
 
 void MainWindow::loadSettings() {
