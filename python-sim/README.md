@@ -53,6 +53,20 @@ python noise_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Test
 O script salva exemplos WAV, `summary.csv` agregado e `trials.csv` por tentativa em `generated\noise_sweep\`, medindo BER, CRC e validade do payload para cada SNR.
 Os CSVs tambem registram a confianca media estimada pelo demodulador.
 
+## Varredura experimental MFSK
+
+Para comparar 2-FSK e 4-FSK na camada fisica:
+
+```powershell
+python mfsk_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Teste HFText"
+```
+
+O script salva `summary.csv` e `trials.csv` em `generated\mfsk_sweep\`,
+registrando modulacao, tons usados, duracao relativa, BER, CRC e payload
+valido por SNR. A varredura usa o frame logico simples em Python para medir a
+camada fisica; a validacao operacional do modo 4-FSK continua dependendo do
+core robusto, dos CLIs e de capturas reais.
+
 ## Resumo de evidencias de campo
 
 Depois de salvar evidencias pelo app PC em `logs\`, e possivel consolidar os blocos `Resumo CSV` em uma unica tabela:
@@ -64,6 +78,18 @@ python field_summary.py --input-dir ..\logs --output ..\logs\field_summary.csv
 Sem `--output`, o script grava `field_summary.csv` dentro da pasta informada por `--input-dir`. Use `--stdout` para imprimir o CSV agregado no terminal.
 
 Quando grava em arquivo, o script tambem cria `field_summary_groups.csv`, agrupando por duracao de simbolo, tons, amplitude, preambulo e estado do log detalhado. Esse resumo inclui quantidade de evidencias, quadros aceitos, taxa de aceite, qualidade media/minima e medias dos contadores RX. Use `--group-by` para escolher outras colunas de agrupamento, `--group-output` para escolher outro caminho ou `--no-groups` para gerar apenas a tabela linha a linha.
+
+O agrupamento padrao tambem inclui a coluna `modulation`, quando presente, para
+comparar 2-FSK e 4-FSK sem misturar os resultados.
+
+Quando o TXT de evidencia tiver a secao `Quadros aceitos CSV`, o script tambem
+grava `field_frames.csv`, com uma linha unica por mensagem aceita. Como
+evidencias salvas durante a mesma sessao acumulam quadros anteriores, esse CSV
+deduplica automaticamente quadros repetidos por instante/configuracao/texto.
+Use essa tabela para comparar transmissoes individuais quando uma mesma sessao
+misturou duracoes de simbolo, modulacoes ou tons. Use `--frames-output` para
+escolher outro caminho, `--no-frames` para desativar esse arquivo ou
+`--keep-duplicate-frames` para auditar as repeticoes brutas.
 
 Para reproduzir os WAVs das evidencias aceitas pelo decoder C++ de linha de comando:
 

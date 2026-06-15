@@ -58,6 +58,18 @@ int main() {
         assert(decision.quality == 0.0F);
     }
 
+    const std::vector<std::uint8_t> fsk4Bits = {0, 0, 0, 1, 1, 0, 1, 1};
+    audio = hftext::modulateBits4Fsk(fsk4Bits, 8000, 0.05F, 1000.0F, 1200.0F, 0.8F);
+    decoded = hftext::demodulateBits4Fsk(audio, 8000, 0.05F, 1000.0F, 1200.0F);
+    assert(decoded == fsk4Bits);
+    const auto fsk4Decisions = hftext::demodulateBitDecisions4Fsk(audio, 8000, 0.05F, 1000.0F, 1200.0F);
+    assert(fsk4Decisions.size() == fsk4Bits.size());
+    for (std::size_t index = 0; index < fsk4Decisions.size(); ++index) {
+        assert(fsk4Decisions[index].bit == fsk4Bits[index]);
+        assert(fsk4Decisions[index].confidence > 0.9F);
+        assert(fsk4Decisions[index].quality > 0.9F);
+    }
+
     std::uint32_t noiseState = 0xA53C19D2U;
     std::vector<float> noiseOnly(800);
     for (auto& sample : noiseOnly) {

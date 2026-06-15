@@ -4,6 +4,11 @@
 
 namespace hftext {
 
+enum class ModulationMode {
+    Fsk2 = 2,
+    Fsk4 = 4,
+};
+
 struct ModemConfig {
     std::int32_t sampleRate = 48000;
     float symbolDurationSec = 0.5F;
@@ -12,6 +17,33 @@ struct ModemConfig {
     float amplitude = 0.8F;
     std::int32_t preambleBits = 64;
     bool syncSearch = true;
+    ModulationMode modulationMode = ModulationMode::Fsk2;
 };
+
+inline int bitsPerModulationSymbol(ModulationMode mode) {
+    return mode == ModulationMode::Fsk4 ? 2 : 1;
+}
+
+inline int toneCount(ModulationMode mode) {
+    return mode == ModulationMode::Fsk4 ? 4 : 2;
+}
+
+inline float modulationToneSpacingHz(const ModemConfig& config) {
+    return config.frequency1Hz - config.frequency0Hz;
+}
+
+inline float modulationToneFrequencyHz(const ModemConfig& config, int toneIndex) {
+    if (config.modulationMode == ModulationMode::Fsk4) {
+        return config.frequency0Hz + modulationToneSpacingHz(config) * static_cast<float>(toneIndex);
+    }
+    return toneIndex == 0 ? config.frequency0Hz : config.frequency1Hz;
+}
+
+inline float highestModulationToneHz(const ModemConfig& config) {
+    if (config.modulationMode == ModulationMode::Fsk2) {
+        return config.frequency0Hz > config.frequency1Hz ? config.frequency0Hz : config.frequency1Hz;
+    }
+    return modulationToneFrequencyHz(config, toneCount(config.modulationMode) - 1);
+}
 
 }  // namespace hftext

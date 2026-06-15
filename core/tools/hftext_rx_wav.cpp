@@ -15,10 +15,27 @@ void printUsage(const char* program) {
         << "\n"
         << "Opcoes:\n"
         << "  --symbol-duration <s>       padrao: 0.5\n"
+        << "  --mode <2fsk|4fsk>          padrao: 2fsk; 4fsk e experimental v0.2\n"
         << "  --f0 <Hz>                   padrao: 1200\n"
-        << "  --f1 <Hz>                   padrao: 1600\n"
+        << "  --f1 <Hz>                   padrao: 1600; em 4fsk define o segundo tom e o espacamento\n"
         << "  --no-sync-search            nao tenta offsets iniciais de amostra\n"
         << "  --verbose                   imprime diagnostico de sincronismo\n";
+}
+
+void setMode(hftext::ModemConfig& config, const std::string& value) {
+    if (value == "2fsk") {
+        config.modulationMode = hftext::ModulationMode::Fsk2;
+        return;
+    }
+    if (value == "4fsk") {
+        config.modulationMode = hftext::ModulationMode::Fsk4;
+        return;
+    }
+    throw std::invalid_argument("modo invalido: " + value);
+}
+
+const char* modeName(hftext::ModulationMode mode) {
+    return mode == hftext::ModulationMode::Fsk4 ? "robust-v0.2-exp-4fsk" : "robust-v0.1-2fsk";
 }
 
 }  // namespace
@@ -44,6 +61,8 @@ int main(int argc, char** argv) {
             }
             if (arg == "--symbol-duration") {
                 config.symbolDurationSec = std::stof(requireValue(arg));
+            } else if (arg == "--mode") {
+                setMode(config, requireValue(arg));
             } else if (arg == "--f0") {
                 config.frequency0Hz = std::stof(requireValue(arg));
             } else if (arg == "--f1") {
@@ -71,7 +90,7 @@ int main(int argc, char** argv) {
             if (!verbose) {
                 return;
             }
-            std::cout << "Modo: robust\n";
+            std::cout << "Modo: " << modeName(config.modulationMode) << "\n";
             std::cout << "Sample rate: " << config.sampleRate << " Hz\n";
             std::cout << "Start offset: " << result.startOffset << " samples\n";
             std::cout << "Offsets tried: " << result.offsetsTried << "\n";

@@ -107,14 +107,22 @@ std::vector<std::uint8_t> preambleBitsFromConfig(const ModemConfig& config) {
         throw std::invalid_argument("preamble_bits must be non-negative");
     }
 
-    if (config.preambleBits == kDefaultPreambleBits) {
+    if (config.modulationMode == ModulationMode::Fsk2 && config.preambleBits == kDefaultPreambleBits) {
         return defaultPreambleBits();
     }
 
     std::vector<std::uint8_t> preamble;
     preamble.reserve(static_cast<std::size_t>(config.preambleBits));
-    for (std::int32_t index = 0; index < config.preambleBits; ++index) {
-        preamble.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+    if (config.modulationMode == ModulationMode::Fsk4) {
+        for (std::int32_t index = 0; index < config.preambleBits; ++index) {
+            const auto tone = static_cast<std::uint8_t>((index / 2) % 4);
+            const int bitIndex = 1 - (index % 2);
+            preamble.push_back(static_cast<std::uint8_t>((tone >> bitIndex) & 0x01U));
+        }
+    } else {
+        for (std::int32_t index = 0; index < config.preambleBits; ++index) {
+            preamble.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+        }
     }
     return preamble;
 }
@@ -203,34 +211,29 @@ int decodePhysicalLengthDecisions(const std::vector<BitDecision>& decisions, std
     return value;
 }
 
-int alternatingPreambleScore(
+int preambleScore(
     const std::vector<std::uint8_t>& bits,
     std::size_t syncStart,
-    int preambleBitCount
+    const std::vector<std::uint8_t>& expectedPreamble
 ) {
-    if (preambleBitCount <= 0) {
+    if (expectedPreamble.empty()) {
         return 0;
     }
 
-    const std::size_t targetBits = static_cast<std::size_t>(std::min(32, std::max(8, preambleBitCount / 2)));
+    const std::size_t targetBits = std::min<std::size_t>(32, expectedPreamble.size());
     const std::size_t availableBits = std::min(syncStart, targetBits);
     const std::size_t preambleStart = syncStart - availableBits;
+    const std::size_t expectedStart = expectedPreamble.size() - availableBits;
 
-    int mismatchesPhase0 = static_cast<int>(targetBits - availableBits);
-    int mismatchesPhase1 = mismatchesPhase0;
+    int mismatches = static_cast<int>(targetBits - availableBits);
     for (std::size_t index = 0; index < availableBits; ++index) {
         const auto bit = bits[preambleStart + index];
-        const auto expectedPhase0 = static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0);
-        const auto expectedPhase1 = static_cast<std::uint8_t>(expectedPhase0 ^ 1U);
-        if (bit != expectedPhase0) {
-            ++mismatchesPhase0;
-        }
-        if (bit != expectedPhase1) {
-            ++mismatchesPhase1;
+        if (bit != expectedPreamble[expectedStart + index]) {
+            ++mismatches;
         }
     }
 
-    return std::min(mismatchesPhase0, mismatchesPhase1);
+    return mismatches;
 }
 
 struct StartSyncCandidate {
@@ -240,7 +243,7 @@ struct StartSyncCandidate {
 
 std::vector<StartSyncCandidate> findStartSyncFrameStarts(
     const std::vector<BitDecision>& decisions,
-    int preambleBitCount
+    const ModemConfig& config
 ) {
     const auto bits = bitsFromDecisions(decisions);
     const auto startSync = startSyncBits();
@@ -257,7 +260,12 @@ std::vector<StartSyncCandidate> findStartSyncFrameStarts(
     std::vector<Candidate> scoredStarts;
     const std::size_t lastStart = bits.size() - startSync.size();
     const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
+    const auto expectedPreamble = preambleBitsFromConfig(config);
+    const auto bitsPerAudioSymbol = static_cast<std::size_t>(bitsPerModulationSymbol(config.modulationMode));
     for (std::size_t syncStart = 0; syncStart <= lastStart; ++syncStart) {
+        if (syncStart % bitsPerAudioSymbol != 0) {
+            continue;
+        }
         const int mismatches = bitMismatchCount(bits, syncStart, startSync);
         if (!acceptsStartSyncCandidate(bits, decisions, syncStart, startSync, maxSyncMismatches)) {
             continue;
@@ -269,9 +277,9 @@ std::vector<StartSyncCandidate> findStartSyncFrameStarts(
             continue;
         }
 
-        const int preambleScore = alternatingPreambleScore(bits, syncStart, preambleBitCount);
+        const int candidatePreambleScore = preambleScore(bits, syncStart, expectedPreamble);
         scoredStarts.push_back({
-            weightedMismatchCount(decisions, syncStart, startSync) + preambleScore,
+            weightedMismatchCount(decisions, syncStart, startSync) + candidatePreambleScore,
             mismatches,
             static_cast<int>(lengthStart + static_cast<std::size_t>(kBitsPerByte * kPhysicalLengthRepeat)),
             payloadLength
@@ -366,9 +374,9 @@ DecodeResult demodulateAndParse(
     const ModemConfig& config,
     int startOffset
 ) {
-    const auto decisions = demodulateBitDecisions2Fsk(samples, config, startOffset);
+    const auto decisions = demodulateBitDecisionsFsk(samples, config, startOffset);
     DecodeResult result;
-    for (const auto& candidate : findStartSyncFrameStarts(decisions, config.preambleBits)) {
+    for (const auto& candidate : findStartSyncFrameStarts(decisions, config)) {
         result = parseRobustFrameAtExpectedOffset(decisions, candidate.frameStart, candidate.payloadLength);
         if (result.crcOk && result.payloadValid) {
             result.startOffset = startOffset;
@@ -388,7 +396,7 @@ std::vector<float> modulateText(const std::string& text, const ModemConfig& conf
     const auto preamble = preambleBitsFromConfig(config);
     const auto bits = buildRobustTransmission(text, preamble);
 
-    return modulateBits2Fsk(bits, config);
+    return modulateBitsFsk(bits, config);
 }
 
 DecodeResult demodulateSamples(const std::vector<float>& samples, const ModemConfig& config) {

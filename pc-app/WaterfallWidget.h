@@ -14,6 +14,7 @@ public:
     void addSamples(const std::vector<float>& samples, int sampleRate);
     void clear();
     void setMarkerFrequencies(double frequency0Hz, double frequency1Hz);
+    void setMarkerFrequencies(const std::vector<double>& frequenciesHz);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -26,6 +27,5 @@ private:
     QRgb colorForLevel(double level, double inputPeak) const;
 
     QImage image_;
-    double markerFrequency0Hz_ = 1200.0;
-    double markerFrequency1Hz_ = 1600.0;
+    std::vector<double> markerFrequenciesHz_ = {1200.0, 1600.0};
 };

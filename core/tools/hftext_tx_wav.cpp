@@ -18,8 +18,9 @@ void printUsage(const char* program) {
         << "  --callsign <texto>          prefixa indicativo ao payload\n"
         << "  --sample-rate <Hz>          padrao: 48000\n"
         << "  --symbol-duration <s>       padrao: 0.5\n"
+        << "  --mode <2fsk|4fsk>          padrao: 2fsk; 4fsk e experimental v0.2\n"
         << "  --f0 <Hz>                   padrao: 1200\n"
-        << "  --f1 <Hz>                   padrao: 1600\n"
+        << "  --f1 <Hz>                   padrao: 1600; em 4fsk define o segundo tom e o espacamento\n"
         << "  --amplitude <0..1>          padrao: 0.8\n";
 }
 
@@ -28,6 +29,22 @@ std::string buildPayload(const std::string& message, const std::string& callsign
         return message;
     }
     return callsign + " " + message;
+}
+
+void setMode(hftext::ModemConfig& config, const std::string& value) {
+    if (value == "2fsk") {
+        config.modulationMode = hftext::ModulationMode::Fsk2;
+        return;
+    }
+    if (value == "4fsk") {
+        config.modulationMode = hftext::ModulationMode::Fsk4;
+        return;
+    }
+    throw std::invalid_argument("modo invalido: " + value);
+}
+
+const char* modeName(hftext::ModulationMode mode) {
+    return mode == hftext::ModulationMode::Fsk4 ? "robust-v0.2-exp-4fsk" : "robust-v0.1-2fsk";
 }
 
 }  // namespace
@@ -58,6 +75,8 @@ int main(int argc, char** argv) {
                 config.sampleRate = std::stoi(requireValue(arg));
             } else if (arg == "--symbol-duration") {
                 config.symbolDurationSec = std::stof(requireValue(arg));
+            } else if (arg == "--mode") {
+                setMode(config, requireValue(arg));
             } else if (arg == "--f0") {
                 config.frequency0Hz = std::stof(requireValue(arg));
             } else if (arg == "--f1") {
@@ -83,7 +102,7 @@ int main(int argc, char** argv) {
         hftext::tools::writeMonoPcm16Wav(outputPath, audio, config.sampleRate);
 
         std::cout << "WAV gerado: " << outputPath << "\n";
-        std::cout << "Modo: robust\n";
+        std::cout << "Modo: " << modeName(config.modulationMode) << "\n";
         std::cout << "Payload: " << payload << "\n";
         return 0;
     } catch (const std::exception& exc) {

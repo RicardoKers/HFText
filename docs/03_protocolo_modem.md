@@ -27,6 +27,28 @@ codigo convolucional rate 1/2, K=3, geradores 111 e 101
 -> 2-FSK
 ```
 
+## Versao experimental v0.2
+
+HFText v0.2 e, nesta etapa, um modo experimental de modulacao fisica 4-FSK.
+Ele reaproveita o mesmo frame logico, a mesma camada robusta e os mesmos
+campos fisicos da v0.1:
+
+```text
+SYNC | LENGTH | PAYLOAD | CRC16
+-> codigo convolucional rate 1/2, K=3, geradores 111 e 101
+-> interleaving retangular deterministico
+-> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
+-> 4-FSK
+```
+
+Nao ha alteracao de alfabeto, `LENGTH`, `CRC16`, `START_SYNC`,
+`PHYS_LENGTH`, FEC ou interleaving. A diferenca e apenas a modulacao dos bits
+fisicos: cada simbolo de audio transporta dois bits.
+
+Por compatibilidade e seguranca de campo, o modo v0.1 2-FSK continua sendo o
+padrao. O modo v0.2 4-FSK deve ser explicitamente selecionado e tratado como
+experimental ate haver validacao real suficiente.
+
 ## Alfabeto inicial
 
 A primeira versão usa um alfabeto reduzido de 64 símbolos ativos, codificados em 6 bits:
@@ -129,11 +151,21 @@ O transmissor deve antepor um preambulo simples e uma palavra fisica de inicio a
 PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 ```
 
-O preambulo e alternado:
+No modo 2-FSK v0.1, o preambulo e alternado:
 
 ```text
 10101010 ... 1010
 ```
+
+No modo 4-FSK experimental v0.2, o preambulo deve exercitar todos os quatro
+tons, usando o ciclo fisico:
+
+```text
+00 01 10 11 00 01 10 11 ...
+```
+
+Isso evita que o preambulo 4-FSK vire um unico tom quando bits alternados sao
+agrupados em pares.
 
 Tamanho inicial do preambulo:
 
@@ -333,6 +365,48 @@ Taxa bruta:
 
 A taxa util e menor que a taxa bruta porque o frame logico passa por codigo convolucional rate 1/2 e bits de cauda antes da modulacao.
 
+## Modulacao experimental v0.2
+
+Versao 0.2 experimental: 4-FSK.
+
+No modo 4-FSK, `Tom 0` e `Tom 1` continuam sendo configurados pelo operador,
+mas passam a definir os dois primeiros tons adjacentes. O espacamento e:
+
+```text
+toneSpacing = Tom 1 - Tom 0
+```
+
+A tabela inicial e:
+
+```text
+00 -> Tom 0
+01 -> Tom 1
+10 -> Tom 0 + 2 * toneSpacing
+11 -> Tom 0 + 3 * toneSpacing
+```
+
+Exemplo recomendado para testes:
+
+```text
+00 -> 1000 Hz
+01 -> 1200 Hz
+10 -> 1400 Hz
+11 -> 1600 Hz
+```
+
+Regras:
+
+- os pares de bits sao formados em ordem MSB-first;
+- se o total de bits fisicos for impar, o ultimo simbolo de audio usa zero no bit menos significativo de preenchimento;
+- `PHYS_LENGTH` continua representando a quantidade de simbolos de 6 bits do `PAYLOAD`, nao a quantidade de simbolos de audio;
+- a duracao estimada de TX deve considerar que cada simbolo de audio carrega 2 bits;
+- a maior frequencia usada pelo modo deve ficar abaixo de Nyquist para o sample rate configurado;
+- a waterfall deve mostrar todos os tons configurados/derivados para ajudar sintonia.
+
+Esse modo reduz a duracao fisica aproximada pela metade para a mesma duracao de
+simbolo, mas exige melhor separacao de tons e deve ser validado com cuidado em
+radio real.
+
 ## Camada de robustez
 
 O HFText v0.1 usa sempre a camada robusta abaixo. Esta camada nao e opcional.
@@ -384,16 +458,9 @@ Regra deterministica de interleaving:
 
 ## Versões futuras
 
-As ideias abaixo nao fazem parte do HFText v0.1. Se forem promovidas de experimento para operacao real, devem definir uma versao nova do protocolo, inicialmente v0.2, para evitar ambiguidade entre transmissores e receptores.
-
-### 4-FSK
-
-```text
-00 -> 1000 Hz
-01 -> 1200 Hz
-10 -> 1400 Hz
-11 -> 1600 Hz
-```
+As ideias abaixo nao fazem parte do HFText v0.1 nem do experimento 4-FSK v0.2.
+Se forem promovidas de experimento para operacao real, devem definir uma versao
+nova do protocolo para evitar ambiguidade entre transmissores e receptores.
 
 ### 8-FSK
 

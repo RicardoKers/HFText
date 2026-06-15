@@ -65,6 +65,7 @@ private:
         std::size_t firstBitSample = 0;
         std::vector<BitDecision> decisions;
         std::vector<std::uint8_t> bits;
+        std::set<std::int64_t> rejectedSyncSamples;
     };
 
     int samplesPerSymbol() const;

@@ -1,5 +1,7 @@
 #include "hftext_core.h"
 #include "hftext_frame.h"
+#include "hftext_modulator.h"
+#include "hftext_robust.h"
 #include "hftext_streaming_receiver.h"
 
 #include <algorithm>
@@ -7,6 +9,7 @@
 #include <cstddef>
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace {
@@ -62,6 +65,26 @@ void damageStartSyncAndPhysicalLengthSoftly(std::vector<float>& audio, const hft
     overwriteSymbolWithWeakWrongDecision(audio, config, lengthStart + hftext::kBitsPerByte, 0);
 }
 
+std::vector<std::uint8_t> alternatingPreamble(int bitCount) {
+    std::vector<std::uint8_t> bits;
+    bits.reserve(static_cast<std::size_t>(bitCount));
+    for (int index = 0; index < bitCount; ++index) {
+        bits.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+    }
+    return bits;
+}
+
+std::vector<float> damagedRobustFrameAudio(const std::string& text, const hftext::ModemConfig& config) {
+    auto bits = hftext::buildRobustTransmission(text, alternatingPreamble(config.preambleBits));
+    const auto robustStart = static_cast<std::size_t>(config.preambleBits)
+        + hftext::startSyncBits().size()
+        + hftext::physicalLengthBits(0).size();
+    for (std::size_t offset = 0; offset < 96 && robustStart + offset < bits.size(); offset += 3) {
+        bits[robustStart + offset] ^= 1U;
+    }
+    return hftext::modulateBitsFsk(bits, config);
+}
+
 }  // namespace
 
 int main() {
@@ -95,6 +118,25 @@ int main() {
     assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::PhysicalLengthRecovered));
     assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::FrameWaiting));
     assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::FrameDecoded));
+
+    hftext::ModemConfig fsk4Config = config;
+    fsk4Config.modulationMode = hftext::ModulationMode::Fsk4;
+    fsk4Config.frequency0Hz = 1000.0F;
+    fsk4Config.frequency1Hz = 1200.0F;
+    const auto fsk4Audio = hftext::modulateText("pu5lrk fsk4", fsk4Config);
+    hftext::StreamingReceiver fsk4Receiver(fsk4Config);
+    std::vector<hftext::DecodeResult> fsk4Results;
+    for (std::size_t offset = 0; offset < fsk4Audio.size(); offset += chunkSize) {
+        const auto end = std::min(fsk4Audio.size(), offset + chunkSize);
+        const std::vector<float> chunk(fsk4Audio.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       fsk4Audio.begin() + static_cast<std::ptrdiff_t>(end));
+        const auto results = fsk4Receiver.pushSamples(chunk);
+        fsk4Results.insert(fsk4Results.end(), results.begin(), results.end());
+    }
+    assert(fsk4Results.size() == 1);
+    assert(fsk4Results.front().crcOk);
+    assert(fsk4Results.front().payloadValid);
+    assert(fsk4Results.front().text == "pu5lrk fsk4");
 
     const auto noMoreResults = receiver.pushSamples({0.0F, 0.0F, 0.0F});
     assert(noMoreResults.empty());
@@ -194,4 +236,29 @@ int main() {
     assert(continuousResults.size() == 2);
     assert(continuousResults[0].text == "pu5lrk streaming");
     assert(continuousResults[1].text == "pu5lrk segunda");
+
+    receiver.reset();
+    const auto damagedAudio = damagedRobustFrameAudio(
+        "pu5lrk mensagem longa com crc ruim antes da proxima transmissao",
+        config
+    );
+    const auto recoveredAudio = hftext::modulateText("pu5lrk recuperou", config);
+    std::vector<float> rejectedThenValidAudio = damagedAudio;
+    rejectedThenValidAudio.insert(rejectedThenValidAudio.end(), 311, 0.0F);
+    rejectedThenValidAudio.insert(rejectedThenValidAudio.end(), recoveredAudio.begin(), recoveredAudio.end());
+    std::vector<hftext::DecodeResult> recoveredResults;
+    for (std::size_t offset = 0; offset < rejectedThenValidAudio.size(); offset += chunkSize) {
+        const auto end = std::min(rejectedThenValidAudio.size(), offset + chunkSize);
+        const std::vector<float> chunk(
+            rejectedThenValidAudio.begin() + static_cast<std::ptrdiff_t>(offset),
+            rejectedThenValidAudio.begin() + static_cast<std::ptrdiff_t>(end)
+        );
+        const auto results = receiver.pushSamples(chunk);
+        recoveredResults.insert(recoveredResults.end(), results.begin(), results.end());
+    }
+    assert(recoveredResults.size() == 1);
+    assert(recoveredResults.front().crcOk);
+    assert(recoveredResults.front().payloadValid);
+    assert(recoveredResults.front().text == "pu5lrk recuperou");
+    assert(hasEvent(receiver.takeEvents(), hftext::StreamingReceiverEventType::FrameRejected));
 }

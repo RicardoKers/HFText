@@ -314,6 +314,31 @@ Tarefa 7.3 — Implementar 4-FSK
 
 Adicionar modo 4-FSK.
 
+Implementacao experimental v0.2 iniciada: core C++ recebeu helpers MFSK/4-FSK
+para modulacao e demodulacao, mantendo 2-FSK como padrao. O modo 4-FSK usa
+`Tom 0` e `Tom 1` como os dois primeiros tons e deriva os outros dois tons pelo
+mesmo espacamento. O frame logico, `START_SYNC`, `PHYS_LENGTH`, FEC,
+interleaving e CRC permanecem iguais ao baseline v0.1.
+
+Os CLIs `hftext_tx_wav`, `hftext_rx_wav` e `hftext_stream_wav` passaram a
+aceitar `--mode 2fsk|4fsk`. O app PC recebeu seletor de modulacao na aba
+`Configuracao`, reinicia RX automaticamente quando o modo muda, ajusta a
+estimativa de duracao e mostra dois ou quatro marcadores na waterfall conforme
+o modo escolhido.
+
+Foi adicionado `python-sim/mfsk_sweep.py` para comparar 2-FSK e 4-FSK em AWGN
+com multiplas sementes, registrando duracao relativa, BER, CRC e payload
+valido. O proximo criterio antes de promover o 4-FSK e comparar o modo em
+capturas reais de radio/SDR, especialmente em sintonia levemente deslocada e
+SNR baixo.
+
+Refinamento apos testes rapidos da v0.2: o preambulo 4-FSK deixou de usar bits
+alternados `1010...`, pois isso virava um unico tom quando agrupado em pares.
+Agora o preambulo experimental percorre os quatro tons com o ciclo
+`00 01 10 11`. O RX continuo tambem passou a ignorar posicoes impossiveis de
+`START_SYNC` no 4-FSK e a marcar quadros completos rejeitados para nao
+reprocessar indefinidamente o mesmo candidato antes de uma proxima mensagem.
+
 Tarefa 7.4 — Implementar repetição
 
 Enviar bits ou símbolos repetidos.
@@ -420,7 +445,20 @@ Foi adotada uma pasta local `logs/` para evidencias manuais de campo. Ela e igno
 
 O TXT gerado por `Salvar Evidencia RX` passou a incluir uma secao `Resumo CSV`, com uma linha de cabecalho e uma linha de valores contendo configuracao, duracao da sessao, contadores RX, ultimo diagnostico, texto recebido e caminho do WAV. O CSV tambem preserva tamanho, qualidade, offset e fases/tentativas do ultimo quadro aceito da sessao, para que uma evidencia salva depois do aceite continue mantendo os dados uteis do quadro valido. A intencao e facilitar comparar varias rodadas de campo em planilha sem alterar a captura de audio nem o protocolo.
 
+Refinamento posterior: o TXT de evidencia tambem passou a incluir a secao
+`Quadros aceitos CSV`, com uma linha por quadro aceito pelo RX continuo. Essa
+tabela preserva a configuracao no momento do aceite, evitando que testes mistos
+em uma mesma sessao, como 0,1 s seguido de 0,3 s ou 2-FSK seguido de 4-FSK,
+fiquem resumidos apenas pela configuracao final da janela.
+
 Foi adicionado o utilitario `python-sim/field_summary.py` para consolidar os blocos `Resumo CSV` de varios TXT de evidencia em um unico CSV agregado. Ele preserva o caminho de origem em `source_txt` e permite comparar rapidamente taxas de aceite, qualidade e parametros de campo entre rodadas salvas em `logs/`. O mesmo script tambem pode gerar `field_summary_groups.csv`, agrupado por parametros de modem, com taxa de aceite, qualidade media/minima e medias dos contadores RX.
+
+O mesmo utilitario tambem gera `field_frames.csv` a partir de `Quadros aceitos
+CSV`, oferecendo uma tabela por transmissao aceita. Como evidencias salvas
+durante a mesma sessao acumulam os aceites anteriores, `field_frames.csv`
+deduplica automaticamente quadros repetidos por instante/configuracao/texto. O replay offline
+`python-sim/field_replay.py` passou a respeitar a modulacao registrada no resumo
+da evidencia, evitando tentar WAVs 4-FSK como se fossem 2-FSK.
 
 Foi adicionado tambem o utilitario `python-sim/field_replay.py` para reproduzir WAVs de evidencias aceitas pelo CLI C++ `hftext_rx_wav`, usando os parametros registrados no `Resumo CSV`. Ele gera `field_replay.csv` com esperado, decodificado, codigo de retorno e status, permitindo reaproveitar capturas reais como regressao manual do decoder offline.
 

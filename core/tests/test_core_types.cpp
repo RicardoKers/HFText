@@ -14,6 +14,18 @@ int main() {
     assert(config.amplitude == 0.8F);
     assert(config.preambleBits == 64);
     assert(config.syncSearch);
+    assert(config.modulationMode == hftext::ModulationMode::Fsk2);
+    assert(hftext::bitsPerModulationSymbol(config.modulationMode) == 1);
+
+    config.modulationMode = hftext::ModulationMode::Fsk4;
+    config.frequency0Hz = 1000.0F;
+    config.frequency1Hz = 1200.0F;
+    assert(hftext::bitsPerModulationSymbol(config.modulationMode) == 2);
+    assert(hftext::toneCount(config.modulationMode) == 4);
+    assert(hftext::modulationToneFrequencyHz(config, 0) == 1000.0F);
+    assert(hftext::modulationToneFrequencyHz(config, 1) == 1200.0F);
+    assert(hftext::modulationToneFrequencyHz(config, 2) == 1400.0F);
+    assert(hftext::highestModulationToneHz(config) == 1600.0F);
 
     hftext::DecodeResult result;
     assert(!result.frameDetected);

@@ -28,6 +28,31 @@ Com `symbol_duration = 0.5 s`, cada bit ocupa meio segundo. Portanto, o preambul
 
 O modulador deve gerar áudio mono em `float32`, normalizado entre `-1.0` e `+1.0`.
 
+## Modulacao 4-FSK experimental
+
+A v0.2 experimental avalia 4-FSK mantendo a mesma camada robusta e mudando
+apenas a modulacao fisica. Cada simbolo de audio carrega dois bits:
+
+```text
+00 -> f0
+01 -> f1
+10 -> f0 + 2 * (f1 - f0)
+11 -> f0 + 3 * (f1 - f0)
+```
+
+Para testes iniciais, a configuracao recomendada e `f0 = 1000 Hz` e
+`f1 = 1200 Hz`, produzindo tons em 1000, 1200, 1400 e 1600 Hz.
+
+O demodulador MFSK mede a energia em todos os tons esperados e escolhe o tom
+dominante. A confianca e derivada da distancia relativa entre o melhor tom e o
+segundo melhor tom. No modo 4-FSK, essa decisao de tom e expandida de volta para
+dois bits MSB-first.
+
+O 4-FSK reduz a quantidade de simbolos de audio necessarios para o mesmo bloco
+robusto, mas tambem reduz a margem entre estados quando o canal tem ruido,
+desvio de sintonia, seletividade ou distorcao. Por isso ele deve permanecer
+experimental ate haver comparacao consistente com capturas reais.
+
 ## Fase
 
 O modulador 2-FSK deve manter fase contínua entre símbolos para evitar cliques desnecessários no áudio gerado.
@@ -100,16 +125,23 @@ O primeiro passo no C++ e `StreamingReceiver`, que:
 
 - recebe blocos de amostras por `pushSamples`;
 - mantém um banco limitado de fases de simbolo para nao depender do instante exato em que a captura foi iniciada;
-- mantem variantes pequenas de deslocamento comum de frequencia dos dois tons, incluindo passos intermediarios como `7,5 Hz`, para tolerar erro leve de sintonia/BFO/SDR no RX continuo;
+- mantem variantes pequenas de deslocamento comum de frequencia dos tons configurados, incluindo passos intermediarios como `7,5 Hz`, para tolerar erro leve de sintonia/BFO/SDR no RX continuo;
 - demodula incrementalmente apenas janelas de simbolo novas;
 - acumula bits por fase em uma janela limitada;
 - procura `START_SYNC`, recupera `PHYS_LENGTH` com apoio opcional da qualidade por simbolo e espera apenas o bloco robusto de tamanho conhecido;
+- no modo 4-FSK, procura `START_SYNC` apenas em fronteiras validas de simbolo fisico, pois cada simbolo de audio carrega dois bits;
 - decodifica o `ROBUST_FRAME` com Viterbi soft-decision, usando a separacao de cada simbolo como peso de erro;
 - emite eventos diagnosticos quando encontra `START_SYNC`, recupera `PHYS_LENGTH`, acumula `ROBUST_FRAME`, rejeita um quadro ou valida CRC/payload;
 - emite `DecodeResult` quando CRC e payload sao validos;
+- marca candidatos completos rejeitados para nao reprocessar indefinidamente o mesmo quadro com CRC/payload invalidos;
 - descarta amostras e bits consumidos apos um quadro recuperado.
 
 Essa estrategia evita varrer todos os comprimentos possiveis de payload e evita reprocessar continuamente um WAV crescente. A validacao continua dependendo de CRC e payload validos; candidatos falsos de sincronismo sao descartados quando nao produzem frame logico valido.
+
+Para duracoes de simbolo muito curtas, como `0,1 s`, o RX continuo pode usar
+um banco menor de fases e deslocamentos de frequencia para acompanhar melhor o
+tempo real. Essa reducao e uma troca operacional: menor custo de CPU com um
+pouco menos de busca redundante.
 
 Os eventos diagnosticos do RX continuo devem ser usados pela interface apenas para log e observabilidade. A interface pode resumir esses eventos no modo normal e expor todos no modo detalhado. Eles nao alteram a regra de aceitacao: somente quadro com CRC e payload validos deve aparecer como mensagem recebida.
 
@@ -133,6 +165,12 @@ Também deve haver efeitos determinísticos simples para testes de:
 - clipping simétrico;
 - desvio de frequência por sinal analítico;
 - fading por blocos com ganho constante por bloco.
+
+Para comparar modulacoes fisicas, `python-sim/mfsk_sweep.py` executa uma
+varredura experimental de AWGN entre 2-FSK e 4-FSK usando o mesmo quadro logico
+simples em Python. A varredura registra duracao relativa, BER, CRC e payload
+valido. Ela serve para comparar a camada fisica; a decisao operacional ainda
+deve ser confirmada no core robusto e em capturas reais.
 
 ## Repeticao futura
 

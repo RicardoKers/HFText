@@ -16,15 +16,23 @@ int packedPayloadBytes(int payloadSymbols) {
     return (payloadSymbols * hftext::kBitsPerSymbol + hftext::kBitsPerByte - 1) / hftext::kBitsPerByte;
 }
 
-std::vector<std::uint8_t> preambleBits(int bitCount) {
-    if (bitCount < 0) {
+std::vector<std::uint8_t> preambleBits(const hftext::ModemConfig& config) {
+    if (config.preambleBits < 0) {
         throw std::invalid_argument("preambulo deve ser nao negativo");
     }
 
     std::vector<std::uint8_t> bits;
-    bits.reserve(static_cast<std::size_t>(bitCount));
-    for (int index = 0; index < bitCount; ++index) {
-        bits.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+    bits.reserve(static_cast<std::size_t>(config.preambleBits));
+    if (config.modulationMode == hftext::ModulationMode::Fsk4) {
+        for (int index = 0; index < config.preambleBits; ++index) {
+            const auto tone = static_cast<std::uint8_t>((index / 2) % 4);
+            const int bitIndex = 1 - (index % 2);
+            bits.push_back(static_cast<std::uint8_t>((tone >> bitIndex) & 0x01U));
+        }
+    } else {
+        for (int index = 0; index < config.preambleBits; ++index) {
+            bits.push_back(static_cast<std::uint8_t>(index % 2 == 0 ? 1 : 0));
+        }
     }
     return bits;
 }
@@ -73,14 +81,15 @@ ModemController::TransmissionEstimate ModemController::estimateTransmission(
     estimate.frameBits = (hftext::kHeaderBytes + packedPayloadBytes(estimate.payloadSymbols) + hftext::kCrcBytes)
         * hftext::kBitsPerByte;
     if (!estimate.payloadTooLong) {
-        const auto bits = hftext::buildRobustTransmission(estimate.payload, preambleBits(config_.preambleBits));
+        const auto bits = hftext::buildRobustTransmission(estimate.payload, preambleBits(config_));
         estimate.transmissionBits = static_cast<int>(bits.size());
         estimate.frameBits = estimate.transmissionBits - config_.preambleBits;
     } else {
         estimate.transmissionBits = config_.preambleBits + estimate.frameBits;
     }
-    estimate.durationSeconds = static_cast<double>(estimate.transmissionBits)
-        * static_cast<double>(config_.symbolDurationSec);
+    const int bitsPerAudioSymbol = hftext::bitsPerModulationSymbol(config_.modulationMode);
+    const int physicalSymbols = (estimate.transmissionBits + bitsPerAudioSymbol - 1) / bitsPerAudioSymbol;
+    estimate.durationSeconds = static_cast<double>(physicalSymbols) * static_cast<double>(config_.symbolDurationSec);
     return estimate;
 }
 

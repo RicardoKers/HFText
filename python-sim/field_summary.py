@@ -12,21 +12,43 @@ from typing import Iterable, TextIO
 
 
 SUMMARY_MARKER = "--- Resumo CSV ---"
+FRAMES_MARKER = "--- Quadros aceitos CSV ---"
 DEFAULT_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
-DEFAULT_GROUP_BY = ["symbol_duration_s", "f0_hz", "f1_hz", "amplitude", "preamble_bits", "detailed_log"]
+DEFAULT_GROUP_BY = [
+    "modulation",
+    "symbol_duration_s",
+    "f0_hz",
+    "f1_hz",
+    "amplitude",
+    "preamble_bits",
+    "detailed_log",
+]
+FRAME_DEDUP_COLUMNS = [
+    "accepted_at",
+    "modulation",
+    "symbol_duration_s",
+    "sample_rate_hz",
+    "f0_hz",
+    "f1_hz",
+    "amplitude",
+    "preamble_bits",
+    "length",
+    "text",
+]
 
 
 @dataclass(frozen=True)
 class EvidenceSummary:
     source_path: Path
     row: dict[str, str]
+    frame_rows: list[dict[str, str]]
 
 
-def _read_summary_records(text: str) -> tuple[list[str], list[str]] | None:
-    """Return header/data CSV records from an evidence TXT, if present."""
+def _read_csv_records(text: str, marker: str) -> list[list[str]] | None:
+    """Return CSV records from a marked evidence TXT section, if present."""
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        if line.strip() != SUMMARY_MARKER:
+        if line.strip() != marker:
             continue
 
         csv_lines = []
@@ -40,11 +62,32 @@ def _read_summary_records(text: str) -> tuple[list[str], list[str]] | None:
 
         reader = csv.reader(StringIO("\n".join(csv_lines)))
         records = [record for record in reader if record]
-        if len(records) < 2:
+        if not records:
             return None
-        return records[0], records[1]
+        return records
 
     return None
+
+
+def _read_summary_records(text: str) -> tuple[list[str], list[str]] | None:
+    """Return header/data CSV records from an evidence TXT, if present."""
+    records = _read_csv_records(text, SUMMARY_MARKER)
+    if records is None or len(records) < 2:
+        return None
+    return records[0], records[1]
+
+
+def _read_frame_rows(text: str) -> list[dict[str, str]]:
+    """Return one row per accepted RX frame from an evidence TXT, if present."""
+    records = _read_csv_records(text, FRAMES_MARKER)
+    if records is None:
+        return []
+    header, *values = records
+    rows = []
+    for record in values:
+        if len(record) == len(header):
+            rows.append(dict(zip(header, record, strict=True)))
+    return rows
 
 
 def parse_evidence_summary(path: str | Path) -> EvidenceSummary | None:
@@ -62,6 +105,7 @@ def parse_evidence_summary(path: str | Path) -> EvidenceSummary | None:
     return EvidenceSummary(
         source_path=evidence_path,
         row=dict(zip(header, values, strict=True)),
+        frame_rows=_read_frame_rows(text),
     )
 
 
@@ -114,6 +158,70 @@ def write_summaries(file: TextIO, summaries: list[EvidenceSummary], columns: lis
         row = {"source_txt": str(summary.source_path)}
         row.update(summary.row)
         writer.writerow(row)
+
+
+def accepted_frame_columns(summaries: Iterable[EvidenceSummary]) -> list[str]:
+    """Build a stable union of columns from accepted-frame evidence rows."""
+    columns = ["source_txt"]
+    for summary in summaries:
+        for frame in summary.frame_rows:
+            for column in frame:
+                if column not in columns:
+                    columns.append(column)
+    return columns
+
+
+def _accepted_frame_key(frame: dict[str, str]) -> tuple[str, ...]:
+    """Return a stable key for one accepted frame across cumulative evidence saves."""
+    return tuple(frame.get(column, "") for column in FRAME_DEDUP_COLUMNS)
+
+
+def unique_accepted_frame_rows(summaries: list[EvidenceSummary]) -> list[tuple[EvidenceSummary, dict[str, str]]]:
+    """Return accepted frames, deduplicating frames repeated by later evidence saves."""
+    rows = []
+    seen: set[tuple[str, ...]] = set()
+    for summary in sorted(summaries, key=lambda item: str(item.source_path)):
+        for frame in summary.frame_rows:
+            key = _accepted_frame_key(frame)
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append((summary, frame))
+    return rows
+
+
+def write_accepted_frames(
+    file: TextIO,
+    summaries: list[EvidenceSummary],
+    columns: list[str] | None = None,
+    *,
+    keep_duplicates: bool = False,
+) -> None:
+    """Write one CSV row per accepted frame from evidence files."""
+    fieldnames = columns if columns is not None else accepted_frame_columns(summaries)
+    writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    if keep_duplicates:
+        rows = [(summary, frame) for summary in summaries for frame in summary.frame_rows]
+    else:
+        rows = unique_accepted_frame_rows(summaries)
+    for summary, frame in rows:
+        row = {"source_txt": str(summary.source_path)}
+        row.update(frame)
+        writer.writerow(row)
+
+
+def write_accepted_frames_csv(
+    path: str | Path,
+    summaries: list[EvidenceSummary],
+    *,
+    keep_duplicates: bool = False,
+) -> None:
+    """Write accepted RX frames as a flat CSV table."""
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as file:
+        write_accepted_frames(file, summaries, keep_duplicates=keep_duplicates)
 
 
 def _parse_percent(value: str) -> float | None:
@@ -223,22 +331,29 @@ def print_report(
     summaries: list[EvidenceSummary],
     output_path: Path | None,
     group_output_path: Path | None,
+    frames_output_path: Path | None,
     stream: TextIO = sys.stdout,
 ) -> None:
     """Print a compact human-readable aggregate report."""
     accepted = 0
+    accepted_frame_rows = len(unique_accepted_frame_rows(summaries))
+    accepted_frame_rows_raw = 0
     qualities = []
     for summary in summaries:
         try:
             accepted += int(summary.row.get("rx_accepted", "0"))
         except ValueError:
             pass
+        accepted_frame_rows_raw += len(summary.frame_rows)
         quality = _parse_percent(summary.row.get("rx_quality", ""))
         if quality is not None:
             qualities.append(quality)
 
     print(f"evidencias,{len(summaries)}", file=stream)
     print(f"quadros_aceitos,{accepted}", file=stream)
+    print(f"quadros_aceitos_unicos,{accepted_frame_rows}", file=stream)
+    if accepted_frame_rows_raw != accepted_frame_rows:
+        print(f"linhas_quadros_aceitos_brutas,{accepted_frame_rows_raw}", file=stream)
     if qualities:
         print(f"qualidade_media_pct,{sum(qualities) / len(qualities):.1f}", file=stream)
         print(f"qualidade_min_pct,{min(qualities):.1f}", file=stream)
@@ -246,6 +361,8 @@ def print_report(
         print(f"csv,{output_path}", file=stream)
     if group_output_path is not None:
         print(f"groups_csv,{group_output_path}", file=stream)
+    if frames_output_path is not None:
+        print(f"frames_csv,{frames_output_path}", file=stream)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -253,8 +370,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--input-dir", default=str(DEFAULT_LOG_DIR), help="directory containing evidence TXT files")
     parser.add_argument("--output", default=None, help="aggregate CSV path")
     parser.add_argument("--group-output", default=None, help="grouped aggregate CSV path")
+    parser.add_argument("--frames-output", default=None, help="accepted frames CSV path")
     parser.add_argument("--group-by", nargs="+", default=DEFAULT_GROUP_BY, help="columns used for grouped summary")
     parser.add_argument("--no-groups", action="store_true", help="do not write grouped aggregate CSV")
+    parser.add_argument("--no-frames", action="store_true", help="do not write accepted-frame CSV")
+    parser.add_argument(
+        "--keep-duplicate-frames",
+        action="store_true",
+        help="keep accepted frames repeated by later cumulative evidence saves",
+    )
     parser.add_argument("--stdout", action="store_true", help="write aggregate CSV to stdout instead of a file")
     return parser.parse_args(argv)
 
@@ -265,19 +389,40 @@ def main(argv: list[str] | None = None) -> int:
 
     output_path = None
     group_output_path = None
+    frames_output_path = None
     if args.stdout:
         write_summaries(sys.stdout, summaries)
         if args.group_output:
             group_output_path = Path(args.group_output)
             write_grouped_summary_csv(group_output_path, summaries, args.group_by)
+        if args.frames_output:
+            frames_output_path = Path(args.frames_output)
+            write_accepted_frames_csv(
+                frames_output_path,
+                summaries,
+                keep_duplicates=args.keep_duplicate_frames,
+            )
     else:
         output_path = Path(args.output) if args.output else Path(args.input_dir) / "field_summary.csv"
         write_summary_csv(output_path, summaries)
         if not args.no_groups:
             group_output_path = Path(args.group_output) if args.group_output else Path(args.input_dir) / "field_summary_groups.csv"
             write_grouped_summary_csv(group_output_path, summaries, args.group_by)
+        if not args.no_frames:
+            frames_output_path = Path(args.frames_output) if args.frames_output else Path(args.input_dir) / "field_frames.csv"
+            write_accepted_frames_csv(
+                frames_output_path,
+                summaries,
+                keep_duplicates=args.keep_duplicate_frames,
+            )
 
-    print_report(summaries, output_path, group_output_path, stream=sys.stderr if args.stdout else sys.stdout)
+    print_report(
+        summaries,
+        output_path,
+        group_output_path,
+        frames_output_path,
+        stream=sys.stderr if args.stdout else sys.stdout,
+    )
     return 0
 
 

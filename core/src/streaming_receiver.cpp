@@ -35,11 +35,12 @@ constexpr float kStreamingFrequencyOffsetsHz[] = {
     15.0F,
     -15.0F,
 };
-
-struct SymbolMetrics {
-    double energy0 = 0.0;
-    double energy1 = 0.0;
-    double power = 0.0;
+constexpr float kFastStreamingFrequencyOffsetsHz[] = {
+    0.0F,
+    7.5F,
+    -7.5F,
+    15.0F,
+    -15.0F,
 };
 
 std::size_t packedPayloadBytes(int symbolCount) {
@@ -142,115 +143,15 @@ std::size_t robustFrameBitCountForPayloadLength(int payloadLength) {
     return static_cast<std::size_t>(logicalBits + kConvTailBits) * kConvOutputBitsPerInputBit;
 }
 
-double toneEnergyWindow(
-    const std::vector<float>& samples,
-    std::size_t start,
-    std::size_t count,
-    int sampleRate,
-    float frequencyHz
-) {
-    double inPhase = 0.0;
-    double quadrature = 0.0;
-
-    for (std::size_t index = 0; index < count; ++index) {
-        const double t = static_cast<double>(index) / sampleRate;
-        const double phase = 2.0 * kPi * frequencyHz * t;
-        const double sample = samples[start + index];
-        inPhase += sample * std::cos(phase);
-        quadrature += sample * std::sin(phase);
-    }
-
-    return inPhase * inPhase + quadrature * quadrature;
-}
-
-SymbolMetrics symbolMetricsWindow(
-    const std::vector<float>& samples,
-    std::size_t start,
-    std::size_t count,
-    int sampleRate,
-    float frequency0Hz,
-    float frequency1Hz
-) {
-    double inPhase0 = 0.0;
-    double quadrature0 = 0.0;
-    double inPhase1 = 0.0;
-    double quadrature1 = 0.0;
-    double power = 0.0;
-
-    for (std::size_t index = 0; index < count; ++index) {
-        const double t = static_cast<double>(index) / sampleRate;
-        const double phase0 = 2.0 * kPi * frequency0Hz * t;
-        const double phase1 = 2.0 * kPi * frequency1Hz * t;
-        const double sample = samples[start + index];
-        inPhase0 += sample * std::cos(phase0);
-        quadrature0 += sample * std::sin(phase0);
-        inPhase1 += sample * std::cos(phase1);
-        quadrature1 += sample * std::sin(phase1);
-        power += sample * sample;
-    }
-
-    return {
-        inPhase0 * inPhase0 + quadrature0 * quadrature0,
-        inPhase1 * inPhase1 + quadrature1 * quadrature1,
-        power,
-    };
-}
-
-double bitSeparation(const SymbolMetrics& metrics) {
-    const double totalEnergy = metrics.energy0 + metrics.energy1;
-    if (totalEnergy <= 0.0) {
-        return 0.0;
-    }
-
-    return std::abs(metrics.energy1 - metrics.energy0) / totalEnergy;
-}
-
-double bitQuality(const SymbolMetrics& metrics, std::size_t count) {
-    if (metrics.power <= 0.0 || count == 0) {
-        return 0.0;
-    }
-
-    const double totalEnergy = metrics.energy0 + metrics.energy1;
-    if (totalEnergy <= 0.0) {
-        return 0.0;
-    }
-
-    const double separation = bitSeparation(metrics);
-    const double coherentConcentration = totalEnergy / (metrics.power * static_cast<double>(count));
-    const double coherentWeight = std::clamp(coherentConcentration / 0.05, 0.0, 1.0);
-    return separation * coherentWeight;
-}
-
-BitDecision demodulateSymbol(
-    const std::vector<float>& samples,
-    std::size_t start,
-    std::size_t count,
-    const ModemConfig& config
-) {
-    const auto metrics = symbolMetricsWindow(
-        samples,
-        start,
-        count,
-        config.sampleRate,
-        config.frequency0Hz,
-        config.frequency1Hz
-    );
-    const double confidence = bitSeparation(metrics);
-    const double quality = bitQuality(metrics, count);
-
-    return BitDecision{
-        static_cast<std::uint8_t>(metrics.energy1 > metrics.energy0 ? 1 : 0),
-        static_cast<float>(std::clamp(confidence, 0.0, 1.0)),
-        static_cast<float>(std::clamp(quality, 0.0, 1.0))
-    };
-}
-
 bool isValidTonePair(const ModemConfig& config) {
     const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
-    return config.frequency0Hz > 0.0F
-        && config.frequency1Hz > 0.0F
-        && config.frequency0Hz < nyquistHz
-        && config.frequency1Hz < nyquistHz;
+    if (config.frequency0Hz <= 0.0F || config.frequency1Hz <= 0.0F || config.frequency0Hz == config.frequency1Hz) {
+        return false;
+    }
+    if (config.modulationMode == ModulationMode::Fsk4 && modulationToneSpacingHz(config) <= 0.0F) {
+        return false;
+    }
+    return highestModulationToneHz(config) < nyquistHz;
 }
 
 float meanConfidence(
@@ -283,6 +184,16 @@ std::vector<SoftBitDecision> softBitsFromDecisions(
         softBits.push_back({decision.bit, decision.confidence});
     }
     return softBits;
+}
+
+const float* frequencyOffsetsForConfig(const ModemConfig& config, std::size_t& count) {
+    if (config.symbolDurationSec <= 0.15F) {
+        count = sizeof(kFastStreamingFrequencyOffsetsHz) / sizeof(kFastStreamingFrequencyOffsetsHz[0]);
+        return kFastStreamingFrequencyOffsetsHz;
+    }
+
+    count = sizeof(kStreamingFrequencyOffsetsHz) / sizeof(kStreamingFrequencyOffsetsHz[0]);
+    return kStreamingFrequencyOffsetsHz;
 }
 
 }  // namespace
@@ -383,7 +294,8 @@ std::size_t StreamingReceiver::frameBitCount(const DecodeResult& result) const {
 
 std::vector<int> StreamingReceiver::phaseOffsets() const {
     const int symbolSamples = samplesPerSymbol();
-    const int step = std::max(1, symbolSamples / kPhaseDivisions);
+    const int phaseDivisions = config_.symbolDurationSec <= 0.15F ? 10 : kPhaseDivisions;
+    const int step = std::max(1, symbolSamples / phaseDivisions);
 
     std::vector<int> offsets;
     for (int offset = 0; offset < symbolSamples; offset += step) {
@@ -398,7 +310,10 @@ std::vector<int> StreamingReceiver::phaseOffsets() const {
 void StreamingReceiver::resetPhaseStates() {
     phases_.clear();
     const auto offsets = phaseOffsets();
-    for (const float frequencyOffsetHz : kStreamingFrequencyOffsetsHz) {
+    std::size_t frequencyOffsetCount = 0;
+    const float* frequencyOffsets = frequencyOffsetsForConfig(config_, frequencyOffsetCount);
+    for (std::size_t frequencyOffsetIndex = 0; frequencyOffsetIndex < frequencyOffsetCount; ++frequencyOffsetIndex) {
+        const float frequencyOffsetHz = frequencyOffsets[frequencyOffsetIndex];
         ModemConfig phaseConfig = config_;
         phaseConfig.frequency0Hz += frequencyOffsetHz;
         phaseConfig.frequency1Hz += frequencyOffsetHz;
@@ -427,6 +342,7 @@ void StreamingReceiver::processPhase(PhaseState& phase) {
         phase.firstBitSample = phase.nextStartSample;
         phase.decisions.clear();
         phase.bits.clear();
+        phase.rejectedSyncSamples.clear();
     }
 
     while (phase.nextStartSample + symbolSamples <= sampleEnd) {
@@ -435,9 +351,11 @@ void StreamingReceiver::processPhase(PhaseState& phase) {
             phase.firstBitSample = phase.nextStartSample;
         }
 
-        const auto decision = demodulateSymbol(buffer_, localStart, symbolSamples, phase.config);
-        phase.decisions.push_back(decision);
-        phase.bits.push_back(decision.bit);
+        const auto decisions = demodulateSymbolDecisionsFsk(buffer_, localStart, symbolSamples, phase.config);
+        for (const auto& decision : decisions) {
+            phase.decisions.push_back(decision);
+            phase.bits.push_back(decision.bit);
+        }
         phase.nextStartSample += symbolSamples;
     }
 }
@@ -451,15 +369,27 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
     const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
     const std::size_t latestSample = sampleCursor_ + buffer_.size();
 
-    for (const auto& phase : phases_) {
+    for (auto& phase : phases_) {
         if (phase.bits.size() < startSync.size() + static_cast<std::size_t>(kPhysicalLengthBits)) {
             continue;
         }
 
         const std::size_t lastSyncStart = phase.bits.size() - startSync.size();
+        const auto bitsPerAudioSymbol = static_cast<std::size_t>(bitsPerModulationSymbol(phase.config.modulationMode));
+        const auto symbolSamples = static_cast<std::size_t>(samplesPerSymbol(phase.config));
         for (std::size_t syncStart = 0; syncStart <= lastSyncStart; ++syncStart) {
+            if (syncStart % bitsPerAudioSymbol != 0) {
+                continue;
+            }
             const int syncMismatches = bitMismatchCount(phase.bits, syncStart, startSync);
             if (!acceptsStartSyncCandidate(phase.bits, phase.decisions, syncStart, startSync, maxSyncMismatches)) {
+                continue;
+            }
+
+            const auto syncSample = static_cast<std::int64_t>(
+                phase.firstBitSample + (syncStart / bitsPerAudioSymbol) * symbolSamples
+            );
+            if (phase.rejectedSyncSamples.find(syncSample) != phase.rejectedSyncSamples.end()) {
                 continue;
             }
 
@@ -467,10 +397,6 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             if (lengthStart + static_cast<std::size_t>(kPhysicalLengthBits) > phase.bits.size()) {
                 continue;
             }
-
-            const auto syncSample = static_cast<std::int64_t>(
-                phase.firstBitSample + syncStart * static_cast<std::size_t>(samplesPerSymbol(phase.config))
-            );
 
             StreamingReceiverEvent syncEvent;
             syncEvent.type = StreamingReceiverEventType::SyncFound;
@@ -519,7 +445,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             candidate.confidence = meanConfidence(phase.decisions, robustStart, robustBits);
 
             const auto candidateEndSample = phase.firstBitSample
-                + (robustStart + robustBits) * static_cast<std::size_t>(samplesPerSymbol(phase.config));
+                + ((robustStart + robustBits + bitsPerAudioSymbol - 1U) / bitsPerAudioSymbol) * symbolSamples;
 
             StreamingReceiverEvent frameEvent = lengthEvent;
             frameEvent.payloadLength = payloadLength;
@@ -543,6 +469,10 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
                 }
             } else {
                 frameEvent.type = StreamingReceiverEventType::FrameRejected;
+                phase.rejectedSyncSamples.insert(syncSample);
+                if (phase.rejectedSyncSamples.size() > 512) {
+                    phase.rejectedSyncSamples.clear();
+                }
                 emitEvent(frameEvent);
             }
         }
@@ -621,12 +551,17 @@ void StreamingReceiver::trimBitBuffers() {
         }
 
         const auto excess = phase.bits.size() - kMaxRetainedBits;
-        phase.bits.erase(phase.bits.begin(), phase.bits.begin() + static_cast<std::ptrdiff_t>(excess));
+        const auto bitsPerAudioSymbol = static_cast<std::size_t>(bitsPerModulationSymbol(phase.config.modulationMode));
+        const auto roundedExcess = std::min(
+            phase.bits.size(),
+            ((excess + bitsPerAudioSymbol - 1U) / bitsPerAudioSymbol) * bitsPerAudioSymbol
+        );
+        phase.bits.erase(phase.bits.begin(), phase.bits.begin() + static_cast<std::ptrdiff_t>(roundedExcess));
         phase.decisions.erase(
             phase.decisions.begin(),
-            phase.decisions.begin() + static_cast<std::ptrdiff_t>(std::min(excess, phase.decisions.size()))
+            phase.decisions.begin() + static_cast<std::ptrdiff_t>(std::min(roundedExcess, phase.decisions.size()))
         );
-        phase.firstBitSample += excess * static_cast<std::size_t>(samplesPerSymbol(phase.config));
+        phase.firstBitSample += (roundedExcess / bitsPerAudioSymbol) * static_cast<std::size_t>(samplesPerSymbol(phase.config));
     }
 }
 

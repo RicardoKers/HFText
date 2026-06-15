@@ -23,6 +23,7 @@ class ReplayCase:
     source_txt: Path
     wav_path: Path
     expected_lines: list[str]
+    mode: str
     symbol_duration: str
     f0: str
     f1: str
@@ -77,6 +78,11 @@ def _resolve_wav_path(summary: EvidenceSummary) -> Path:
     return summary.source_path.with_suffix(".wav")
 
 
+def _mode_from_summary(summary: EvidenceSummary) -> str:
+    modulation = summary.row.get("modulation", "").lower()
+    return "4fsk" if "4" in modulation else "2fsk"
+
+
 def build_replay_cases(summaries: list[EvidenceSummary], include_failures: bool = False) -> list[ReplayCase]:
     """Build replay cases from evidence summaries."""
     cases = []
@@ -95,6 +101,7 @@ def build_replay_cases(summaries: list[EvidenceSummary], include_failures: bool 
                 source_txt=summary.source_path,
                 wav_path=_resolve_wav_path(summary),
                 expected_lines=expected_lines,
+                mode=_mode_from_summary(summary),
                 symbol_duration=summary.row.get("symbol_duration_s", "0.5") or "0.5",
                 f0=summary.row.get("f0_hz", "1200.0") or "1200.0",
                 f1=summary.row.get("f1_hz", "1600.0") or "1600.0",
@@ -137,6 +144,8 @@ def replay_case(case: ReplayCase, rx_command: list[str], timeout: float = DEFAUL
 
     command = [
         *rx_command,
+        "--mode",
+        case.mode,
         "--symbol-duration",
         case.symbol_duration,
         "--f0",

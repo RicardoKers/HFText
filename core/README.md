@@ -45,6 +45,18 @@ core\build\Debug\hftext_rx_wav.exe --verbose python-sim\generated\cpp_tx.wav
 
 O CTest do core tambem executa um round-trip automatico `hftext_tx_wav` -> `hftext_rx_wav`.
 
-Os CLIs usam sempre o modo robusto atual: frame logico HFText v0.1, codigo convolucional `conv_k3`, interleaving deterministico, fluxo fisico `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME` e 2-FSK. Nao ha opcao para transmitir ou receber sem FEC/interleaving. Quando a recepcao vem do demodulador C++, a busca de `START_SYNC`, a recuperacao de `PHYS_LENGTH` e o Viterbi podem usar a confianca de cada simbolo.
+Os CLIs usam sempre o modo robusto atual: frame logico HFText v0.1, codigo convolucional `conv_k3`, interleaving deterministico e fluxo fisico `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`. Nao ha opcao para transmitir ou receber sem FEC/interleaving. Quando a recepcao vem do demodulador C++, a busca de `START_SYNC`, a recuperacao de `PHYS_LENGTH` e o Viterbi podem usar a confianca de cada simbolo.
+
+Por padrao, a modulacao fisica e 2-FSK v0.1. Para testar a v0.2 experimental
+4-FSK, use `--mode 4fsk` nos CLIs:
+
+```powershell
+core\build\Debug\hftext_tx_wav.exe --mode 4fsk --f0 1000 --f1 1200 --callsign pu5lrk "Teste" python-sim\generated\cpp_tx_4fsk.wav
+core\build\Debug\hftext_rx_wav.exe --mode 4fsk --f0 1000 --f1 1200 --verbose python-sim\generated\cpp_tx_4fsk.wav
+core\build\Debug\hftext_stream_wav.exe --mode 4fsk --f0 1000 --f1 1200 python-sim\generated\cpp_tx_4fsk.wav
+```
+
+No modo 4-FSK, `f0` e `f1` definem os dois primeiros tons e o espacamento; os
+outros dois tons sao derivados automaticamente.
 
 `hftext_rx_wav` continua sendo ferramenta offline de debug. A recepcao operacional do app PC usa `StreamingReceiver`, que processa blocos de audio durante a captura e evita depender de um WAV fechado.

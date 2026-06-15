@@ -124,9 +124,11 @@ Outra melhoria iniciada: o demodulador passou a calcular uma confianca media bas
 
 A investigacao de robustez em Python apontou `conv_k3 + interleaving` como modo principal: codigo convolucional rate 1/2, K=3, geradores `111` e `101`, Viterbi e interleaving retangular sobre o fluxo codificado. O HFText v0.1 usa esse modo sempre; o frame simples `SYNC | LENGTH | PAYLOAD | CRC16` permanece como frame logico interno antes do FEC. No RX C++, o Viterbi usa decisao suave quando recebe confianca por simbolo do demodulador.
 
-Nesta fase, FEC simples e interleaving deixaram de ser apenas experimento e passaram a fazer parte do modo operacional unico. Repeticao simples, 4-FSK e 8-FSK permanecem como linhas futuras de pesquisa, nao como modos atuais.
+Nesta fase, FEC simples e interleaving deixaram de ser apenas experimento e passaram a fazer parte do modo operacional unico. O 4-FSK foi iniciado como modo experimental v0.2, selecionavel explicitamente para testes controlados. Repeticao simples e 8-FSK permanecem como linhas futuras de pesquisa, nao como modos atuais.
 
 Baseline congelado para campo: o HFText Basic v0.1 operacional atual e `2-FSK + START_SYNC + PHYS_LENGTH + conv_k3 + interleaving + Viterbi soft-decision + CRC`. Mudancas incompativeis, como repeticao operacional, ACK ou MFSK, devem ser tratadas como v0.2 ou posterior.
+
+Experimento v0.2 iniciado: 4-FSK reaproveita o mesmo frame logico e a mesma camada robusta da v0.1, mas transmite dois bits por simbolo de audio. `Tom 0` e `Tom 1` definem os dois primeiros tons e o espacamento; os tons seguintes sao derivados automaticamente. O modo padrao continua sendo 2-FSK v0.1.
 
 ## Fase 7 — Aplicação Android TX
 
@@ -207,3 +209,5 @@ A interface do app PC foi reorganizada em abas para reduzir poluicao visual: `Op
 Como o texto recebido agora e um historico, a interface tambem possui `Limpar RX` para limpar somente a area de mensagens recebidas, preservando log, WAVs e configuracoes.
 
 O app PC tambem possui recursos de apoio a validacao de campo: `Salvar Evidencia RX`, linha `Estado RX` e linha `Sessao RX`, permitindo exportar audio/log e acompanhar candidatos aceitos, rejeitados, syncs e `PHYS_LENGTH` durante a recepcao.
+
+A Fase 6 tambem iniciou a v0.2 experimental com 4-FSK no core, nos CLIs e no app PC. O objetivo imediato e comparar tempo de transmissao e sensibilidade contra o 2-FSK v0.1 sem alterar o frame logico nem remover o modo estavel.

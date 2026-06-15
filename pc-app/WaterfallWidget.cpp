@@ -101,12 +101,15 @@ void WaterfallWidget::clear() {
 }
 
 void WaterfallWidget::setMarkerFrequencies(double frequency0Hz, double frequency1Hz) {
-    if (markerFrequency0Hz_ == frequency0Hz && markerFrequency1Hz_ == frequency1Hz) {
+    setMarkerFrequencies(std::vector<double>{frequency0Hz, frequency1Hz});
+}
+
+void WaterfallWidget::setMarkerFrequencies(const std::vector<double>& frequenciesHz) {
+    if (markerFrequenciesHz_ == frequenciesHz) {
         return;
     }
 
-    markerFrequency0Hz_ = frequency0Hz;
-    markerFrequency1Hz_ = frequency1Hz;
+    markerFrequenciesHz_ = frequenciesHz;
     update();
 }
 
@@ -123,7 +126,7 @@ void WaterfallWidget::paintEvent(QPaintEvent* event) {
     painter.setClipRect(waterfallRect);
     QPen markerPen(QColor(255, 220, 0, 210), 2);
     painter.setPen(markerPen);
-    for (const double frequency : {markerFrequency0Hz_, markerFrequency1Hz_}) {
+    for (const double frequency : markerFrequenciesHz_) {
         if (frequency < kMinFrequencyHz || frequency > kMaxFrequencyHz) {
             continue;
         }
@@ -152,7 +155,7 @@ void WaterfallWidget::paintEvent(QPaintEvent* event) {
     }
 
     painter.setPen(QPen(QColor(255, 220, 0), 2));
-    for (const double frequency : {markerFrequency0Hz_, markerFrequency1Hz_}) {
+    for (const double frequency : markerFrequenciesHz_) {
         if (frequency < kMinFrequencyHz || frequency > kMaxFrequencyHz) {
             continue;
         }

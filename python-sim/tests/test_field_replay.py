@@ -12,8 +12,8 @@ def evidence_text(wav_path: str, received_text: str = "pu5lrk Ola!") -> str:
         "HFText evidencia RX\n"
         "\n"
         "--- Resumo CSV ---\n"
-        "generated_at,symbol_duration_s,f0_hz,f1_hz,rx_accepted,received_text,wav_path\n"
-        f'"2026-06-06T17:59:11",0.300,1200.0,1600.0,1,"{received_text}","{wav_path}"\n'
+        "generated_at,modulation,symbol_duration_s,f0_hz,f1_hz,rx_accepted,received_text,wav_path\n"
+        f'"2026-06-06T17:59:11","4-FSK exp v0.2",0.300,1200.0,1600.0,1,"{received_text}","{wav_path}"\n'
         "\n"
         "--- Log ---\n"
     )
@@ -50,6 +50,7 @@ def test_build_replay_cases_uses_accepted_evidence(tmp_path):
     assert len(cases) == 1
     assert cases[0].wav_path == wav_path
     assert cases[0].expected_lines == ["pu5lrk Ola!"]
+    assert cases[0].mode == "4fsk"
     assert cases[0].symbol_duration == "0.300"
     assert cases[0].f0 == "1200.0"
     assert cases[0].f1 == "1600.0"

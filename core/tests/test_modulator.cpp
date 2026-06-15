@@ -36,6 +36,14 @@ int main() {
     assert(*minIt >= -1.0F);
     assert(*maxIt <= 1.0F);
 
+    const auto quietAudio = hftext::modulateBits2Fsk({0, 1}, 8000, 0.1F, 1200.0F, 1600.0F, 0.2F);
+    const auto loudAudio = hftext::modulateBits2Fsk({0, 1}, 8000, 0.1F, 1200.0F, 1600.0F, 0.8F);
+    const auto quietPeak = std::max(std::abs(*std::min_element(quietAudio.begin(), quietAudio.end())),
+                                    std::abs(*std::max_element(quietAudio.begin(), quietAudio.end())));
+    const auto loudPeak = std::max(std::abs(*std::min_element(loudAudio.begin(), loudAudio.end())),
+                                   std::abs(*std::max_element(loudAudio.begin(), loudAudio.end())));
+    assert(loudPeak > quietPeak * 3.5F);
+
     const int sampleRate = 8000;
     const float symbolDuration = 0.1F;
     const int samplesPerSymbol = static_cast<int>(sampleRate * symbolDuration);
@@ -44,6 +52,16 @@ int main() {
     const std::vector<float> second(audio.begin() + samplesPerSymbol, audio.end());
     assert(tonePower(first, sampleRate, 1000.0) > tonePower(first, sampleRate, 2000.0));
     assert(tonePower(second, sampleRate, 2000.0) > tonePower(second, sampleRate, 1000.0));
+
+    audio = hftext::modulateBits4Fsk({0, 0, 0, 1, 1, 0, 1, 1}, sampleRate, symbolDuration, 1000.0F, 1200.0F, 0.8F);
+    assert(audio.size() == static_cast<std::size_t>(4 * samplesPerSymbol));
+    for (int symbol = 0; symbol < 4; ++symbol) {
+        const auto begin = audio.begin() + symbol * samplesPerSymbol;
+        const auto end = begin + samplesPerSymbol;
+        const std::vector<float> window(begin, end);
+        const double expectedFrequency = 1000.0 + 200.0 * symbol;
+        assert(tonePower(window, sampleRate, expectedFrequency) > tonePower(window, sampleRate, 1000.0 + 200.0 * ((symbol + 1) % 4)));
+    }
 
     assert(hftext::modulateBits2Fsk({}, 8000, 0.1F, 1200.0F, 1600.0F, 0.8F).empty());
 
@@ -55,6 +73,14 @@ int main() {
     bool invalidBitRejected = false;
     try {
         (void)hftext::modulateBits2Fsk({0, 2, 1});
+    } catch (const std::invalid_argument&) {
+        invalidBitRejected = true;
+    }
+    assert(invalidBitRejected);
+
+    invalidBitRejected = false;
+    try {
+        (void)hftext::modulateBits4Fsk({1, 2}, 8000, 0.1F, 1000.0F, 1200.0F, 0.8F);
     } catch (const std::invalid_argument&) {
         invalidBitRejected = true;
     }

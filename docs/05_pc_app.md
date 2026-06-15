@@ -105,9 +105,10 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao normal em
 - barra discreta de progresso TX, sem texto;
 - limpeza do historico RX por menu de contexto no historico de mensagens;
 - indicativo e parametros do modem na aba `Configuracao`;
+- seletor de modulacao fisica, mantendo `2-FSK robust v0.1` como padrao e oferecendo `4-FSK experimental v0.2` para testes controlados;
 - botoes `Receber` e `Parar RX` na aba `Configuracao`;
 - botoes `Gerar WAV` e `Decodificar WAV` mantidos na aba `Configuracao` como ferramentas de debug;
-- configuracao de sample rate TX/WAV, sample rate RX, duracao de simbolo, tom 0, tom 1, amplitude e preambulo;
+- configuracao de sample rate TX/WAV, sample rate RX, duracao de simbolo, tom 0, tom 1, amplitude, preambulo e modulacao;
 - recepcao continua iniciada automaticamente ao abrir o app quando ha dispositivo de entrada disponivel;
 - reinicio automatico do RX ativo quando parametros de recepcao mudam, como sample rate RX, duracao de simbolo, tons, preambulo, entrada de audio ou log detalhado;
 - opcao `Log RX detalhado` para alternar entre log operacional resumido e telemetria completa de debug;
@@ -120,7 +121,7 @@ A interface atual do `pc-app/` e uma aplicacao Qt Widgets com operacao normal em
 - indicador simples de qualidade RX baseado na confianca media do demodulador;
 - linha `Estado RX` com resumo operacional de sincronismo, ultimo `PHYS_LENGTH`, qualidade e ultimo motivo de rejeicao;
 - linha `Sessao RX` com duracao e contadores consolidados da recepcao atual;
-- waterfall RX simples para observacao visual do audio recebido, com marcadores amarelos nos tons RX configurados;
+- waterfall RX simples para observacao visual do audio recebido, com marcadores amarelos nos tons RX configurados ou derivados pela modulacao escolhida;
 - area de texto recebido;
 - log simples;
 - botao `Salvar Evidencia RX` para gravar um WAV do audio RX recente e um TXT com configuracao, texto recebido e log;
@@ -137,7 +138,7 @@ A interface agora separa operacao e configuracao em abas:
 A area `Texto recebido` funciona como historico: novas mensagens ou resultados de decodificacao sao adicionados abaixo dos anteriores.
 O comando `Limpar RX`, no menu de contexto desse historico, limpa o historico visual sem apagar WAVs, log ou configuracoes.
 
-Ao fechar, o app salva localmente indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio selecionados, estado do `Log RX detalhado` e geometria da janela. Esses valores sao restaurados na proxima abertura. A mensagem TX digitada nao e persistida, para evitar reabrir o app com texto antigo pronto para transmissao.
+Ao fechar, o app salva localmente indicativo, modulacao, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio selecionados, estado do `Log RX detalhado` e geometria da janela. Esses valores sao restaurados na proxima abertura. A mensagem TX digitada nao e persistida, para evitar reabrir o app com texto antigo pronto para transmissao.
 
 O app usa `ModemController` apenas como ponte entre a interface, `hftext_core` e o utilitario de leitura/escrita WAV. Ele nao implementa logica DSP.
 
@@ -159,11 +160,11 @@ Nesta etapa, a escuta continua e iniciada automaticamente ao abrir o app quando 
 
 O RX foi projetado para permanecer ligado por horas. Para isso, a fila entre captura e worker e limitada, o historico interno recente de `AudioInput` e limitado, a evidencia manual usa uma janela circular recente e o contador total de amostras fica separado do audio armazenado. Assim a duracao registrada continua correta sem crescimento indefinido de memoria.
 
-Quando o operador altera parametros que afetam a recepcao enquanto o RX esta ativo, o app reinicia a escuta automaticamente para recriar o `StreamingReceiver` com a nova configuracao. Isso evita a necessidade de parar e iniciar manualmente depois de mudar tons, sample rate RX, duracao de simbolo, preambulo, dispositivo de entrada ou o estado do log detalhado.
+Quando o operador altera parametros que afetam a recepcao enquanto o RX esta ativo, o app reinicia a escuta automaticamente para recriar o `StreamingReceiver` com a nova configuracao. Isso evita a necessidade de parar e iniciar manualmente depois de mudar modulacao, tons, sample rate RX, duracao de simbolo, preambulo, dispositivo de entrada ou o estado do log detalhado.
 
 O RX continuo usa o modo robusto unico do core. Quando o demodulador fornece confianca por simbolo, o bloco robusto e decodificado por Viterbi soft-decision; o CRC do frame logico continua sendo a validacao final. O receptor em fluxo tambem testa pequenos deslocamentos comuns de frequencia nos dois tons, incluindo um passo intermediario de `7,5 Hz`, alinhando a escuta continua com a tolerancia do decoder WAV offline para erro leve de sintonia/BFO/SDR.
 
-Na waterfall, duas linhas verticais amarelas indicam os tons `Tom 0` e `Tom 1` configurados para recepcao. Elas sao referencias visuais para sintonia: se as trilhas recebidas aparecerem deslocadas para um lado das linhas, o operador pode ajustar a sintonia do radio/SDR ou os tons configurados. As linhas nao alteram a decodificacao.
+Na waterfall, linhas verticais amarelas indicam os tons usados pela modulacao atual. Em 2-FSK sao `Tom 0` e `Tom 1`; em 4-FSK experimental sao quatro tons igualmente espacados derivados de `Tom 0` e `Tom 1`. Elas sao referencias visuais para sintonia: se as trilhas recebidas aparecerem deslocadas para um lado das linhas, o operador pode ajustar a sintonia do radio/SDR ou os tons configurados. As linhas nao alteram a decodificacao.
 
 A paleta da waterfall tambem ajuda no ajuste de nivel: trilhas fracas ou normais tendem ao verde, trilhas proximas de saturacao puxam para amarelo e blocos de entrada no fundo de escala fazem as trilhas daquele instante aparecerem em vermelho. O amarelo/vermelho e aviso visual de possivel saturacao/clipping da entrada de audio; a aceitacao da mensagem continua dependendo apenas do core e do CRC.
 
@@ -183,11 +184,24 @@ O log do app inclui timestamp em cada linha. Quando uma mensagem e aceita, o tex
 - quadro rejeitado por CRC/payload/tamanho;
 - quadro valido, com confianca e latencia estimada apos o fim do frame.
 
+Durante TX direto, o log tambem informa o pico do audio gerado. Esse valor
+deve acompanhar o parametro `Amplitude`; se o pico gerado mudar mas o volume
+recebido parecer igual, a normalizacao provavelmente esta ocorrendo fora do
+HFText, por exemplo no mixer, no radio, no SDR ou em algum AGC.
+
 O botao `Salvar Log` grava o conteudo atual do log em um arquivo `.txt`. O arquivo inclui um cabecalho com timestamp de exportacao, indicativo, sample rates, duracao de simbolo, tons, amplitude, preambulo, dispositivos de audio e estado do log detalhado. Isso serve para anexar testes de campo sem depender de prints da interface.
 
 O botao `Limpar Log` limpa apenas a area de log operacional exibida na interface. Ele nao apaga o historico de `Texto recebido`, configuracoes locais, WAVs gerados ou capturas.
 
 O botao `Salvar Evidencia RX` grava manualmente, na pasta escolhida pelo operador, dois arquivos com o mesmo prefixo: um `.wav` contendo a janela circular de audio RX recente e um `.txt` contendo cabecalho de configuracao, caminho do WAV, duracao salva, resumo CSV de campo, historico de `Texto recebido` e log atual. A janela inicial e limitada aos ultimos 300 segundos para evitar crescimento indefinido durante escutas longas. O resumo CSV inclui configuracao, contadores da sessao, diagnostico recente e, quando houver, tamanho, qualidade, offset e fases/tentativas do ultimo quadro aceito. Esse recurso e voltado para depurar falhas de campo e reproduzir capturas depois, sem alterar o protocolo nem a decodificacao em tempo real.
+
+O mesmo TXT de evidencia tambem inclui a secao `Quadros aceitos CSV`, com uma
+linha para cada quadro aceito pelo RX continuo desde o inicio da recepcao atual.
+Cada linha preserva o instante de aceite, tempo decorrido da sessao, modulacao,
+duracao de simbolo, sample rate RX, tons, amplitude configurada, preambulo,
+tamanho, qualidade, offset/fases e texto aceito. Essa tabela deve ser usada
+para comparar transmissoes individuais quando a mesma sessao tiver misturado
+parametros, por exemplo 0,1 s e 0,3 s antes de salvar a evidencia.
 
 Para manter a interface responsiva durante ruido ou muitos candidatos falsos, a fila de audio entre captura e worker RX deve ser limitada. Se o worker ficar atrasado, amostras antigas pendentes podem ser descartadas em vez de bloquear a interface. O waterfall tambem deve limitar atualizacoes pendentes, e o log detalhado pode omitir eventos por lote quando houver excesso. A validacao de mensagem continua sendo feita somente pelo core com CRC e payload validos.
 

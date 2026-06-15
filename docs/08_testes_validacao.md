@@ -32,14 +32,16 @@ Definir como validar o funcionamento do modem e das aplicações.
 
 - saída não deve ultrapassar -1.0 a +1.0;
 - duração do áudio deve corresponder ao número de símbolos;
-- frequência dominante deve corresponder ao bit transmitido.
+- frequência dominante deve corresponder ao bit transmitido;
+- no modo 4-FSK experimental, pares `00`, `01`, `10` e `11` devem mapear para os quatro tons esperados.
 
 ### Demodulador
 
 - deve detectar tom 0;
 - deve detectar tom 1;
 - deve decodificar sequência conhecida;
-- deve recuperar quadro limpo.
+- deve recuperar quadro limpo;
+- no modo 4-FSK experimental, deve recuperar dois bits por simbolo de audio e informar confianca coerente com a separacao entre tons.
 
 ## Testes de canal
 
@@ -93,6 +95,15 @@ Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes p
 - confianca media;
 - menor confianca;
 - mínimo e máximo de erros de bit.
+
+Para a v0.2 experimental, a comparacao 2-FSK vs 4-FSK deve registrar tambem:
+
+- modulacao usada;
+- tons efetivos;
+- duracao relativa da transmissao;
+- taxa de sucesso de CRC/payload por SNR;
+- BER media e pior BER por modo;
+- diferenca entre ganho de tempo e perda de sensibilidade, quando houver.
 
 Além da varredura por SNR, a simulação deve possuir uma varredura por cenários nomeados de canal, cobrindo efeitos isolados e combinação moderada de efeitos.
 
@@ -215,7 +226,17 @@ Cada recepção deve salvar opcionalmente:
 
 Para testes de campo, o app PC deve permitir salvar manualmente um pacote de evidencia RX contendo o audio recente em WAV e um TXT com configuracao, resumo CSV, historico de texto recebido e log. Esse pacote deve ser acionado pelo operador e servir como material reproduzivel para investigar falhas de sincronismo, `PHYS_LENGTH`, CRC ou nivel de sinal. O resumo CSV deve ter uma linha de cabecalho e uma linha de valores para facilitar copiar varios testes para uma planilha. Quando houver quadro aceito na sessao, o CSV deve preservar os diagnosticos desse ultimo aceite, incluindo qualidade, tamanho aceito, offset em amostras e quantidade de fases/tentativas, mesmo que a linha visual `Estado RX` ja tenha voltado a outro estado.
 
-O utilitario `python-sim/field_summary.py` deve consolidar varios TXT de evidencia em um unico CSV agregado, preservando o caminho do arquivo original em `source_txt`. Isso permite comparar rodadas de campo por duracao de simbolo, contadores RX, qualidade, texto recebido e diagnosticos do ultimo quadro aceito. Quando gravar em arquivo, ele tambem deve gerar um CSV agrupado por parametros de modem para comparar taxa de aceite, qualidade media/minima e medias dos contadores RX entre configuracoes.
+O TXT de evidencia tambem deve incluir uma tabela `Quadros aceitos CSV`, com uma
+linha por quadro aceito pelo RX continuo. Essa tabela preserva os parametros no
+momento do aceite e deve ser usada para comparar transmissoes individuais,
+principalmente quando a sessao tiver mudanca de duracao de simbolo, modulacao
+ou tons antes de salvar a evidencia.
+
+O utilitario `python-sim/field_summary.py` deve consolidar varios TXT de evidencia em um unico CSV agregado, preservando o caminho do arquivo original em `source_txt`. Isso permite comparar rodadas de campo por duracao de simbolo, contadores RX, qualidade, texto recebido e diagnosticos do ultimo quadro aceito. Quando gravar em arquivo, ele tambem deve gerar um CSV agrupado por parametros de modem para comparar taxa de aceite, qualidade media/minima e medias dos contadores RX entre configuracoes. Quando houver a secao `Quadros aceitos CSV`, o script tambem deve gerar `field_frames.csv`, com uma linha unica por quadro aceito. Como evidencias salvas durante a mesma sessao acumulam quadros anteriores, `field_frames.csv` deve deduplicar automaticamente quadros repetidos por instante, configuracao e texto.
+
+O agrupamento padrao do `field_summary.py` deve separar tambem por modulacao,
+para nao misturar evidencias 2-FSK v0.1 e 4-FSK v0.2 experimental no mesmo
+resumo.
 
 O utilitario `python-sim/field_replay.py` deve reproduzir os WAVs de evidencias aceitas usando o CLI C++ `hftext_rx_wav`, com duracao de simbolo e tons extraidos do `Resumo CSV`, e gravar `field_replay.csv` com texto esperado, texto decodificado, codigo de retorno e status. Esse replay nao substitui o RX continuo, mas permite verificar se capturas reais continuam decodificaveis pelo decoder offline apos alteracoes futuras.
 
@@ -268,20 +289,23 @@ A interface PC deve manter validacoes manuais simples:
 - ao digitar caracteres invalidos, o campo TX deve mostrar `?` antes de gerar WAV;
 - ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
 - ao abrir o app com dispositivo de entrada disponivel, o RX deve iniciar automaticamente sem acao manual do operador;
-- ao alterar sample rate RX, duracao de simbolo, tom 0, tom 1, preambulo, dispositivo de entrada ou `Log RX detalhado` durante RX ativo, a escuta deve reiniciar sozinha e registrar o reinicio no log;
+- ao alterar modulacao, sample rate RX, duracao de simbolo, tom 0, tom 1, preambulo, dispositivo de entrada ou `Log RX detalhado` durante RX ativo, a escuta deve reiniciar sozinha e registrar o reinicio no log;
 - durante envio direto, a barra de progresso TX deve avancar ate o fim do audio gerado ou parar corretamente quando o mesmo botao for usado para cancelar TX;
 - durante RX, a barra `Progresso RX` deve avancar de forma monotona dentro de um candidato forte, sem oscilar com candidatos fracos ou fases internas, e voltar a zero apos rejeicao forte completa;
 - durante RX, a linha `Estado RX` deve mostrar o estado consolidado mais util do lote recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao forte;
 - durante RX, a linha `Sessao RX` deve acumular duracao e contadores consolidados da recepcao atual, contando rejeicoes fortes no modo normal, reiniciar ao clicar `Receber` e aparecer no log ao parar RX;
 - a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
 - a waterfall RX deve mostrar duas linhas verticais amarelas nos tons `Tom 0` e `Tom 1`, atualizando quando esses valores forem alterados;
+- no modo 4-FSK experimental, a waterfall RX deve mostrar quatro linhas verticais amarelas derivadas de `Tom 0`, `Tom 1` e do espacamento entre eles;
 - a waterfall RX deve mostrar trilhas de sinal fraco/normal em verde, puxar para amarelo quando o bloco de entrada estiver proximo de saturacao e ficar vermelha quando saturar;
 - a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
+- a estimativa TX deve ficar menor no modo 4-FSK experimental para o mesmo texto e duracao de simbolo, pois cada simbolo de audio carrega dois bits;
 - o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
 - o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
 - o menu de contexto do historico RX deve oferecer `Limpar RX`;
 - o botao `Salvar Evidencia RX` deve criar um `.wav` com audio RX recente e um `.txt` associado com resumo CSV, sem parar automaticamente a recepcao, preservando os dados do ultimo quadro aceito quando houver;
 - `python-sim/field_summary.py` deve ler os TXT de evidencia e gerar um CSV agregado com uma linha por evidencia valida, alem de um CSV agrupado por parametros quando solicitado ou usado no modo padrao de arquivo;
+- `python-sim/field_summary.py` deve gerar tambem `field_frames.csv` quando houver quadros aceitos por transmissao individual;
 - `python-sim/field_replay.py` deve rodar os WAVs das evidencias aceitas pelo `hftext_rx_wav` e gerar um CSV de replay com passa/falha;
 - ao fechar e abrir novamente, o app deve restaurar indicativo, parametros do modem, dispositivos selecionados, estado do log detalhado e geometria da janela;
 - ao fechar e abrir novamente, a caixa de mensagem TX deve permanecer vazia;
@@ -321,8 +345,15 @@ No core C++, os testes automatizados devem cobrir:
 - rejeicao de tamanho fisico invalido;
 - round-trip limpo via API publica `modulateText`/`demodulateSamples`;
 - recepcao continua por `StreamingReceiver`, incluindo atraso inicial arbitrario, pequeno deslocamento comum dos tons e mais de um quadro no mesmo fluxo;
+- recepcao continua depois de um quadro completo rejeitado por CRC/payload, garantindo que uma mensagem valida posterior ainda seja aceita;
 - round-trip WAV pelos CLIs `hftext_tx_wav` e `hftext_rx_wav`;
 - replay de WAV salvo pelo CLI `hftext_stream_wav`, validando o mesmo caminho incremental do `StreamingReceiver`;
 - round-trip manual no app PC gerando e decodificando o mesmo WAV.
+
+Para a v0.2 experimental, os mesmos caminhos devem ter testes especificos em
+4-FSK: modulador, demodulador, API publica, `StreamingReceiver` e CLIs
+`hftext_tx_wav`, `hftext_rx_wav` e `hftext_stream_wav` com `--mode 4fsk`.
+O preambulo 4-FSK deve ser validado como ciclo pelos quatro tons, nao como um
+unico tom produzido por bits alternados agrupados em pares.
 
 O modo robusto deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC, incluindo Viterbi soft-decision, nao substitui o CRC.

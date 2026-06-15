@@ -1,4 +1,5 @@
 #include "hftext_core.h"
+#include "hftext_demodulator.h"
 #include "hftext_frame.h"
 
 #include <cassert>
@@ -156,6 +157,24 @@ int main() {
     assert(result.startOffset == 0);
     assert(result.offsetsTried >= 1);
     assert(result.confidence > 0.9F);
+
+    hftext::ModemConfig fsk4Config = config;
+    fsk4Config.modulationMode = hftext::ModulationMode::Fsk4;
+    fsk4Config.frequency0Hz = 1000.0F;
+    fsk4Config.frequency1Hz = 1200.0F;
+    const auto fsk4Audio = hftext::modulateText("pu5lrk Teste", fsk4Config);
+    assert(fsk4Audio.size() < audio.size());
+    const auto fsk4Bits = hftext::demodulateBitsFsk(fsk4Audio, fsk4Config);
+    const std::vector<std::uint8_t> expectedFsk4PreamblePrefix{0, 0, 0, 1, 1, 0, 1, 1};
+    assert(std::vector<std::uint8_t>(fsk4Bits.begin(), fsk4Bits.begin() + expectedFsk4PreamblePrefix.size())
+        == expectedFsk4PreamblePrefix);
+    const auto fsk4Result = hftext::demodulateSamples(fsk4Audio, fsk4Config);
+    assert(fsk4Result.frameDetected);
+    assert(fsk4Result.crcOk);
+    assert(fsk4Result.payloadValid);
+    assert(fsk4Result.text == "pu5lrk Teste");
+    assert(fsk4Result.syncIndex == config.preambleBits + static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
+    assert(fsk4Result.confidence > 0.9F);
 
     const int halfSymbolSamples = static_cast<int>(config.sampleRate * config.symbolDurationSec / 2.0F);
     std::vector<float> delayedAudio(static_cast<std::size_t>(halfSymbolSamples), 0.0F);

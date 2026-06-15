@@ -59,6 +59,7 @@ private:
     void appendLog(const QString& text);
     void writeLogHeader(QTextStream& stream, const char* title) const;
     void writeFieldSummaryCsv(QTextStream& stream, const QString& wavPath, std::size_t sampleCount, int sampleRate) const;
+    void writeAcceptedRxFramesCsv(QTextStream& stream) const;
     void resetRxDiagnostic(const QString& state);
     void resetRxFrameProgress();
     void updateRxFrameProgressFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
@@ -67,7 +68,7 @@ private:
     void resetRxSessionCounters();
     void updateRxSessionFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
     void setRxSessionText();
-    void rememberAcceptedRx(const hftext::DecodeResult& result);
+    void rememberAcceptedRx(const hftext::DecodeResult& result, const hftext::ModemConfig& config);
     void setTransmitButtonTransmitting(bool transmitting);
     void setReceiveControlsRecording(bool recording);
     void loadSettings();
@@ -87,6 +88,16 @@ private:
     AudioInput audioInput_;
     AudioOutput audioOutput_;
     ModemController controller_;
+    struct AcceptedRxFrame {
+        QString acceptedAtIso;
+        double elapsedSeconds = 0.0;
+        QString text;
+        hftext::ModemConfig config;
+        QString qualityText = "--";
+        int length = -1;
+        int offsetSamples = 0;
+        int offsetsTried = 0;
+    };
     std::thread rxWorker_;
     std::mutex rxMutex_;
     std::condition_variable rxCondition_;
@@ -104,6 +115,7 @@ private:
     QPlainTextEdit* messageEdit_ = nullptr;
     QSpinBox* sampleRateSpin_ = nullptr;
     QSpinBox* rxSampleRateSpin_ = nullptr;
+    QComboBox* modulationModeCombo_ = nullptr;
     QDoubleSpinBox* symbolDurationSpin_ = nullptr;
     QDoubleSpinBox* frequency0Spin_ = nullptr;
     QDoubleSpinBox* frequency1Spin_ = nullptr;
@@ -142,6 +154,7 @@ private:
     int lastAcceptedRxLength_ = -1;
     int lastAcceptedRxOffsetSamples_ = 0;
     int lastAcceptedRxOffsetsTried_ = 0;
+    std::vector<AcceptedRxFrame> acceptedRxFrames_;
     int rxSessionSyncCount_ = 0;
     int rxSessionLengthCount_ = 0;
     int rxSessionRejectedCount_ = 0;
