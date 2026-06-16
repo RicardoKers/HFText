@@ -4,12 +4,12 @@
 
 ```text
 HFText/
-├── python-sim/   # Simulation, sweeps, WAV tools, Python tests
-├── core/         # Portable C++ modem core, CLI tools, C++ tests
-├── pc-app/       # Qt 6 Widgets PC application
-├── android-app/  # Future Android app
-├── docs/         # Project documentation
-└── scripts/      # Packaging and helper scripts when needed
++-- python-sim/   # Simulation, sweeps, WAV tools, Python tests
++-- core/         # Portable C++ modem core, CLI tools, C++ tests
++-- pc-app/       # Qt 6 Widgets PC application
++-- android-app/  # Future Android app
++-- docs/         # Project documentation
++-- scripts/      # Release and maintenance scripts
 ```
 
 ## Layering

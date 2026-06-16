@@ -1,5 +1,6 @@
 #include "hftext_config.h"
 #include "hftext_result.h"
+#include "hftext_version.h"
 
 #include <cassert>
 #include <cstdint>
@@ -48,4 +49,7 @@ int main() {
     assert(result.confidence == 0.0F);
 
     static_assert(std::is_same_v<decltype(result.payloadSymbols)::value_type, std::uint8_t>);
+
+    static_assert(hftext::kVersion[0] != '\0');
+    static_assert(hftext::kProtocolVersion[0] != '\0');
 }

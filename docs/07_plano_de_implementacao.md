@@ -22,6 +22,9 @@
 - 4-FSK and 8-FSK experimental modes.
 - Waterfall tone markers and saturation-aware palette.
 - English UI/log wording.
+- Repeatable Windows release packaging script.
+- Basic GitHub Actions CI for Python simulation and C++ core tests.
+- Visible app, CLI, log, and evidence version metadata.
 
 ## Current Focus
 
@@ -40,6 +43,7 @@ The current focus is field validation and operator usability:
 4. Improve frequency/timing tolerance only when field logs show a repeatable weakness.
 5. Keep the PC interface polished and simple.
 6. Refresh release packages after meaningful user-visible changes.
+7. Keep the user guide aligned with the packaged interface.
 
 ## Future Tasks
 

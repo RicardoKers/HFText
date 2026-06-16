@@ -1,5 +1,6 @@
 #include "hftext_config.h"
 #include "hftext_streaming_receiver.h"
+#include "hftext_version.h"
 #include "wav_io.h"
 
 #include <algorithm>
@@ -17,6 +18,7 @@ void printUsage(const char* program) {
         << "Usage: " << program << " [options] <input.wav>\n"
         << "\n"
         << "Options:\n"
+        << "  --version                  print version information\n"
         << "  --symbol-duration <s>       default: 0.5\n"
         << "  --mode <2fsk|4fsk|8fsk>     default: 2fsk; 4fsk/8fsk are experimental\n"
         << "  --f0 <Hz>                   default: 1200\n"
@@ -75,6 +77,11 @@ int main(int argc, char** argv) {
                 printUsage(argv[0]);
                 return 0;
             }
+            if (arg == "--version") {
+                std::cout << hftext::kVersionLabel << " (" << hftext::kReleaseTrack << ")\n";
+                std::cout << "Protocol: " << hftext::kProtocolVersion << "\n";
+                return 0;
+            }
             if (arg == "--symbol-duration") {
                 config.symbolDurationSec = std::stof(requireValue(arg));
             } else if (arg == "--mode") {
@@ -122,6 +129,7 @@ int main(int argc, char** argv) {
 
         if (verbose) {
             const auto events = receiver.takeEvents();
+            std::cout << "HFText version: " << hftext::kVersion << "\n";
             std::cout << "Mode: " << modeName(config.modulationMode) << " streaming\n";
             std::cout << "Sample rate: " << config.sampleRate << " Hz\n";
             std::cout << "Chunk: " << chunkMilliseconds << " ms\n";

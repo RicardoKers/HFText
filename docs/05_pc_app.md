@@ -17,6 +17,8 @@ The modem logic remains in `core/`.
 
 The interface language is English.
 
+The Settings tab displays the current HFText application version, release track, and protocol baseline. Logs and evidence exports include the same metadata.
+
 The normal operation tab is chat-like:
 
 - received messages at the top;
@@ -157,3 +159,11 @@ WAV generation and WAV decoding remain in Settings as debug tools. Normal operat
 ## Release Packaging
 
 The Windows release package must include the Qt runtime, C++ runtime dependencies, the PC executable, CLI tools, and documentation needed to test on another computer.
+
+Create the package with:
+
+```powershell
+.\scripts\package_release.ps1
+```
+
+The script builds and tests by default, runs `windeployqt`, copies the PC app, CLI tools, documentation, and writes `PACKAGE.txt` into the package folder.

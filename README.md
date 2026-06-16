@@ -15,6 +15,12 @@ The project favors weak-signal robustness and operator clarity over throughput. 
 
 ## Current State
 
+Current application version:
+
+- HFText 0.3.0, experimental track.
+- Operational protocol baseline: HFText Basic v0.1.
+- Experimental physical modes: 4-FSK v0.2 and 8-FSK v0.3.
+
 The operational baseline is HFText Basic v0.1:
 
 - logical frame: `SYNC | LENGTH | PAYLOAD | CRC16`;
@@ -43,6 +49,33 @@ The Qt PC application can transmit directly through the sound card, receive cont
 - CMake for the C++ core, CLI tools, and PC app.
 - Qt 6 Widgets for the PC application.
 - Kotlin, Jetpack Compose, and JNI are planned for Android.
+
+## Quick Start
+
+Build and test locally:
+
+```powershell
+cmake -S . -B build-qt15
+cmake --build build-qt15 --config Release
+ctest --test-dir build-qt15 -C Release --output-on-failure
+```
+
+Run Python validation:
+
+```powershell
+cd python-sim
+python -m pytest tests
+```
+
+Create a Windows release package:
+
+```powershell
+.\scripts\package_release.ps1
+```
+
+The package is written under `dist/` and includes the PC app, CLI tools, Qt/runtime dependencies, and documentation.
+
+For operator workflow, see `docs/10_user_guide.md`.
 
 ## Core Principle
 

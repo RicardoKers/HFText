@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 find_package(Qt6 QUIET COMPONENTS Widgets)
 if(NOT Qt6_FOUND)
-    message(STATUS "Qt6 Widgets nao encontrado; pc-app sera ignorado nesta configuracao.")
+    message(STATUS "Qt6 Widgets not found; pc-app will be skipped for this configuration.")
     return()
 endif()
 

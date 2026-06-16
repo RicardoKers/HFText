@@ -1,5 +1,6 @@
 #include "hftext_config.h"
 #include "hftext_core.h"
+#include "hftext_version.h"
 #include "wav_io.h"
 
 #include <cstdlib>
@@ -15,6 +16,7 @@ void printUsage(const char* program) {
         << "Usage: " << program << " [options] <message> <output.wav>\n"
         << "\n"
         << "Options:\n"
+        << "  --version                  print version information\n"
         << "  --callsign <text>           prefix callsign to the payload\n"
         << "  --sample-rate <Hz>          default: 48000\n"
         << "  --symbol-duration <s>       default: 0.5\n"
@@ -81,6 +83,11 @@ int main(int argc, char** argv) {
                 printUsage(argv[0]);
                 return 0;
             }
+            if (arg == "--version") {
+                std::cout << hftext::kVersionLabel << " (" << hftext::kReleaseTrack << ")\n";
+                std::cout << "Protocol: " << hftext::kProtocolVersion << "\n";
+                return 0;
+            }
             if (arg == "--callsign") {
                 callsign = requireValue(arg);
             } else if (arg == "--sample-rate") {
@@ -114,6 +121,7 @@ int main(int argc, char** argv) {
         hftext::tools::writeMonoPcm16Wav(outputPath, audio, config.sampleRate);
 
         std::cout << "WAV generated: " << outputPath << "\n";
+        std::cout << "HFText version: " << hftext::kVersion << "\n";
         std::cout << "Mode: " << modeName(config.modulationMode) << "\n";
         std::cout << "Payload: " << payload << "\n";
         return 0;

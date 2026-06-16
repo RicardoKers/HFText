@@ -10,6 +10,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Project overview, requirements, architecture, protocol, DSP, PC app, Android plan, validation plan, and backlog.
 - Documentation updated for HFText Basic v0.1, experimental 4-FSK v0.2, and experimental 8-FSK v0.3.
 - Product-facing language standardized to English.
+- Basic user guide.
 
 ### Python Simulation
 
@@ -53,6 +54,9 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Log export.
 - Load Defaults button.
 - HFText app icon and release packaging.
+- Visible app, CLI, log, and evidence version metadata.
+- Repeatable Windows release packaging script.
+- Basic GitHub Actions CI.
 
 ## Current Validation Tasks
 
@@ -66,6 +70,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 ## Near-Term UI Tasks
 
 - Review final English wording in the packaged app.
+- Keep `docs/10_user_guide.md` aligned with the current interface.
 - Keep the Operation tab visually simple.
 - Improve message history only if field use shows a need.
 - Consider a clearer receive/tuning aid if waterfall markers are not enough.

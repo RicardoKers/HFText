@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "hftext_encoder.h"
+#include "hftext_version.h"
 #include "wav_io.h"
 
 #include <QDateTime>
@@ -86,6 +87,13 @@ QString modulationModeName(hftext::ModulationMode mode) {
     default:
         return QStringLiteral("2-FSK v0.1");
     }
+}
+
+QString versionDisplayText() {
+    return QString("%1 (%2, %3)")
+        .arg(QString::fromLatin1(hftext::kVersionLabel))
+        .arg(QString::fromLatin1(hftext::kReleaseTrack))
+        .arg(QString::fromLatin1(hftext::kProtocolVersion));
 }
 
 QString audioPeakPercent(const std::vector<float>& samples) {
@@ -408,7 +416,7 @@ std::vector<QString> formatStreamingEvents(
         }
         if (limit < events.size()) {
             lines.push_back(
-                QString("RX: %1 evento(s) detalhado(s) omitido(s) para manter a interface responsiva.")
+                QString("RX: %1 detailed event(s) omitted to keep the interface responsive.")
                     .arg(static_cast<qulonglong>(events.size() - limit))
             );
         }
@@ -495,7 +503,7 @@ std::vector<QString> formatStreamingEvents(
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
-    setWindowTitle("HFText");
+    setWindowTitle(QString::fromLatin1(hftext::kVersionLabel));
 
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);
@@ -546,6 +554,11 @@ MainWindow::MainWindow(QWidget* parent)
     callsignEdit_ = new QLineEdit(this);
     callsignEdit_->setText("pu5lrk");
     configForm->addRow("Callsign", callsignEdit_);
+
+    auto* versionLabel = new QLabel(versionDisplayText(), this);
+    versionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    versionLabel->setWordWrap(true);
+    configForm->addRow("Version", versionLabel);
 
     modulationModeCombo_ = new QComboBox(this);
     modulationModeCombo_->addItem("2-FSK robust v0.1", 2);
@@ -739,6 +752,7 @@ MainWindow::MainWindow(QWidget* parent)
     updateTxEstimate();
     updateWaterfallMarkers();
     setReceiveControlsRecording(false);
+    appendLog("Application: " + versionDisplayText());
     QTimer::singleShot(0, this, [this]() {
         if (inputDeviceCombo_ != nullptr && inputDeviceCombo_->isEnabled() && inputDeviceCombo_->count() > 0) {
             startReceive();
@@ -1216,6 +1230,9 @@ void MainWindow::appendLog(const QString& text) {
 void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
     stream << title << '\n';
     stream << "Generated at: " << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
+    stream << "HFText version: " << hftext::kVersion << '\n';
+    stream << "Release track: " << hftext::kReleaseTrack << '\n';
+    stream << "Protocol: " << hftext::kProtocolVersion << '\n';
     stream << "Callsign: " << callsignEdit_->text().trimmed() << '\n';
     stream << "Modulation: " << modulationModeName(modulationModeFromCombo(modulationModeCombo_)) << '\n';
     stream << "Sample rate TX/WAV: " << sampleRateSpin_->value() << " Hz\n";
@@ -1260,7 +1277,8 @@ void MainWindow::writeFieldSummaryCsv(
 
     stream << "--- Summary CSV ---\n";
     stream
-        << "generated_at,callsign,modulation,symbol_duration_s,tx_sample_rate_hz,rx_sample_rate_hz,"
+        << "generated_at,hftext_version,release_track,protocol,callsign,modulation,"
+        << "symbol_duration_s,tx_sample_rate_hz,rx_sample_rate_hz,"
         << "f0_hz,f1_hz,tone_spacing_hz,amplitude,preamble_bits,detailed_log,"
         << "rx_elapsed_s,rx_accepted,accepted_frames,rx_rejected_strong,rx_phys_length,rx_sync,"
         << "rx_quality,last_phys_length,last_reject,received_lines,received_text,"
@@ -1272,6 +1290,9 @@ void MainWindow::writeFieldSummaryCsv(
         : lastRxPhysicalLengthText_;
     stream
         << csvCell(QDateTime::currentDateTime().toString(Qt::ISODate)) << ','
+        << csvCell(QString::fromLatin1(hftext::kVersion)) << ','
+        << csvCell(QString::fromLatin1(hftext::kReleaseTrack)) << ','
+        << csvCell(QString::fromLatin1(hftext::kProtocolVersion)) << ','
         << csvCell(callsignEdit_->text().trimmed()) << ','
         << csvCell(modulationModeName(modulationModeFromCombo(modulationModeCombo_))) << ','
         << QString::number(symbolDurationSpin_->value(), 'f', 3) << ','

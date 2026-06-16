@@ -17,6 +17,8 @@ ctest --test-dir build-qt15 -C Release --output-on-failure
 
 The exact build directory may vary. Use the active CMake build directory for the current machine.
 
+The GitHub Actions workflow runs Python simulation tests and standalone C++ core tests on every push and pull request.
+
 ## What Must Be Tested
 
 Core protocol behavior:
@@ -99,6 +101,24 @@ After packaging:
 6. Decode a generated WAV through the app and CLI.
 7. Save a log and RX evidence bundle.
 8. Confirm the files contain English labels and CSV section names.
+9. Confirm version and protocol metadata appear in the app, logs, evidence, CLI tools, and `PACKAGE.txt`.
+
+## Release Packaging
+
+Create a Windows package:
+
+```powershell
+.\scripts\package_release.ps1
+```
+
+Useful options:
+
+```powershell
+.\scripts\package_release.ps1 -SkipBuild -SkipTests
+.\scripts\package_release.ps1 -PackageName HFText-win64-release-local-test
+```
+
+Use the default path for normal releases; use `-SkipBuild` and `-SkipTests` only for quick local packaging after validation has already passed.
 
 ## Known Sources of Failure
 

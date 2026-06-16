@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    name: Python simulation tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system audio dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsndfile1
+
+      - name: Install Python dependencies
+        run: python -m pip install -r python-sim/requirements.txt
+
+      - name: Run Python tests
+        working-directory: python-sim
+        run: python -B -m pytest tests
+
+  cpp-core:
+    name: C++ core tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure core
+        run: cmake -S core -B build-core -DCMAKE_BUILD_TYPE=Release -DHFTEXT_CORE_BUILD_TESTS=ON
+
+      - name: Build core
+        run: cmake --build build-core --config Release
+
+      - name: Run core tests
+        run: ctest --test-dir build-core -C Release --output-on-failure
