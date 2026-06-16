@@ -24,6 +24,7 @@ The Operation tab is for normal use:
 - message field and send button at the bottom.
 
 The Settings tab is for configuration, diagnostics, logs, evidence export, and WAV debug tools.
+It scrolls when the window is short, so all controls remain available without forcing the main window to a tall minimum height.
 
 ## Basic Transmit
 
@@ -43,7 +44,7 @@ Transmission only starts after pressing the send button. While TX is active, the
 2. Confirm RX is running.
 3. Tune until received tone tracks align with the yellow waterfall markers.
 4. Keep input level below clipping.
-5. Accepted messages appear in the received-message area.
+5. Accepted messages appear in the received-message area with a local date/time timestamp.
 
 Blue waterfall traces are weak/normal energy, yellow indicates strong energy near saturation, and red indicates near-full-scale input blocks.
 
@@ -75,7 +76,7 @@ Use real field evidence before trusting an experimental mode for regular operati
 Use `Save RX evidence` after a test. HFText writes:
 
 - a recent RX WAV capture;
-- a TXT report with settings, logs, received text, summary CSV, and accepted-frame CSV.
+- a TXT report with settings, logs, timestamped received text, summary CSV, and accepted-frame CSV.
 
 Evidence files are the best way to compare settings and debug failures later.
 

@@ -58,6 +58,7 @@ private slots:
 
 private:
     void appendLog(const QString& text);
+    void appendReceivedLine(const QString& text);
     void writeLogHeader(QTextStream& stream, const char* title) const;
     void writeFieldSummaryCsv(QTextStream& stream, const QString& wavPath, std::size_t sampleCount, int sampleRate) const;
     void writeAcceptedRxFramesCsv(QTextStream& stream) const;

@@ -17,6 +17,7 @@
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -511,14 +512,16 @@ MainWindow::MainWindow(QWidget* parent)
     auto* tabs = new QTabWidget(this);
     auto* operationPage = new QWidget(this);
     auto* operationLayout = new QVBoxLayout(operationPage);
-    auto* configPage = new QWidget(this);
+    auto* configScroll = new QScrollArea(this);
+    auto* configPage = new QWidget(configScroll);
     auto* configLayout = new QVBoxLayout(configPage);
     auto* configForm = new QFormLayout();
+    configScroll->setWidgetResizable(true);
 
     receivedEdit_ = new QPlainTextEdit(this);
     receivedEdit_->setReadOnly(true);
     receivedEdit_->setPlaceholderText("Received messages");
-    receivedEdit_->setMinimumHeight(180);
+    receivedEdit_->setMinimumHeight(120);
     receivedEdit_->setContextMenuPolicy(Qt::CustomContextMenu);
     operationLayout->addWidget(receivedEdit_, 3);
 
@@ -699,9 +702,10 @@ MainWindow::MainWindow(QWidget* parent)
     logEdit_->document()->setMaximumBlockCount(kMaxLogBlocks);
     configLayout->addWidget(logEdit_);
     configLayout->addStretch(1);
+    configScroll->setWidget(configPage);
 
     tabs->addTab(operationPage, "Operation");
-    tabs->addTab(configPage, "Settings");
+    tabs->addTab(configScroll, "Settings");
     root->addWidget(tabs);
 
     setCentralWidget(central);
@@ -1225,6 +1229,11 @@ void MainWindow::saveFieldEvidence() {
 void MainWindow::appendLog(const QString& text) {
     const QString timestamp = QDateTime::currentDateTime().toString("[HH:mm:ss] ");
     logEdit_->appendPlainText(timestamp + text);
+}
+
+void MainWindow::appendReceivedLine(const QString& text) {
+    const QString timestamp = QDateTime::currentDateTime().toString("[yyyy-MM-dd HH:mm:ss] ");
+    receivedEdit_->appendPlainText(timestamp + text);
 }
 
 void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
@@ -1902,16 +1911,16 @@ hftext::ModemConfig MainWindow::readRxConfig() const {
 void MainWindow::showDecodeResult(const hftext::DecodeResult& result) {
     rxQualityBar_->setValue(static_cast<int>(std::clamp(result.confidence, 0.0F, 1.0F) * 1000.0F));
     if (!result.frameDetected) {
-        receivedEdit_->appendPlainText(QStringLiteral("Frame not detected: ") + QString::fromStdString(result.error));
+        appendReceivedLine(QStringLiteral("Frame not detected: ") + QString::fromStdString(result.error));
         return;
     }
     if (!result.crcOk) {
-        receivedEdit_->appendPlainText("Frame detected, but CRC is invalid.");
+        appendReceivedLine("Frame detected, but CRC is invalid.");
         return;
     }
     if (!result.payloadValid) {
-        receivedEdit_->appendPlainText("Frame detected, CRC is valid, but payload is invalid.");
+        appendReceivedLine("Frame detected, CRC is valid, but payload is invalid.");
         return;
     }
-    receivedEdit_->appendPlainText(QString::fromStdString(result.text));
+    appendReceivedLine(QString::fromStdString(result.text));
 }

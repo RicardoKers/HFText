@@ -47,6 +47,8 @@ The Settings tab contains:
 - log and evidence export buttons;
 - a Load Defaults button.
 
+The Settings tab is scrollable. This keeps the Operation tab usable on shorter window heights while preserving all configuration, diagnostic, log, and evidence controls.
+
 ## Normal Operation
 
 RX starts automatically when the app opens and an input device is available. RX can be stopped manually and restarted from Settings.
@@ -77,6 +79,8 @@ The Settings tab shows compact live diagnostics:
 - RX session counters.
 
 Normal logs are compact and timestamped. Detailed RX log shows raw telemetry such as sync candidates, recovered physical length, robust-frame progress, candidate rejection, and accepted frames.
+
+The received-message history also prefixes each displayed line with the local date and time, so unattended receive sessions show when each message or decode result arrived.
 
 ## RX State and Session
 

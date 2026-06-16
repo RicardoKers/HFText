@@ -65,7 +65,7 @@ double peakLevel(const std::vector<float>& samples) {
 
 WaterfallWidget::WaterfallWidget(QWidget* parent)
     : QWidget(parent) {
-    setMinimumHeight(144);
+    setMinimumHeight(112);
 }
 
 void WaterfallWidget::addSamples(const std::vector<float>& samples, int sampleRate) {
