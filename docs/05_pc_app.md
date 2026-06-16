@@ -78,7 +78,7 @@ The Settings tab shows compact live diagnostics:
 - RX state;
 - RX session counters.
 
-Normal logs are compact and timestamped. Detailed RX log shows raw telemetry such as sync candidates, recovered physical length, robust-frame progress, candidate rejection, and accepted frames.
+Normal logs are compact and timestamped. Robust-frame progress is summarized in coarse progress milestones, and low-confidence rejected candidates are kept out of the normal log. Detailed RX log shows raw telemetry such as sync candidates, recovered physical length, every robust-frame progress event, candidate rejection, and accepted frames.
 
 The received-message history also prefixes each displayed line with the local date and time, so unattended receive sessions show when each message or decode result arrived.
 
@@ -91,7 +91,10 @@ The received-message history also prefixes each displayed line with the local da
 - physical length recovered;
 - receiving frame;
 - candidate rejected;
-- valid frame.
+- valid frame;
+- message accepted.
+
+After an accepted message, `RX state` keeps the successful frame visible briefly and labels its quality as `CRC OK` plus the decoder confidence. This prevents weak idle-channel candidates from immediately replacing a valid reception with an invalid-length status.
 
 `RX session` shows elapsed time and consolidated counters:
 
@@ -100,7 +103,7 @@ The received-message history also prefixes each displayed line with the local da
 - recovered `PHYS_LENGTH` events;
 - strong sync candidates.
 
-Weak internal candidates are omitted from the normal UI but remain available in detailed logs.
+Weak internal candidates and low-confidence rejections are omitted from the normal UI but remain available in detailed logs.
 
 ## Waterfall
 

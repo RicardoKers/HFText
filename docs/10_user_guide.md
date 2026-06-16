@@ -84,6 +84,8 @@ Evidence files are the best way to compare settings and debug failures later.
 
 Use `Save log` for a lighter report without the recent RX WAV. Logs include version, protocol, settings, and timestamped events.
 
+The normal log is filtered for operation: long-frame progress appears in coarse milestones, low-confidence rejected candidates are hidden, and accepted frames are shown as `CRC OK` with their decoder confidence. Enable `Detailed RX log` in Settings when raw receiver telemetry is needed.
+
 ## WAV Debug Tools
 
 `Generate WAV` and `Decode WAV` are debug tools in Settings. Normal operation should use direct TX and continuous RX.

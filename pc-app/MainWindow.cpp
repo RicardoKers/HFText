@@ -51,6 +51,9 @@ constexpr int kRxWorkerChunkMilliseconds = 500;
 constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
 constexpr int kRxEvidenceSeconds = 300;
 constexpr int kMaxAcceptedRxSnapshots = 512;
+constexpr int kAcceptedRxStateHoldSeconds = 60;
+constexpr int kNormalRxProgressLogStepPercent = 10;
+constexpr float kRejectedCandidateUiConfidenceFloor = 0.10F;
 constexpr int kDefaultSampleRate = 48000;
 constexpr double kDefaultSymbolDurationSec = 0.5;
 constexpr double kDefaultBaseFrequencyHz = 1200.0;
@@ -260,6 +263,34 @@ bool isStrongSyncEvent(const hftext::StreamingReceiverEvent& event) {
     return event.syncMismatches <= 4;
 }
 
+bool isDisplayableRejectedEvent(const hftext::StreamingReceiverEvent& event) {
+    return isStrongSyncEvent(event) && event.confidence >= kRejectedCandidateUiConfidenceFloor;
+}
+
+int frameProgressPercent(const hftext::StreamingReceiverEvent& event) {
+    if (event.bitsExpected <= 0) {
+        return 0;
+    }
+
+    if (event.bitsAvailable >= event.bitsExpected) {
+        return 100;
+    }
+
+    const double ratio = static_cast<double>(event.bitsAvailable) / static_cast<double>(event.bitsExpected);
+    return static_cast<int>(std::clamp(ratio, 0.0, 1.0) * 100.0);
+}
+
+int frameProgressLogMilestone(int percent) {
+    if (percent >= 100) {
+        return 100;
+    }
+    return std::clamp(
+        (std::max(0, percent) / kNormalRxProgressLogStepPercent) * kNormalRxProgressLogStepPercent,
+        0,
+        100
+    );
+}
+
 bool isBetterSyncEvent(
     const hftext::StreamingReceiverEvent& candidate,
     const hftext::StreamingReceiverEvent* current
@@ -297,10 +328,20 @@ QString normalRxStatusKey(const QString& line) {
         return line;
     }
     if (line.startsWith("RX: frame ")) {
-        return line;
+        const int prefixLength = QStringLiteral("RX: frame ").size();
+        const int percentEnd = line.indexOf('%', prefixLength);
+        if (percentEnd < 0) {
+            return "RX: frame";
+        }
+        bool ok = false;
+        const int percent = line.mid(prefixLength, percentEnd - prefixLength).toInt(&ok);
+        if (ok) {
+            return QString("RX: frame %1").arg(frameProgressLogMilestone(percent));
+        }
+        return "RX: frame";
     }
-    if (line.contains("strong candidate(s) rejected")) {
-        return "RX: strong candidates rejected";
+    if (line.contains("candidate(s) rejected")) {
+        return line;
     }
     return {};
 }
@@ -336,6 +377,10 @@ int rxQualityPermille(const std::vector<hftext::StreamingReceiverEvent>& events)
         switch (event.type) {
         case hftext::StreamingReceiverEventType::FrameDecoded:
         case hftext::StreamingReceiverEventType::FrameRejected:
+            if (event.type == hftext::StreamingReceiverEventType::FrameRejected
+                && !isDisplayableRejectedEvent(event)) {
+                break;
+            }
             bestQuality = std::max(
                 bestQuality,
                 static_cast<int>(std::clamp(event.confidence, 0.0F, 1.0F) * 1000.0F)
@@ -368,7 +413,8 @@ RxSessionEventCounts rxSessionEventCounts(const std::vector<hftext::StreamingRec
         case hftext::StreamingReceiverEventType::FrameDecoded:
             break;
         case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isStrongSyncEvent(event) && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
+            if (isDisplayableRejectedEvent(event)
+                && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
                 bestRejected = &event;
             }
             break;
@@ -428,6 +474,7 @@ std::vector<QString> formatStreamingEvents(
     const hftext::StreamingReceiverEvent* bestLength = nullptr;
     const hftext::StreamingReceiverEvent* bestWaiting = nullptr;
     const hftext::StreamingReceiverEvent* bestSync = nullptr;
+    const hftext::StreamingReceiverEvent* bestRejected = nullptr;
     int rejectedCount = 0;
 
     for (const auto& event : events) {
@@ -438,8 +485,11 @@ std::vector<QString> formatStreamingEvents(
             }
             break;
         case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isStrongSyncEvent(event)) {
+            if (isDisplayableRejectedEvent(event)) {
                 ++rejectedCount;
+                if (bestRejected == nullptr || event.confidence > bestRejected->confidence) {
+                    bestRejected = &event;
+                }
             }
             break;
         case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
@@ -482,19 +532,22 @@ std::vector<QString> formatStreamingEvents(
     }
 
     if (bestWaiting != nullptr) {
-        const double progress = bestWaiting->bitsExpected <= 0
-            ? 0.0
-            : 100.0 * static_cast<double>(bestWaiting->bitsAvailable) / static_cast<double>(bestWaiting->bitsExpected);
+        const int progress = frameProgressLogMilestone(frameProgressPercent(*bestWaiting));
         lines.push_back(
             QString("RX: frame %1% (%2/%3 bits)")
-                .arg(progress, 0, 'f', 0)
+                .arg(progress)
                 .arg(bestWaiting->bitsAvailable)
                 .arg(bestWaiting->bitsExpected)
         );
     }
 
     if (rejectedCount > 0) {
-        lines.push_back(QString("RX: %1 strong candidate(s) rejected by CRC/payload.").arg(rejectedCount));
+        lines.push_back(
+            QString("RX: %1 candidate(s) rejected by CRC/payload (best %2, %3).")
+                .arg(rejectedCount)
+                .arg(formatConfidence(bestRejected->confidence))
+                .arg(frameRejectionReason(*bestRejected))
+        );
     }
 
     return lines;
@@ -1398,7 +1451,7 @@ void MainWindow::updateRxFrameProgressFromEvents(const std::vector<hftext::Strea
             }
             break;
         case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isStrongSyncEvent(event)
+            if (isDisplayableRejectedEvent(event)
                 && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
                 bestRejected = &event;
             }
@@ -1468,7 +1521,6 @@ void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::Streamin
             break;
         case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
             hasInvalidLength = true;
-            lastRxRejectText_ = "invalid PHYS_LENGTH";
             break;
         case hftext::StreamingReceiverEventType::FrameWaiting:
             if (isStrongSyncEvent(event) && isBetterWaitingEvent(event, bestWaiting)) {
@@ -1476,7 +1528,7 @@ void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::Streamin
             }
             break;
         case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isStrongSyncEvent(event)
+            if (isDisplayableRejectedEvent(event)
                 && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
                 bestRejected = &event;
             }
@@ -1502,10 +1554,7 @@ void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::Streamin
         state = "Valid frame";
     } else if (bestWaiting != nullptr) {
         displayEvent = bestWaiting;
-        const double progress = bestWaiting->bitsExpected <= 0
-            ? 0.0
-            : 100.0 * static_cast<double>(bestWaiting->bitsAvailable) / static_cast<double>(bestWaiting->bitsExpected);
-        state = QString("Receiving frame %1%").arg(progress, 0, 'f', 0);
+        state = QString("Receiving frame %1%").arg(frameProgressPercent(*bestWaiting));
     } else if (bestLength != nullptr) {
         displayEvent = bestLength;
         state = "PHYS_LENGTH recovered";
@@ -1516,6 +1565,10 @@ void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::Streamin
         displayEvent = bestRejected;
         state = "Candidate rejected";
     } else if (hasInvalidLength) {
+        if (hasRecentAcceptedRx()) {
+            return;
+        }
+        lastRxRejectText_ = "invalid PHYS_LENGTH";
         state = "Invalid physical length";
     }
 
@@ -1558,6 +1611,7 @@ void MainWindow::resetRxSessionCounters() {
     lastAcceptedRxLength_ = -1;
     lastAcceptedRxOffsetSamples_ = 0;
     lastAcceptedRxOffsetsTried_ = 0;
+    lastAcceptedRxAtMsecs_ = 0;
     acceptedRxFrames_.clear();
     setRxSessionText();
 }
@@ -1592,15 +1646,20 @@ void MainWindow::rememberAcceptedRx(const hftext::DecodeResult& result, const hf
         return;
     }
 
+    const auto nowMsecs = QDateTime::currentMSecsSinceEpoch();
     hasLastAcceptedRx_ = true;
     lastAcceptedRxQualityText_ = formatConfidence(result.confidence);
     lastAcceptedRxLength_ = result.length;
     lastAcceptedRxOffsetSamples_ = result.startOffset;
     lastAcceptedRxOffsetsTried_ = result.offsetsTried;
+    lastAcceptedRxAtMsecs_ = nowMsecs;
+    lastRxPhysicalLengthText_ = QString("%1 symbols").arg(result.length);
+    lastRxQualityText_ = "CRC OK, " + lastAcceptedRxQualityText_;
+    lastRxRejectText_ = "--";
 
     const auto elapsedMsecs = rxSessionStartedAtMsecs_ <= 0
         ? 0
-        : QDateTime::currentMSecsSinceEpoch() - rxSessionStartedAtMsecs_;
+        : nowMsecs - rxSessionStartedAtMsecs_;
 
     AcceptedRxFrame frame;
     frame.acceptedAtIso = QDateTime::currentDateTime().toString(Qt::ISODate);
@@ -1615,6 +1674,15 @@ void MainWindow::rememberAcceptedRx(const hftext::DecodeResult& result, const hf
     if (acceptedRxFrames_.size() > kMaxAcceptedRxSnapshots) {
         acceptedRxFrames_.erase(acceptedRxFrames_.begin());
     }
+}
+
+bool MainWindow::hasRecentAcceptedRx() const {
+    if (lastAcceptedRxAtMsecs_ <= 0) {
+        return false;
+    }
+
+    const auto elapsed = QDateTime::currentMSecsSinceEpoch() - lastAcceptedRxAtMsecs_;
+    return elapsed >= 0 && elapsed <= kAcceptedRxStateHoldSeconds * 1000;
 }
 
 void MainWindow::setTransmitButtonTransmitting(bool transmitting) {
@@ -1819,6 +1887,11 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
         const auto events = receiver.takeEvents();
         if (!events.empty()) {
             const int frameQuality = rxQualityPermille(events);
+            const bool hasTerminalCandidate = std::any_of(events.begin(), events.end(), [](const auto& event) {
+                return event.type == hftext::StreamingReceiverEventType::FrameDecoded
+                    || (event.type == hftext::StreamingReceiverEventType::FrameRejected
+                        && isDisplayableRejectedEvent(event));
+            });
             auto lines = formatStreamingEvents(
                 events,
                 detailedRxLog,
@@ -1847,6 +1920,9 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
                 },
                 Qt::QueuedConnection
             );
+            if (hasTerminalCandidate) {
+                emittedNormalRxStatusLines.clear();
+            }
         }
         if (!results.empty()) {
             emittedNormalRxStatusLines.clear();
@@ -1855,25 +1931,32 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
             QMetaObject::invokeMethod(
                 this,
                 [this, result, config]() {
+                    const bool resultAccepted = result.crcOk && result.payloadValid;
                     rxProgressSyncSample_ = -1;
                     rxDisplayedFrameProgressPermille_ = 1000;
                     rxFrameProgressBar_->setValue(rxDisplayedFrameProgressPermille_);
-                    if (result.crcOk && result.payloadValid) {
+                    if (resultAccepted) {
                         rememberAcceptedRx(result, config);
                     }
                     showDecodeResult(result);
-                    if (result.crcOk && result.payloadValid) {
+                    if (resultAccepted) {
                         ++rxSessionAcceptedCount_;
                         setRxSessionText();
                         appendLog("RX text: " + QString::fromStdString(result.text));
                     }
-                    lastRxQualityText_ = formatConfidence(result.confidence);
-                    lastRxRejectText_ = "--";
-                    setRxDiagnosticText("Message accepted");
+                    if (resultAccepted) {
+                        lastRxQualityText_ = "CRC OK, " + formatConfidence(result.confidence);
+                        lastRxRejectText_ = "--";
+                        setRxDiagnosticText("Message accepted");
+                    } else {
+                        lastRxQualityText_ = formatConfidence(result.confidence);
+                    }
                     appendLog(
-                        "RX: message accepted, offset " + QString::number(result.startOffset)
+                        QString(resultAccepted ? "RX: message accepted, offset " : "RX: decoded result rejected, offset ")
+                        + QString::number(result.startOffset)
                         + " samples, phases " + QString::number(result.offsetsTried)
                         + ", confidence: " + formatConfidence(result.confidence)
+                        + (resultAccepted ? ", CRC OK" : "")
                     );
                 },
                 Qt::QueuedConnection

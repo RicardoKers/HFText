@@ -71,6 +71,7 @@ private:
     void updateRxSessionFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
     void setRxSessionText();
     void rememberAcceptedRx(const hftext::DecodeResult& result, const hftext::ModemConfig& config);
+    bool hasRecentAcceptedRx() const;
     void setTransmitButtonTransmitting(bool transmitting);
     void setReceiveControlsRecording(bool recording);
     void loadSettings();
@@ -163,6 +164,7 @@ private:
     int rxSessionRejectedCount_ = 0;
     int rxSessionAcceptedCount_ = 0;
     std::int64_t rxSessionStartedAtMsecs_ = 0;
+    std::int64_t lastAcceptedRxAtMsecs_ = 0;
     std::int64_t rxProgressSyncSample_ = -1;
     int rxDisplayedFrameProgressPermille_ = 0;
 };
