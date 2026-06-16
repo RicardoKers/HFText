@@ -63,6 +63,23 @@ int main() {
         assert(tonePower(window, sampleRate, expectedFrequency) > tonePower(window, sampleRate, 1000.0 + 200.0 * ((symbol + 1) % 4)));
     }
 
+    audio = hftext::modulateBits8Fsk(
+        {0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1},
+        sampleRate,
+        symbolDuration,
+        1000.0F,
+        1200.0F,
+        0.8F
+    );
+    assert(audio.size() == static_cast<std::size_t>(8 * samplesPerSymbol));
+    for (int symbol = 0; symbol < 8; ++symbol) {
+        const auto begin = audio.begin() + symbol * samplesPerSymbol;
+        const auto end = begin + samplesPerSymbol;
+        const std::vector<float> window(begin, end);
+        const double expectedFrequency = 1000.0 + 200.0 * symbol;
+        assert(tonePower(window, sampleRate, expectedFrequency) > tonePower(window, sampleRate, 1000.0 + 200.0 * ((symbol + 1) % 8)));
+    }
+
     assert(hftext::modulateBits2Fsk({}, 8000, 0.1F, 1200.0F, 1600.0F, 0.8F).empty());
 
     hftext::ModemConfig config;
@@ -81,6 +98,14 @@ int main() {
     invalidBitRejected = false;
     try {
         (void)hftext::modulateBits4Fsk({1, 2}, 8000, 0.1F, 1000.0F, 1200.0F, 0.8F);
+    } catch (const std::invalid_argument&) {
+        invalidBitRejected = true;
+    }
+    assert(invalidBitRejected);
+
+    invalidBitRejected = false;
+    try {
+        (void)hftext::modulateBits8Fsk({1, 2, 0}, 8000, 0.1F, 1000.0F, 1200.0F, 0.8F);
     } catch (const std::invalid_argument&) {
         invalidBitRejected = true;
     }

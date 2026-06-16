@@ -53,7 +53,7 @@ AudioOutput::~AudioOutput() {
 std::vector<AudioOutput::DeviceInfo> AudioOutput::devices() const {
 #ifdef _WIN32
     std::vector<DeviceInfo> result;
-    result.push_back(DeviceInfo{kDefaultDeviceId, "Dispositivo padrao do Windows"});
+    result.push_back(DeviceInfo{kDefaultDeviceId, "Windows default device"});
 
     const UINT count = waveOutGetNumDevs();
     for (UINT id = 0; id < count; ++id) {
@@ -70,7 +70,7 @@ std::vector<AudioOutput::DeviceInfo> AudioOutput::devices() const {
 
 void AudioOutput::playWavAsync(const std::string& path, unsigned int deviceId) {
     if (path.empty()) {
-        throw std::invalid_argument("caminho do WAV vazio");
+        throw std::invalid_argument("empty WAV path");
     }
 
     stop();
@@ -82,7 +82,7 @@ void AudioOutput::playWavAsync(const std::string& path, unsigned int deviceId) {
 
 void AudioOutput::playSamplesAsync(std::vector<float> samples, int sampleRate, unsigned int deviceId) {
     if (sampleRate <= 0 || samples.empty()) {
-        throw std::invalid_argument("audio TX vazio");
+        throw std::invalid_argument("empty TX audio");
     }
 
     stop();
@@ -150,7 +150,7 @@ void AudioOutput::playSamplesBlocking(std::vector<float> samples, int sampleRate
 
     try {
         if (sampleRate <= 0 || samples.empty()) {
-            throw std::runtime_error("audio sem amostras validas");
+            throw std::runtime_error("audio has no valid samples");
         }
         durationSeconds_ = static_cast<double>(samples.size()) / static_cast<double>(sampleRate);
         positionSeconds_ = 0.0;
@@ -171,12 +171,12 @@ void AudioOutput::playSamplesBlocking(std::vector<float> samples, int sampleRate
 
         event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
         if (event == nullptr) {
-            throw std::runtime_error("falha ao criar evento de audio");
+            throw std::runtime_error("failed to create audio event");
         }
 
         checkMmResult(
             waveOutOpen(&handle, deviceId, &format, reinterpret_cast<DWORD_PTR>(event), 0, CALLBACK_EVENT),
-            "falha ao abrir dispositivo de saida"
+            "failed to open output device"
         );
 
         {
@@ -187,9 +187,9 @@ void AudioOutput::playSamplesBlocking(std::vector<float> samples, int sampleRate
         header.lpData = reinterpret_cast<LPSTR>(pcm.data());
         header.dwBufferLength = static_cast<DWORD>(pcm.size() * sizeof(std::int16_t));
 
-        checkMmResult(waveOutPrepareHeader(handle, &header, sizeof(header)), "falha ao preparar buffer de audio");
+        checkMmResult(waveOutPrepareHeader(handle, &header, sizeof(header)), "failed to prepare audio buffer");
         headerPrepared = true;
-        checkMmResult(waveOutWrite(handle, &header, sizeof(header)), "falha ao iniciar audio");
+        checkMmResult(waveOutWrite(handle, &header, sizeof(header)), "failed to start audio playback");
         playing_ = true;
         const auto startedAt = std::chrono::steady_clock::now();
 
@@ -230,6 +230,6 @@ void AudioOutput::playSamplesBlocking(std::vector<float> samples, int sampleRate
     (void)samples;
     (void)sampleRate;
     (void)deviceId;
-    throw std::runtime_error("reproducao de audio ainda nao suportada nesta plataforma");
+    throw std::runtime_error("audio playback is not supported on this platform yet");
 #endif
 }

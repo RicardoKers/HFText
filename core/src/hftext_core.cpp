@@ -113,10 +113,12 @@ std::vector<std::uint8_t> preambleBitsFromConfig(const ModemConfig& config) {
 
     std::vector<std::uint8_t> preamble;
     preamble.reserve(static_cast<std::size_t>(config.preambleBits));
-    if (config.modulationMode == ModulationMode::Fsk4) {
+    if (toneCount(config.modulationMode) > 2) {
+        const int bitsPerTone = bitsPerModulationSymbol(config.modulationMode);
+        const int tones = toneCount(config.modulationMode);
         for (std::int32_t index = 0; index < config.preambleBits; ++index) {
-            const auto tone = static_cast<std::uint8_t>((index / 2) % 4);
-            const int bitIndex = 1 - (index % 2);
+            const auto tone = static_cast<std::uint8_t>((index / bitsPerTone) % tones);
+            const int bitIndex = bitsPerTone - 1 - (index % bitsPerTone);
             preamble.push_back(static_cast<std::uint8_t>((tone >> bitIndex) & 0x01U));
         }
     } else {
@@ -261,11 +263,7 @@ std::vector<StartSyncCandidate> findStartSyncFrameStarts(
     const std::size_t lastStart = bits.size() - startSync.size();
     const int maxSyncMismatches = std::max(2, static_cast<int>(startSync.size() / 4));
     const auto expectedPreamble = preambleBitsFromConfig(config);
-    const auto bitsPerAudioSymbol = static_cast<std::size_t>(bitsPerModulationSymbol(config.modulationMode));
     for (std::size_t syncStart = 0; syncStart <= lastStart; ++syncStart) {
-        if (syncStart % bitsPerAudioSymbol != 0) {
-            continue;
-        }
         const int mismatches = bitMismatchCount(bits, syncStart, startSync);
         if (!acceptsStartSyncCandidate(bits, decisions, syncStart, startSync, maxSyncMismatches)) {
             continue;

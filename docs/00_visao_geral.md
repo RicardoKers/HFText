@@ -1,68 +1,57 @@
-# Visão geral do projeto HFText
+# HFText Project Overview
 
-## Descrição
+## Description
 
-HFText é um sistema de comunicação digital de texto via áudio. A mensagem digitada pelo usuário é convertida em uma sequência de bits, codificada, modulada em áudio e enviada para a entrada de áudio de um rádio HF.
+HFText is a digital text communication system over audio. A user message is encoded into a bit stream, protected by a robust coding layer, modulated as audio tones, and sent through an HF radio audio path.
 
-No receptor, o áudio recebido do rádio é capturado, demodulado, decodificado e convertido novamente em texto.
+At the receiver, audio from the radio or SDR is captured, demodulated, decoded, checked with CRC, and shown as text.
 
-O projeto deve funcionar inicialmente em PC e posteriormente em Android.
+## Use Case
 
-## Cenário de uso
+1. The operator types a short message.
+2. The transmitter adds the configured callsign, builds the logical frame, applies FEC and interleaving, and generates audio tones.
+3. The audio is sent to the radio.
+4. Another station receives the signal.
+5. The receiving software listens continuously, detects a frame, decodes it, validates the CRC, and displays the message.
 
-1. Usuário digita uma mensagem curta.
-2. O sistema adiciona identificação, tamanho, CRC, FEC e interleaving.
-3. O sistema gera uma forma de onda de áudio.
-4. O áudio é enviado ao rádio por cabo.
-5. Outro rádio recebe o sinal.
-6. O áudio recebido é fornecido ao computador ou celular.
-7. O software detecta o quadro, demodula e mostra o texto.
+## Technical Goal
 
-## Objetivo técnico
+The current operational mode is the robust HFText Basic v0.1 baseline:
 
-Criar um modem digital extremamente simples, robusto e de baixa taxa, adequado a sinais de HF fracos e ruidosos.
+```text
+SYNC | LENGTH | PAYLOAD | CRC16
+-> convolutional code conv_k3
+-> deterministic interleaving
+-> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
+-> 2-FSK
+```
 
-O modo operacional atual e o modo robusto unico do HFText Basic v0.1: frame logico com `SYNC | LENGTH | PAYLOAD | CRC16`, codificacao convolucional `conv_k3`, interleaving deterministico e transmissao 2-FSK.
+4-FSK v0.2 and 8-FSK v0.3 are experimental physical modulation modes. They reuse the same logical frame and robust layer.
 
-Esse modo v0.1 e o baseline para validacao de campo. Mudancas incompativeis, como novos modos de modulacao, repeticao operacional, ACK ou campos adicionais de quadro, devem ser planejadas como v0.2 ou posterior.
+## Desired Characteristics
 
-## Características desejadas
+- Low throughput, optimized for weak HF signals.
+- Non-coherent demodulation.
+- Tolerance to moderate frequency error, timing error, noise, and fading.
+- Portable C++ modem core.
+- PC application for real field validation.
+- Future Android application using the same core.
 
-- Baixa taxa de transmissão.
-- Alta robustez.
-- Largura de banda estreita.
-- Demodulação não coerente.
-- Tolerância a desvio de frequência.
-- Tolerância a ruído e fading.
-- Interface simples.
-- Código portável entre PC e Android.
+## Current Implementation
 
-## Primeira versão histórica
+- Text codec with a 6-bit alphabet, uppercase shift, acute/tilde modifiers, and `ç`.
+- Logical framing with CRC-16/CCITT-FALSE.
+- Robust layer with convolutional code `conv_k3`, deterministic interleaving, physical `PHYS_LENGTH`, and Viterbi decoding.
+- 2-FSK baseline plus experimental 4-FSK and 8-FSK.
+- Python simulation and sweep tools.
+- C++ core, CLI tools, and tests.
+- Qt PC app with direct TX, continuous RX, waterfall, RX diagnostics, logs, and field evidence export.
 
-A primeira versao funcional do projeto foi planejada como uma etapa incremental com:
+## Not Yet Implemented
 
-- codificação simples de texto;
-- modulação 2-FSK ou 4-FSK;
-- geração de arquivo WAV;
-- recepção a partir de arquivo WAV;
-- CRC16;
-- testes com ruído simulado.
-
-## Estado atual
-
-A implementacao atual ja inclui:
-
-- modo robusto unico com FEC `conv_k3` e interleaving;
-- transmissao e recepcao 2-FSK;
-- recepcao continua no app PC usando `StreamingReceiver`;
-- Viterbi soft-decision no RX C++ quando ha confianca por simbolo;
-- app PC Qt com TX/RX por placa de som, decodificacao WAV para debug, historico de mensagens, log com timestamp, estado/sessao RX, evidencia de campo, nivel/qualidade RX e waterfall simples entre 300 Hz e 3 kHz.
-
-## Proximas evolucoes
-
-- v0.2 experimental para repeticao, ACK, 4-FSK, 8-FSK ou 16-FSK;
-- aplicação Android;
-- rastreamento fino de clock/frequencia;
-- controle automatico de ganho ou orientacao operacional equivalente;
-- empacotamento/deploy de release para testes de campo;
-- ACK.
+- Android application.
+- Automatic gain control.
+- Fine continuous carrier/timing tracking.
+- ACK or retry protocol.
+- Operational repetition mode.
+- Encryption, intentionally out of scope.

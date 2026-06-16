@@ -4,12 +4,14 @@ import pytest
 from hftext.demodulator import (
     demodulate_bit_decisions_2fsk,
     demodulate_bit_decisions_4fsk,
+    demodulate_bit_decisions_8fsk,
     demodulate_bits_2fsk,
     demodulate_bits_4fsk,
+    demodulate_bits_8fsk,
     tone_energy,
 )
 from hftext.frame import build_frame, parse_frame
-from hftext.modulator import modulate_bits_2fsk, modulate_bits_4fsk
+from hftext.modulator import modulate_bits_2fsk, modulate_bits_4fsk, modulate_bits_8fsk
 
 
 def test_tone_energy_detects_matching_tone():
@@ -59,6 +61,45 @@ def test_demodulate_bits_4fsk_recovers_clean_modulated_bits():
         f1=1_200.0,
     )
     decisions = demodulate_bit_decisions_4fsk(
+        audio,
+        sample_rate=8_000,
+        symbol_duration=0.05,
+        f0=1_000.0,
+        f1=1_200.0,
+    )
+
+    assert decoded == bits
+    assert [decision.bit for decision in decisions] == bits
+    assert all(decision.confidence > 0.9 for decision in decisions)
+
+
+def test_demodulate_bits_8fsk_recovers_clean_modulated_bits():
+    bits = [
+        0, 0, 0,
+        0, 0, 1,
+        0, 1, 0,
+        0, 1, 1,
+        1, 0, 0,
+        1, 0, 1,
+        1, 1, 0,
+        1, 1, 1,
+    ]
+    audio = modulate_bits_8fsk(
+        bits,
+        sample_rate=8_000,
+        symbol_duration=0.05,
+        f0=1_000.0,
+        f1=1_200.0,
+    )
+
+    decoded = demodulate_bits_8fsk(
+        audio,
+        sample_rate=8_000,
+        symbol_duration=0.05,
+        f0=1_000.0,
+        f1=1_200.0,
+    )
+    decisions = demodulate_bit_decisions_8fsk(
         audio,
         sample_rate=8_000,
         symbol_duration=0.05,

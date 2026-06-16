@@ -1,109 +1,111 @@
-# Instruções para agentes Codex
+# Instructions for Codex Agents
 
-Este projeto implementa um modem digital simples e robusto para comunicação de texto via áudio, com uso previsto em rádio HF.
+This project implements a simple and robust digital text modem over audio, intended for HF radio use.
 
-O desenvolvimento deve ser incremental, testável e bem documentado.
+Development must be incremental, testable, and well documented.
 
-## Regras principais
+## Main Rules
 
-1. Não implementar grandes blocos de uma vez.
-2. Antes de codificar, ler os documentos em `docs/`.
-3. Manter o núcleo DSP independente de interface gráfica, Android, Qt ou APIs específicas de áudio.
-4. Toda funcionalidade nova do núcleo deve ter testes.
-5. Não remover arquivos sem justificativa.
-6. Não alterar protocolo sem atualizar `docs/03_protocolo_modem.md`.
-7. Priorizar clareza, robustez e testabilidade.
-8. Não implementar criptografia.
-9. Não transmitir automaticamente sem ação explícita do usuário.
-10. Não começar pelo Android; a ordem correta é simulação Python, núcleo C++, CLI, PC app e depois Android.
+1. Do not implement large unrelated blocks at once.
+2. Before coding, read the documents in `docs/`.
+3. Keep the DSP core independent from GUI, Android, Qt, and platform audio APIs.
+4. Every new core feature must have tests.
+5. Do not remove files without justification.
+6. Do not change the protocol without updating `docs/03_protocolo_modem.md`.
+7. Prioritize clarity, robustness, and testability.
+8. Do not implement encryption.
+9. Do not transmit automatically without an explicit user action.
+10. Do not start with Android; the correct order is Python simulation, C++ core, CLI, PC app, then Android.
 
-## Arquitetura desejada
+## Desired Architecture
 
-O projeto deve ser dividido em:
+The project is divided into:
 
-- `python-sim/`: simulação, geração de WAV, testes matemáticos e validação inicial.
-- `core/`: núcleo definitivo em C++ portável.
-- `pc-app/`: aplicação PC.
-- `android-app/`: aplicação Android.
-- `docs/`: documentação de requisitos, arquitetura, protocolo e testes.
+- `python-sim/`: simulation, WAV generation, mathematical tests, and initial validation.
+- `core/`: portable C++ modem core.
+- `pc-app/`: PC application.
+- `android-app/`: Android application.
+- `docs/`: requirements, architecture, protocol, and validation documentation.
 
-## Protocolo atual
+## Current Protocol
 
-Usar HFText Basic v0.1:
+Use HFText Basic v0.1:
 
 ```text
 SYNC | LENGTH | PAYLOAD | CRC16
 
-Fluxo fisico transmitido:
+Transmitted physical flow:
 
 PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 
-Regras:
+Rules:
 
 SYNC = 0x2DD4, 2 bytes.
-START_SYNC = 0x2DD4 0x2DD4, 32 bits, transmitido diretamente antes de PHYS_LENGTH.
-PHYS_LENGTH = LENGTH_BYTE repetido 3 vezes, 24 bits MSB-first, transmitido diretamente antes de ROBUST_FRAME.
-LENGTH tem 1 byte, usa apenas os 7 bits inferiores.
-Bit 7 de LENGTH deve ser zero.
-LENGTH representa a quantidade de símbolos de 6 bits no PAYLOAD.
-Valores válidos de LENGTH: 0 a 127.
-PHYS_LENGTH representa a mesma quantidade de símbolos do PAYLOAD e deve bater com LENGTH após Viterbi.
-PAYLOAD tem no máximo 127 símbolos de 6 bits.
-O indicativo não é campo separado; quando configurado, o transmissor o insere automaticamente no início do PAYLOAD, seguido por um espaço.
-O alfabeto usa letras minúsculas; letras maiúsculas são codificadas como shift + letra minúscula.
-Símbolo 61 = acute, 62 = tilde, 63 = ç.
-Vogais acentuadas usam modificador + vogal; vogais acentuadas maiúsculas usam modificador + shift + vogal.
-O símbolo ç é direto; Ç usa shift + ç.
-Caracteres não suportados devem ser substituídos por ?.
-CRC16 é CRC-16/CCITT-FALSE calculado sobre PAYLOAD compactado em bytes.
-Símbolos de 6 bits são compactados em bytes MSB-first, com zero padding no último byte.
-SYNC e CRC16 são serializados em big-endian; o quadro completo vira bits MSB-first antes da modulação.
-TX usa preâmbulo alternado de 64 bits antes de START_SYNC.
-RX procura START_SYNC no fluxo de bits, recupera PHYS_LENGTH e acumula o ROBUST_FRAME de tamanho conhecido.
-Quando houver confiança por símbolo, RX pode ponderar START_SYNC, PHYS_LENGTH e Viterbi por essa confiança.
-RX em operação normal deve ser contínuo, processando blocos de áudio durante a recepção; WAV fechado é ferramenta de debug.
-RX offline pode tentar múltiplos offsets iniciais de amostra dentro do símbolo para melhorar alinhamento temporal.
-Não incluir SYNC nem LENGTH no CRC.
-Não incluir START_SYNC nem PHYS_LENGTH no CRC.
+START_SYNC = 0x2DD4 0x2DD4, 32 bits, transmitted directly before PHYS_LENGTH.
+PHYS_LENGTH = LENGTH_BYTE repeated 3 times, 24 bits MSB-first, transmitted directly before ROBUST_FRAME.
+LENGTH is 1 byte and uses only the lower 7 bits.
+Bit 7 of LENGTH must be zero.
+LENGTH is the number of 6-bit symbols in PAYLOAD.
+Valid LENGTH values: 0 to 127.
+PHYS_LENGTH represents the same number of PAYLOAD symbols and must match LENGTH after Viterbi decoding.
+PAYLOAD has at most 127 6-bit symbols.
+The callsign is not a separate field; when configured, the transmitter inserts it at the beginning of PAYLOAD followed by one space.
+The alphabet uses lowercase letters; uppercase letters are encoded as shift + lowercase letter.
+Symbol 61 = acute, 62 = tilde, 63 = ç.
+Accented vowels use modifier + vowel; uppercase accented vowels use modifier + shift + vowel.
+The ç symbol is direct; Ç uses shift + ç.
+Unsupported characters must be replaced with ?.
+CRC16 is CRC-16/CCITT-FALSE over PAYLOAD packed into bytes.
+6-bit symbols are packed into bytes MSB-first, with zero padding in the final byte.
+SYNC and CRC16 are serialized big-endian; the full logical frame becomes MSB-first bits before modulation.
+TX uses a 64-bit preamble before START_SYNC: alternating tones in 2-FSK, a four-tone cycle in 4-FSK, and an eight-tone cycle in 8-FSK.
+RX searches for START_SYNC in the bit stream, recovers PHYS_LENGTH, and accumulates the known-size ROBUST_FRAME.
+Experimental 8-FSK v0.3 uses the same fields and robust layer; each audio symbol carries 3 bits MSB-first.
+In 8-FSK, START_SYNC does not need to start at a bit index that is a multiple of 3.
+When symbol confidence is available, RX may weight START_SYNC, PHYS_LENGTH, and Viterbi decisions by that confidence.
+Normal RX operation must be continuous and process audio blocks during reception; closed WAV files are a debug tool.
+Offline RX may try multiple initial sample offsets inside the symbol to improve timing alignment.
+Do not include SYNC or LENGTH in the CRC.
+Do not include START_SYNC or PHYS_LENGTH in the CRC.
 ```
 
-## Implementação inicial histórica
+## Historical Initial Implementation
 
-A primeira implementação usou:
+The first implementation used:
 
-Python;
-2-FSK;
-WAV offline;
-CRC16;
-sem FEC;
-sem interleaving;
-sem recepção em tempo real.
+- Python;
+- 2-FSK;
+- offline WAV files;
+- CRC16;
+- no FEC;
+- no interleaving;
+- no real-time reception.
 
-A implementação atual usa modo robusto único com `conv_k3 + interleaving`, `PHYS_LENGTH` físico, recepção contínua no app PC e sincronismo/Viterbi ponderados por confiança no RX C++ quando há confiança por símbolo.
+The current implementation uses one robust mode with `conv_k3 + interleaving`, physical `PHYS_LENGTH`, continuous RX in the PC app, and confidence-weighted synchronization/Viterbi in C++ when symbol confidence is available. The standard modulation baseline is 2-FSK v0.1; 4-FSK v0.2 and 8-FSK v0.3 are experimental selectable modes.
 
-## Estilo Python
-Usar funções pequenas.
-Usar NumPy para buffers de áudio.
-Usar pytest para testes.
-Salvar WAVs gerados em python-sim/generated/.
-Não misturar scripts CLI com biblioteca.
+## Python Style
 
-## Estilo C++
-Usar C++17 ou superior.
-Usar std::vector<float> para áudio.
-Amostras normalizadas entre -1.0 e +1.0.
-Evitar dependências de plataforma no core/.
-Separar headers e fontes.
+- Use small functions.
+- Use NumPy for audio buffers.
+- Use pytest for tests.
+- Save generated WAV files in `python-sim/generated/`.
+- Do not mix CLI scripts with library code.
 
-## Fluxo recomendado
+## C++ Style
 
-Implementar nesta ordem:
+- Use C++17 or newer.
+- Use `std::vector<float>` for audio.
+- Keep samples normalized between `-1.0` and `+1.0`.
+- Avoid platform dependencies in `core/`.
+- Separate headers and sources.
 
-Codificação e sanitização de texto em Python.
-CRC16 em Python.
-Montagem e desmontagem de quadro.
-Modulador 2-FSK.
-Demodulador 2-FSK.
-Scripts TX/RX WAV.
-Testes com ruído.
-Portabilidade para C++.
+## Recommended Flow
+
+1. Text encoding and sanitization in Python.
+2. CRC16 in Python.
+3. Frame build and parse.
+4. 2-FSK modulator.
+5. 2-FSK demodulator.
+6. TX/RX WAV scripts.
+7. Noise validation.
+8. Port to C++.

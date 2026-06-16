@@ -80,6 +80,8 @@ def _resolve_wav_path(summary: EvidenceSummary) -> Path:
 
 def _mode_from_summary(summary: EvidenceSummary) -> str:
     modulation = summary.row.get("modulation", "").lower()
+    if "8" in modulation:
+        return "8fsk"
     return "4fsk" if "4" in modulation else "2fsk"
 
 
@@ -246,8 +248,8 @@ def print_report(results: list[ReplayResult], output_path: Path | None, stream: 
     """Print a compact replay report."""
     passed = sum(1 for result in results if result.passed)
     print(f"replays,{len(results)}", file=stream)
-    print(f"passou,{passed}", file=stream)
-    print(f"falhou,{len(results) - passed}", file=stream)
+    print(f"passed,{passed}", file=stream)
+    print(f"failed,{len(results) - passed}", file=stream)
     if output_path is not None:
         print(f"csv,{output_path}", file=stream)
 
@@ -267,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     rx_exe = Path(args.rx_exe) if args.rx_exe else find_rx_executable()
     if rx_exe is None:
-        print("Erro: hftext_rx_wav nao encontrado. Use --rx-exe.", file=sys.stderr)
+        print("Error: hftext_rx_wav not found. Use --rx-exe.", file=sys.stderr)
         return 2
 
     summaries = collect_summaries(args.input_dir)

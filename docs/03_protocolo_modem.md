@@ -1,60 +1,67 @@
-# Protocolo do modem
+# Modem Protocol
 
-## Objetivo
+## Purpose
 
-Definir o formato inicial de quadro e a codificação de mensagem.
+This document defines the HFText frame format, text alphabet, robust coding layer, and physical modulation modes.
 
-## Versão atual do protocolo
+## Operational Baseline: HFText Basic v0.1
 
-Nome: HFText v0.1
+HFText Basic v0.1 is the conservative operational baseline. It uses one robust transmit mode. There is no supported normal mode without FEC and interleaving.
 
-O modo de transmissao unico e robusto. Nao existe modo operacional sem FEC/interleaving.
-
-Status: baseline operacional para validacao de campo. Alteracoes incompativeis de quadro, FEC, interleaving, modulacao ou semantica de campos devem ser documentadas como HFText v0.2 ou posterior, nao como variacao silenciosa da v0.1.
-
-O frame logico antes da camada de robustez continua sendo:
+Logical frame:
 
 ```text
 SYNC | LENGTH | PAYLOAD | CRC16
 ```
 
-Antes da modulacao, esse frame logico deve passar por:
+Before modulation, the logical frame is transformed into the transmitted physical flow:
 
 ```text
-codigo convolucional rate 1/2, K=3, geradores 111 e 101
--> interleaving retangular deterministico
+logical frame
+-> convolutional code rate 1/2, K=3, generators 111 and 101
+-> deterministic rectangular interleaving
 -> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 -> 2-FSK
 ```
 
-## Versao experimental v0.2
+Incompatible changes to the frame, field semantics, FEC, interleaving, or modulation must be documented as a later protocol version, not as a silent v0.1 variation.
 
-HFText v0.2 e, nesta etapa, um modo experimental de modulacao fisica 4-FSK.
-Ele reaproveita o mesmo frame logico, a mesma camada robusta e os mesmos
-campos fisicos da v0.1:
+## Experimental Physical Modes
+
+### HFText v0.2 Experimental 4-FSK
+
+4-FSK v0.2 reuses the same logical frame, robust layer, `START_SYNC`, and `PHYS_LENGTH`. Each audio symbol carries 2 bits MSB-first.
 
 ```text
-SYNC | LENGTH | PAYLOAD | CRC16
--> codigo convolucional rate 1/2, K=3, geradores 111 e 101
--> interleaving retangular deterministico
+logical frame v0.1
+-> robust layer
 -> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 -> 4-FSK
 ```
 
-Nao ha alteracao de alfabeto, `LENGTH`, `CRC16`, `START_SYNC`,
-`PHYS_LENGTH`, FEC ou interleaving. A diferenca e apenas a modulacao dos bits
-fisicos: cada simbolo de audio transporta dois bits.
+4-FSK is explicit and experimental.
 
-Por compatibilidade e seguranca de campo, o modo v0.1 2-FSK continua sendo o
-padrao. O modo v0.2 4-FSK deve ser explicitamente selecionado e tratado como
-experimental ate haver validacao real suficiente.
+### HFText v0.3 Experimental 8-FSK
 
-## Alfabeto inicial
-
-A primeira versão usa um alfabeto reduzido de 64 símbolos ativos, codificados em 6 bits:
+8-FSK v0.3 reuses the same logical frame, robust layer, `START_SYNC`, and `PHYS_LENGTH`. Each audio symbol carries 3 bits MSB-first.
 
 ```text
-0  = espaço
+logical frame v0.1
+-> robust layer
+-> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
+-> 8-FSK
+```
+
+In 8-FSK, `START_SYNC` does not need to start at a bit index that is a multiple of 3. The receiver must search the recovered bit stream and accept only frames that pass `PHYS_LENGTH`, Viterbi, logical `LENGTH`, payload validation, and CRC.
+
+8-FSK is explicit and experimental.
+
+## Text Alphabet
+
+The text alphabet has 64 symbols encoded as 6-bit values:
+
+```text
+0  = space
 1  = a
 2  = b
 ...
@@ -92,41 +99,36 @@ A primeira versão usa um alfabeto reduzido de 64 símbolos ativos, codificados 
 63 = ç
 ```
 
+Unsupported input characters must be replaced with `?`, making the substitution visible to the operator.
 
-Caracteres não suportados devem ser substituídos por `?`, para deixar a substituição visível ao operador.
+### Uppercase
 
-Os símbolos `acute` e `tilde` são modificadores de apresentação. Eles não representam caracteres isolados: indicam que a próxima vogal deve ser apresentada com acento.
-
-Regras:
-
-- `acute` pode modificar `a`, `e`, `i`, `o` e `u`, produzindo `á`, `é`, `í`, `ó` e `ú`;
-- `tilde` pode modificar `a` e `o`, produzindo `ã` e `õ`;
-- `ç` usa o símbolo 63 diretamente;
-- `acute` ou `tilde` digitados como caracteres soltos não devem ser gerados pelo transmissor; se aparecerem no texto de entrada como caracteres isolados, devem ser substituídos por `?`;
-- se um modificador recebido aparecer antes de um alvo inválido, o receptor deve apresentar `?` antes do alvo para tornar a anomalia visível.
-
-## Letras maiúsculas
-
-Letras são transmitidas como símbolos minúsculos.
-
-Para transmitir uma letra maiúscula, o transmissor deve emitir o símbolo `shift` seguido da letra minúscula correspondente.
-
-Exemplos:
+Letters are transmitted as lowercase symbols. Uppercase letters use `shift` followed by the lowercase symbol.
 
 ```text
-a -> [a]
-A -> [shift, a]
+a  -> [a]
+A  -> [shift, a]
 Ab -> [shift, a, b]
 AB -> [shift, a, shift, b]
 ```
 
-Na recepção, `shift` converte apenas a próxima letra `a-z` para maiúscula na apresentação.
+On receive, `shift` affects only the next alphabetic symbol. If `shift` appears before a non-letter, the receiver ignores the shift and displays the following symbol normally. A trailing `shift` is ignored.
 
-Se `shift` aparecer antes de um símbolo que não seja letra, o receptor deve ignorar o `shift` e apresentar o símbolo seguinte normalmente.
+### Accents
 
-Se `shift` aparecer no fim da mensagem, o receptor deve ignorá-lo.
+`acute` and `tilde` are presentation modifiers. They do not represent standalone characters.
 
-Para letras acentuadas maiúsculas, o modificador de acento deve preceder o `shift`:
+Rules:
+
+- `acute + a/e/i/o/u` displays `á/é/í/ó/ú`;
+- `tilde + a/o` displays `ã/õ`;
+- `ç` uses symbol 63 directly;
+- `Ç` uses `shift + ç`;
+- uppercase accented vowels use modifier + `shift` + vowel;
+- standalone typed acute or tilde characters are unsupported and become `?`;
+- if a received modifier is followed by an invalid target, the receiver displays `?` before the target.
+
+Examples:
 
 ```text
 á -> [acute, a]
@@ -137,217 +139,210 @@ Para letras acentuadas maiúsculas, o modificador de acento deve preceder o `shi
 Ç -> [shift, ç]
 ```
 
-## Estrutura de quadro
+## Logical Frame
 
 ```text
 SYNC | LENGTH | PAYLOAD | CRC16
 ```
 
-O preâmbulo de transmissão é necessário para preparar a detecção e habilitar corretamente o TX do rádio, mas não faz parte do frame lógico `SYNC | LENGTH | PAYLOAD | CRC16`.
+### SYNC
 
-O transmissor deve antepor um preambulo simples e uma palavra fisica de inicio ao fluxo codificado:
+`SYNC` is the fixed logical-frame marker.
+
+```text
+value: 0x2DD4
+size:  2 bytes
+byte order: big-endian
+```
+
+`SYNC` is not included in the CRC.
+
+The physical `START_SYNC` uses the same base value repeated twice before `PHYS_LENGTH | ROBUST_FRAME`. Logical `SYNC` is visible only after robust decoding.
+
+### LENGTH
+
+`LENGTH` is the number of encoded 6-bit symbols in `PAYLOAD`.
+
+Rules:
+
+- size: 1 byte;
+- only the lower 7 bits are used;
+- bit 7 must be zero;
+- valid range: 0 to 127;
+- uppercase letters count as 2 symbols;
+- accented lowercase vowels count as 2 symbols;
+- accented uppercase vowels count as 3 symbols;
+- `ç` counts as 1 symbol and `Ç` counts as 2 symbols.
+
+### PAYLOAD
+
+`PAYLOAD` is the transmitted message after callsign insertion and sanitization.
+
+Rules:
+
+- length: 0 to 127 encoded 6-bit symbols;
+- uses the alphabet above;
+- unsupported characters become `?`;
+- transmit must reject payloads that exceed 127 encoded symbols.
+
+### Callsign
+
+The callsign is not a separate protocol field.
+
+When configured, the transmitter inserts it at the beginning of `PAYLOAD`, followed by one space.
+
+```text
+callsign: pu5lrk
+typed text: test
+payload text: pu5lrk test
+```
+
+The callsign can have any length as long as `callsign + space + message` fits within the 127-symbol payload limit.
+
+### CRC16
+
+CRC16 uses CRC-16/CCITT-FALSE over the packed `PAYLOAD` only.
+
+```text
+polynomial: 0x1021
+initial:    0xFFFF
+RefIn:      false
+RefOut:     false
+XorOut:     0x0000
+```
+
+Do not include `SYNC`, `LENGTH`, `START_SYNC`, or `PHYS_LENGTH` in the CRC.
+
+The CRC value is serialized big-endian.
+
+## Packing 6-Bit Symbols
+
+PAYLOAD symbols are packed into bytes MSB-first.
+
+Each 6-bit symbol is emitted from most significant bit to least significant bit. The continuous bit stream is split into 8-bit bytes, also MSB-first. If the last byte is incomplete, remaining low bits are zero padded.
+
+On receive, `LENGTH` defines how many 6-bit symbols to recover. Padding bits at the end are ignored.
+
+The full logical frame is also converted to bits MSB-first before robust encoding.
+
+## Physical Flow
 
 ```text
 PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 ```
 
-No modo 2-FSK v0.1, o preambulo e alternado:
+The physical preamble prepares detection and helps radio TX/VOX behavior. It is not part of the logical frame and is not included in the CRC.
 
-```text
-10101010 ... 1010
-```
+### PREAMBLE
 
-No modo 4-FSK experimental v0.2, o preambulo deve exercitar todos os quatro
-tons, usando o ciclo fisico:
-
-```text
-00 01 10 11 00 01 10 11 ...
-```
-
-Isso evita que o preambulo 4-FSK vire um unico tom quando bits alternados sao
-agrupados em pares.
-
-Tamanho inicial do preambulo:
+Initial length:
 
 ```text
 64 bits
 ```
 
-`START_SYNC` e transmitido diretamente, sem FEC/interleaving, imediatamente antes do bloco robusto.
-
-Valor:
+2-FSK v0.1 preamble:
 
 ```text
-0x2DD4 0x2DD4
+10101010 ...
 ```
 
-Serializacao:
+4-FSK v0.2 experimental preamble cycles through all tones:
 
 ```text
-big-endian, MSB-first
+00 01 10 11 00 01 10 11 ...
 ```
 
-Tamanho:
+8-FSK v0.3 experimental preamble cycles through all tones:
 
 ```text
-32 bits
+000 001 010 011 100 101 110 111 000 ...
 ```
 
-O preambulo, `START_SYNC` e `PHYS_LENGTH` nao entram no calculo do CRC e nao fazem parte de `SYNC | LENGTH | PAYLOAD | CRC16`.
+### START_SYNC
+
+`START_SYNC` is transmitted directly, without FEC or interleaving, immediately before `PHYS_LENGTH`.
+
+```text
+value: 0x2DD4 0x2DD4
+size:  32 bits
+order: big-endian, MSB-first
+```
 
 ### PHYS_LENGTH
 
-`PHYS_LENGTH` e uma copia fisica do tamanho do payload, transmitida diretamente apos `START_SYNC` e antes do bloco robusto.
-
-Formato:
+`PHYS_LENGTH` is a physical copy of the payload length transmitted directly after `START_SYNC` and before the robust frame.
 
 ```text
-LENGTH_BYTE repetido 3 vezes
+format: LENGTH_BYTE repeated 3 times
+size:   24 bits
+order:  MSB-first
 ```
 
-Tamanho:
+Rules:
+
+- each repetition is one byte;
+- only the lower 7 bits are used;
+- bit 7 must be zero;
+- valid range: 0 to 127;
+- each bit is recovered by majority vote across the three repetitions;
+- `PHYS_LENGTH` is not part of the logical frame and is not included in the CRC;
+- `PHYS_LENGTH` must match logical `LENGTH` after Viterbi decoding.
+
+The purpose of `PHYS_LENGTH` is to let the streaming receiver know the exact robust block size before the end of reception.
+
+## Robust Layer
+
+TX:
 
 ```text
-24 bits
+logical frame
+-> convolutional encoder rate 1/2, K=3, generators 111 and 101
+-> zero tail bits to return to state zero
+-> deterministic rectangular interleaving
+-> physical sync/length wrapper
 ```
 
-Regras:
-
-- cada repeticao tem 1 byte MSB-first;
-- usa apenas os 7 bits inferiores;
-- bit 7 deve ser zero;
-- o receptor recupera cada bit por maioria entre as 3 repeticoes;
-- valores validos: 0 a 127;
-- `PHYS_LENGTH` nao entra no CRC e nao faz parte do frame logico.
-
-Objetivo: permitir que o receptor saiba o tamanho do bloco robusto antes do fim da recepcao, evitando varrer todos os comprimentos possiveis depois da transmissao.
-
-O receptor deve procurar `START_SYNC` no fluxo de bits demodulado, tolerando erro moderado de bit no marcador fisico, recuperar `PHYS_LENGTH` e calcular exatamente quantos bits do `ROBUST_FRAME` devem ser acumulados. Apos receber esse bloco, deve desfazer interleaving, aplicar Viterbi e aceitar apenas o frame logico recuperado cujo CRC, `LENGTH` logico e payload sejam validos.
-
-Quando o demodulador fornecer confianca por simbolo, o RX pode usar essa confianca na busca de `START_SYNC` e na maioria repetida de `PHYS_LENGTH`. Bits errados com baixa confianca podem ser tratados como evidencias fracas, mas candidatos so podem ser aceitos operacionalmente depois que o frame logico passar em CRC e payload.
-
-## Campos
-
-### SYNC
-
-Palavra fixa de sincronismo do frame logico.
-
-Valor:
+RX:
 
 ```text
-0x2DD4
+demodulated bits
+-> START_SYNC search, optionally confidence-weighted
+-> PHYS_LENGTH recovery, optionally confidence-weighted
+-> known-size ROBUST_FRAME accumulation
+-> deinterleaving
+-> Viterbi hard-decision or soft-decision
+-> logical frame parse
+-> CRC and payload validation
 ```
 
-Tamanho:
+Rules:
+
+- the CRC protects only the original packed payload;
+- interleaving is applied after FEC and reversed before Viterbi;
+- interleaving geometry is derived from the encoded size;
+- RX may use symbol confidence for sync, length, and Viterbi decisions;
+- text is accepted only when CRC and payload validation pass.
+
+Deterministic interleaving shape:
+
+- calculate the encoded stream size after FEC;
+- consider only row counts that divide that size exactly;
+- initially limit rows to `2..16`;
+- choose the row count closest to 6;
+- on ties, choose the smaller row count;
+- columns = encoded size / rows.
+
+## Modulation
+
+### 2-FSK v0.1
 
 ```text
-2 bytes
+bit 0 -> base frequency
+bit 1 -> base frequency + tone spacing
 ```
 
-Serialização:
-
-```text
-big-endian: 0x2D 0xD4
-```
-
-SYNC não entra no cálculo do CRC.
-
-Observacao: o mesmo valor `0x2DD4` tambem e usado como base do `START_SYNC` fisico antes de `PHYS_LENGTH | ROBUST_FRAME`. No fluxo fisico ele e repetido duas vezes (`0x2DD4 0x2DD4`) para melhorar a correlacao em ruido. O `START_SYNC` fisico e visivel antes do Viterbi; o `SYNC` do frame logico so reaparece depois da decodificacao robusta.
-
-### LENGTH
-
-Tamanho lógico do `PAYLOAD`.
-
-Tamanho:
-
-```text
-1 byte
-```
-
-Regras:
-
-- usa apenas os 7 bits inferiores;
-- o bit 7 deve ser zero;
-- valores válidos: 0 a 127;
-- representa a quantidade de símbolos de 6 bits no `PAYLOAD`;
-- letras maiúsculas contam como 2 símbolos, pois usam `shift` + letra;
-- vogais com `acute` ou `tilde` contam como 2 símbolos;
-- vogais acentuadas maiúsculas contam como 3 símbolos, pois usam modificador + `shift` + letra;
-- `ç` conta como 1 símbolo e `Ç` conta como 2 símbolos.
-
-### PAYLOAD
-
-Mensagem transmitida.
-
-Regras:
-
-- tamanho de 0 a 127 símbolos de 6 bits;
-- usa o alfabeto reduzido;
-- caracteres não suportados devem ser substituídos por `?`, para deixar a substituição visível ao operador;
-- se a mensagem codificada tiver mais de 127 símbolos, rejeitar.
-
-### Indicativo
-
-O indicativo não é um campo separado do protocolo.
-
-Quando configurado, o transmissor deve inserir automaticamente o indicativo no início do `PAYLOAD`, seguido por um único espaço.
-
-Exemplo:
-
-```text
-indicativo: pu5lrk
-texto digitado: teste
-payload textual antes da codificação: pu5lrk teste
-```
-
-O indicativo pode ter qualquer tamanho desde que `indicativo + espaço + texto` caiba no limite total de 127 símbolos codificados.
-
-### CRC16
-
-CRC calculado sobre:
-
-```text
-PAYLOAD
-```
-
-Não incluir `SYNC` nem `LENGTH` no cálculo do CRC.
-
-Usar CRC-16/CCITT-FALSE:
-
-```text
-Polinômio: 0x1021
-Inicial:   0xFFFF
-RefIn:     false
-RefOut:    false
-XorOut:    0x0000
-```
-
-O CRC é calculado sobre a representação compactada em bytes dos símbolos de 6 bits do `PAYLOAD`.
-
-O valor CRC16 é serializado em big-endian, byte mais significativo primeiro.
-
-## Empacotamento de símbolos
-
-Símbolos de 6 bits são empacotados em bytes na ordem MSB-first.
-
-Cada símbolo é emitido do bit mais significativo para o bit menos significativo. O fluxo contínuo de bits resultante é dividido em bytes de 8 bits, também MSB-first.
-
-Se o último byte não tiver 8 bits completos, preencher os bits menos significativos restantes com zero.
-
-Na recepção, `LENGTH` define quantos símbolos de 6 bits devem ser recuperados do `PAYLOAD`; bits de preenchimento no final devem ser ignorados.
-
-O quadro completo também deve ser convertido para bits em ordem MSB-first antes da modulação.
-
-## Modulação inicial
-
-Versão 0.1: 2-FSK
-
-```text
-bit 0 -> 1200 Hz
-bit 1 -> 1600 Hz
-```
-
-Parâmetros iniciais:
+Default parameters:
 
 ```text
 sampleRate = 48000 Hz
@@ -357,141 +352,52 @@ toneSpacing = 400 Hz
 toneCount = 2
 ```
 
-Taxa bruta:
+### 4-FSK v0.2 Experimental
 
 ```text
-2 bits/s
+00 -> base
+01 -> base + toneSpacing
+10 -> base + 2 * toneSpacing
+11 -> base + 3 * toneSpacing
 ```
 
-A taxa util e menor que a taxa bruta porque o frame logico passa por codigo convolucional rate 1/2 e bits de cauda antes da modulacao.
+Rules:
 
-## Modulacao experimental v0.2
+- bit pairs are formed MSB-first;
+- if needed, the final audio symbol is padded with zero in the least significant bit;
+- `PHYS_LENGTH` still counts 6-bit payload symbols, not audio symbols;
+- TX duration accounts for 2 bits per audio symbol;
+- all tones must stay below Nyquist and inside the intended radio audio passband.
 
-Versao 0.2 experimental: 4-FSK.
-
-No modo 4-FSK, `Tom 0` e `Tom 1` continuam sendo configurados pelo operador,
-mas passam a definir os dois primeiros tons adjacentes. O espacamento e:
+### 8-FSK v0.3 Experimental
 
 ```text
-toneSpacing = Tom 1 - Tom 0
+000 -> base
+001 -> base + toneSpacing
+010 -> base + 2 * toneSpacing
+011 -> base + 3 * toneSpacing
+100 -> base + 4 * toneSpacing
+101 -> base + 5 * toneSpacing
+110 -> base + 6 * toneSpacing
+111 -> base + 7 * toneSpacing
 ```
 
-A tabela inicial e:
+Rules:
 
-```text
-00 -> Tom 0
-01 -> Tom 1
-10 -> Tom 0 + 2 * toneSpacing
-11 -> Tom 0 + 3 * toneSpacing
-```
+- bit triples are formed MSB-first;
+- if needed, the final audio symbol is padded with zeros in least significant bits;
+- `PHYS_LENGTH` still counts 6-bit payload symbols, not audio symbols;
+- TX duration accounts for 3 bits per audio symbol;
+- all tones must stay below Nyquist and, for HF SSB, should typically remain between 300 Hz and 3 kHz.
 
-Exemplo recomendado para testes:
+## Future Versions
 
-```text
-00 -> 1000 Hz
-01 -> 1200 Hz
-10 -> 1400 Hz
-11 -> 1600 Hz
-```
+The following ideas are not part of v0.1, v0.2, or v0.3:
 
-Regras:
+- operational repetition;
+- ACK/retry;
+- optional timestamp;
+- message type field;
+- automatic link negotiation.
 
-- os pares de bits sao formados em ordem MSB-first;
-- se o total de bits fisicos for impar, o ultimo simbolo de audio usa zero no bit menos significativo de preenchimento;
-- `PHYS_LENGTH` continua representando a quantidade de simbolos de 6 bits do `PAYLOAD`, nao a quantidade de simbolos de audio;
-- a duracao estimada de TX deve considerar que cada simbolo de audio carrega 2 bits;
-- a maior frequencia usada pelo modo deve ficar abaixo de Nyquist para o sample rate configurado;
-- a waterfall deve mostrar todos os tons configurados/derivados para ajudar sintonia.
-
-Esse modo reduz a duracao fisica aproximada pela metade para a mesma duracao de
-simbolo, mas exige melhor separacao de tons e deve ser validado com cuidado em
-radio real.
-
-## Camada de robustez
-
-O HFText v0.1 usa sempre a camada robusta abaixo. Esta camada nao e opcional.
-
-TX:
-
-```text
-frame logico v0.1
--> codigo convolucional rate 1/2, K=3, geradores 111 e 101
--> interleaving retangular derivado do tamanho codificado
--> preambulo + START_SYNC + PHYS_LENGTH + 2-FSK
-```
-
-RX:
-
-```text
-bits demodulados
--> busca de START_SYNC fisico, opcionalmente ponderada por confianca
--> recuperacao de PHYS_LENGTH, opcionalmente ponderada por confianca
--> acumulacao do ROBUST_FRAME com tamanho conhecido
--> deinterleaving do bloco robusto
--> Viterbi hard-decision ou soft-decision no RX com confianca por simbolo
--> frame logico v0.1
--> CRC16 normal
-```
-
-Regras:
-
-- o frame logico antes do FEC continua sendo `SYNC | LENGTH | PAYLOAD | CRC16`;
-- o fluxo fisico transmitido usa `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
-- `PHYS_LENGTH` deve bater com o `LENGTH` recuperado no frame logico apos Viterbi;
-- o CRC continua protegendo o payload logico original, nao os bits codificados;
-- o codigo convolucional usa tail bits zero para retornar ao estado zero;
-- o receptor deve remover os bits de cauda apos o Viterbi;
-- o interleaving deve ser aplicado depois do FEC e revertido antes do Viterbi;
-- a geometria do interleaving e derivada do tamanho do fluxo codificado;
-- o RX pode ponderar `START_SYNC` e `PHYS_LENGTH` pela confianca do demodulador, sem alterar os bits transmitidos;
-- o RX pode usar Viterbi soft-decision quando o demodulador fornecer confianca por simbolo, sem alterar o fluxo transmitido;
-- o receptor deve aceitar texto apenas quando o frame logico recuperado tiver CRC e payload validos.
-
-Regra deterministica de interleaving:
-
-- calcular o tamanho do fluxo codificado apos FEC;
-- considerar apenas geometrias cujo numero de linhas divida exatamente esse tamanho;
-- limitar inicialmente as linhas a 2..16;
-- escolher o numero de linhas mais proximo de 6;
-- em caso de empate, escolher o menor numero de linhas;
-- colunas = tamanho codificado / linhas.
-
-## Versões futuras
-
-As ideias abaixo nao fazem parte do HFText v0.1 nem do experimento 4-FSK v0.2.
-Se forem promovidas de experimento para operacao real, devem definir uma versao
-nova do protocolo para evitar ambiguidade entre transmissores e receptores.
-
-### 8-FSK
-
-```text
-000 -> f0
-001 -> f1
-...
-111 -> f7
-```
-
-## Observações
-
-O protocolo inicial deve privilegiar simplicidade, não eficiência.
-
-Depois de validado, adicionar:
-
-- repetição;
-- ACK;
-- timestamp opcional;
-- tipo de mensagem.
-
-### Repeticao experimental futura
-
-A repeticao nao faz parte do HFText v0.1.
-
-Quando for implementada, deve ser tratada como modo explicito de uma versao futura do protocolo, para evitar que receptores v0.1 interpretem um fluxo repetido de forma ambigua.
-
-Direcao inicial recomendada:
-
-- repetir bits ou simbolos antes da modulacao;
-- no RX, usar voto majoritario por grupo;
-- manter CRC sobre o payload logico original, nao sobre as copias repetidas;
-- registrar no quadro ou na configuracao negociada qual fator de repeticao esta ativo;
-- validar primeiro em Python com varreduras de SNR e fading antes de portar para C++.
+If promoted, they must define a later protocol version.

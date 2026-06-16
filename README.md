@@ -1,63 +1,49 @@
 # HFText
 
-HFText é um projeto experimental de comunicação digital de texto via áudio, destinado à transmissão por rádio HF usando um celular, computador ou outro dispositivo de áudio conectado ao rádio.
+HFText is an experimental digital text modem for HF radio. It converts short typed messages into audio tones, sends them through a radio audio path, and decodes received audio back into text.
 
-O objetivo é permitir que uma mensagem curta digitada pelo usuário seja convertida em áudio modulado, transmitida pelo rádio e posteriormente demodulada de volta para texto.
+The project favors weak-signal robustness and operator clarity over throughput. Useful data rates are intentionally low while the protocol, DSP core, and PC application are validated with real radio and SDR captures.
 
-O projeto deve priorizar robustez em sinais fracos e ruidosos, mesmo que a taxa útil de transmissão seja muito baixa.
+## Main Goals
 
-## Objetivos principais
+- Build a simple, robust audio-based text modem for HF radio.
+- Keep the DSP core independent from the graphical interface and audio APIs.
+- Validate the protocol first in Python, then in portable C++.
+- Provide a PC application for field testing.
+- Reuse the C++ core later in an Android application.
+- Keep FEC, interleaving, diagnostics, and evidence export testable.
 
-- Criar um modem digital simples e robusto baseado em áudio.
-- Permitir transmissão de texto curto via rádio HF.
-- Começar com uma versão para PC para simulação, teste e validação.
-- Reaproveitar o núcleo DSP em uma futura versão Android.
-- Manter o núcleo do modem independente da interface gráfica.
-- Usar FEC e interleaving no modo robusto atual, mantendo espaço para ACK e modos futuros.
+## Current State
 
-## Estado atual
+The operational baseline is HFText Basic v0.1:
 
-O sistema atual usa sempre o modo robusto HFText v0.1:
+- logical frame: `SYNC | LENGTH | PAYLOAD | CRC16`;
+- robust layer: convolutional code `conv_k3`, deterministic interleaving, and Viterbi decoding;
+- transmitted physical flow: `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
+- continuous receive path in the Qt PC application;
+- weighted `START_SYNC`, `PHYS_LENGTH`, and Viterbi decisions when symbol confidence is available.
 
-- frame logico `SYNC | LENGTH | PAYLOAD | CRC16`;
-- FEC `conv_k3` rate 1/2 com interleaving deterministico;
-- fluxo fisico `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
-- modulacao 2-FSK;
-- recepcao continua no app PC por `StreamingReceiver`;
-- busca de `START_SYNC`, recuperacao de `PHYS_LENGTH` e Viterbi soft-decision no RX C++ usando confianca por simbolo quando disponivel.
+2-FSK is the conservative v0.1 baseline. 4-FSK v0.2 and 8-FSK v0.3 are experimental physical modulation modes that reuse the same logical frame and robust layer. They must be selected explicitly in the CLI tools or PC application.
 
-Este modo v0.1 e o baseline operacional para validacao de campo.
+The Qt PC application can transmit directly through the sound card, receive continuously, show RX level/quality/waterfall, track RX state/session diagnostics, save logs, and export field evidence bundles.
 
-A v0.2 experimental iniciou a avaliacao de 4-FSK mantendo o mesmo frame logico
-e a mesma camada robusta. O modo padrao continua sendo 2-FSK v0.1; 4-FSK deve
-ser selecionado explicitamente nos CLIs ou no app PC para testes controlados.
-Mudancas incompativeis adicionais, como repeticao operacional, 8-FSK, ACK ou
-novos campos de quadro, devem ser tratadas como versoes posteriores.
+## Development Strategy
 
-O app PC em Qt ja permite gerar/transmitir WAV, receber audio continuamente pela placa de som, visualizar nivel/qualidade/waterfall, acompanhar estado/sessao RX e registrar logs/evidencias de campo.
+1. Python simulation.
+2. Portable C++ core.
+3. CLI tools.
+4. PC application.
+5. Android application.
+6. Protocol and robustness improvements.
 
-## Estratégia de desenvolvimento
+## Technology
 
-O projeto será desenvolvido em fases:
+- Python, NumPy, and pytest for simulation and validation.
+- C++17 for the portable DSP core.
+- CMake for the C++ core, CLI tools, and PC app.
+- Qt 6 Widgets for the PC application.
+- Kotlin, Jetpack Compose, and JNI are planned for Android.
 
-1. Simulação em Python.
-2. Núcleo do modem em C++.
-3. Aplicação PC.
-4. Aplicação Android.
-5. Melhorias de robustez e protocolo.
+## Core Principle
 
-## Tecnologias previstas
-
-- Python para simulação e validação inicial.
-- C++17 ou C++20 para o núcleo DSP definitivo.
-- Qt + C++ para aplicação PC.
-- Kotlin + Jetpack Compose para aplicação Android.
-- JNI para integração Android com o núcleo C++.
-- CMake para build do núcleo e aplicação PC.
-- Gradle/Kotlin para build Android.
-
-## Princípio fundamental
-
-O núcleo do modem não deve depender de interface gráfica, Android, Qt ou sistema operacional.
-
-A interface gráfica deve apenas fornecer entrada de texto, configurações, áudio e exibição dos resultados.
+The modem core must not depend on Qt, Android, platform audio APIs, or UI code. User interfaces provide text, settings, audio input/output, logs, and visual feedback; modem behavior belongs in the core and its tests.

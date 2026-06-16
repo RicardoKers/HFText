@@ -52,6 +52,7 @@ private slots:
     void updateTxEstimate();
     void updateWaterfallMarkers();
     void restartReceiveIfActive();
+    void applyDefaultSettings();
     void saveLog();
     void saveFieldEvidence();
 
@@ -144,6 +145,7 @@ private:
     QPushButton* saveLogButton_ = nullptr;
     QPushButton* clearLogButton_ = nullptr;
     QPushButton* saveEvidenceButton_ = nullptr;
+    QPushButton* defaultSettingsButton_ = nullptr;
     QTimer* rxLevelTimer_ = nullptr;
     QTimer* txProgressTimer_ = nullptr;
     QString lastRxPhysicalLengthText_ = "--";

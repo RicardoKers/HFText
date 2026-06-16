@@ -27,6 +27,15 @@ int main() {
     assert(hftext::modulationToneFrequencyHz(config, 2) == 1400.0F);
     assert(hftext::highestModulationToneHz(config) == 1600.0F);
 
+    config.modulationMode = hftext::ModulationMode::Fsk8;
+    config.frequency0Hz = 1000.0F;
+    config.frequency1Hz = 1200.0F;
+    assert(hftext::bitsPerModulationSymbol(config.modulationMode) == 3);
+    assert(hftext::toneCount(config.modulationMode) == 8);
+    assert(hftext::modulationToneFrequencyHz(config, 0) == 1000.0F);
+    assert(hftext::modulationToneFrequencyHz(config, 7) == 2400.0F);
+    assert(hftext::highestModulationToneHz(config) == 2400.0F);
+
     hftext::DecodeResult result;
     assert(!result.frameDetected);
     assert(!result.crcOk);

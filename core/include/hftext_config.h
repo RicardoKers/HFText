@@ -7,6 +7,7 @@ namespace hftext {
 enum class ModulationMode {
     Fsk2 = 2,
     Fsk4 = 4,
+    Fsk8 = 8,
 };
 
 struct ModemConfig {
@@ -21,11 +22,17 @@ struct ModemConfig {
 };
 
 inline int bitsPerModulationSymbol(ModulationMode mode) {
-    return mode == ModulationMode::Fsk4 ? 2 : 1;
+    if (mode == ModulationMode::Fsk8) {
+        return 3;
+    }
+    if (mode == ModulationMode::Fsk4) {
+        return 2;
+    }
+    return 1;
 }
 
 inline int toneCount(ModulationMode mode) {
-    return mode == ModulationMode::Fsk4 ? 4 : 2;
+    return 1 << bitsPerModulationSymbol(mode);
 }
 
 inline float modulationToneSpacingHz(const ModemConfig& config) {
@@ -33,7 +40,7 @@ inline float modulationToneSpacingHz(const ModemConfig& config) {
 }
 
 inline float modulationToneFrequencyHz(const ModemConfig& config, int toneIndex) {
-    if (config.modulationMode == ModulationMode::Fsk4) {
+    if (toneCount(config.modulationMode) > 2) {
         return config.frequency0Hz + modulationToneSpacingHz(config) * static_cast<float>(toneIndex);
     }
     return toneIndex == 0 ? config.frequency0Hz : config.frequency1Hz;

@@ -1,178 +1,128 @@
-# Arquitetura do sistema
+# Architecture
 
-## Visão geral
-
-O sistema deve ser dividido em quatro partes principais:
-
-1. Simulação Python.
-2. Núcleo DSP em C++.
-3. Aplicação PC.
-4. Aplicação Android.
-
-## Diagrama lógico
+## Repository Layout
 
 ```text
-Mensagem
-   ↓
-Codificador de texto
-   ↓
-Montador de quadro
-   ↓
-CRC / FEC / Interleaving
-   ↓
-Modulador FSK/MFSK
-   ↓
-Áudio PCM
-   ↓
-Rádio HF
-   ↓
-Áudio recebido
-   ↓
-Demodulador FSK/MFSK
-   ↓
-Deinterleaving / FEC / CRC
-   ↓
-Decodificador de texto
-   ↓
-Mensagem recebida
+HFText/
+├── python-sim/   # Simulation, sweeps, WAV tools, Python tests
+├── core/         # Portable C++ modem core, CLI tools, C++ tests
+├── pc-app/       # Qt 6 Widgets PC application
+├── android-app/  # Future Android app
+├── docs/         # Project documentation
+└── scripts/      # Packaging and helper scripts when needed
+```
 
-Núcleo C++
+## Layering
 
-O núcleo C++ deve conter:
+HFText is intentionally layered:
 
-core/
-├── include/
-│   ├── hftext_config.h
-│   ├── hftext_encoder.h
-│   ├── hftext_frame.h
-│   ├── hftext_crc16.h
-│   ├── hftext_modulator.h
-│   ├── hftext_demodulator.h
-│   └── hftext_result.h
-│
-├── src/
-│   ├── encoder.cpp
-│   ├── frame.cpp
-│   ├── crc16.cpp
-│   ├── modulator_fsk.cpp
-│   ├── demodulator_fsk.cpp
-│   └── goertzel.cpp
-│
-└── tests/
-Interfaces principais sugeridas
-struct ModemConfig {
-    int sampleRate = 48000;
-    float symbolDurationSec = 0.5f;
-    float frequency0Hz = 1200.0f;
-    float frequency1Hz = 1600.0f;
-    float amplitude = 0.8f;
-    int preambleBits = 64;
-    bool syncSearch = true;
-};
+```text
+UI / CLI / scripts
+        |
+Modem controller glue
+        |
+Portable C++ core
+        |
+Text codec, frame, robust layer, modulation, demodulation
+```
 
-struct DecodeResult {
-    bool frameDetected = false;
-    bool crcOk = false;
-    bool payloadValid = false;
-    std::string text;
-    std::string error;
-    int length = 0;
-    int syncIndex = -1;
-    int startOffset = 0;
-    int offsetsTried = 1;
-    float confidence = 0.0f;
-};
+The core must not depend on Qt, Android, Windows audio APIs, or GUI classes. Platform-specific audio and UI code live outside `core/`.
 
-std::vector<float> modulateText(
-    const std::string& text,
-    const ModemConfig& config
-);
+## Python Simulation
 
-DecodeResult demodulateSamples(
-    const std::vector<float>& samples,
-    const ModemConfig& config
-);
+`python-sim/` contains:
 
-class StreamingReceiver {
-public:
-    explicit StreamingReceiver(const ModemConfig& config);
-    void reset();
-    std::vector<DecodeResult> pushSamples(const std::vector<float>& samples);
-};
+- the original text codec and frame implementation;
+- WAV TX/RX debug tools;
+- noise/channel sweeps;
+- FEC and interleaving experiments;
+- field evidence aggregation and replay helpers;
+- pytest regression tests.
 
-Essas interfaces de alto nível devem ser a entrada preferencial para ferramentas CLI, aplicação PC e futura integração Android.
-`modulateText` e `demodulateSamples` usam sempre o modo robusto atual: frame logico v0.1, `conv_k3`, interleaving deterministico, `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME` e 2-FSK. O frame logico simples continua disponivel internamente para testes e para a camada de robustez, mas nao e modo operacional desligavel. Quando ha confianca por simbolo vinda do demodulador, o RX C++ pode ponderar a busca de `START_SYNC`, a recuperacao de `PHYS_LENGTH` e o Viterbi do bloco robusto.
-Quando `syncSearch` está habilitado, `demodulateSamples` pode tentar múltiplos offsets iniciais de amostra dentro de um símbolo antes de escolher o primeiro quadro com CRC e payload válidos.
-`StreamingReceiver` é a base para recepção contínua: ele acumula blocos curtos de amostras, demodula simbolos novos em um banco limitado de fases, recupera quadros completos em janelas limitadas, usa a confianca por simbolo no sincronismo fisico e no Viterbi quando disponivel, e emite resultados válidos sem depender de um WAV fechado.
-As APIs internas de encoder, frame, modulador e demodulador continuam disponíveis para testes e validações de baixo nível.
-Simulação Python
+Python is used for quick validation and exploration. Operational behavior should eventually be mirrored in the C++ core.
 
-A simulação Python deve ser usada para experimentar rapidamente algoritmos.
+## C++ Core
 
-Ela pode duplicar algoritmos temporariamente, mas a versão definitiva deve migrar para C++.
+`core/` contains:
 
-Aplicação PC
+- text encoding and decoding;
+- CRC and logical frame parsing;
+- robust transmission builder;
+- modulation and demodulation for 2-FSK, 4-FSK, and 8-FSK;
+- streaming receiver;
+- WAV I/O helpers for CLI/debug tools;
+- tests for all main behaviors.
 
-A aplicação PC deve usar o núcleo C++ diretamente.
+The core uses `std::vector<float>` for normalized audio buffers.
 
-Responsabilidades da aplicação PC:
+## CLI Tools
 
-interface gráfica;
-seleção de dispositivos de áudio;
-captura e reprodução;
-visualização;
-logs.
+The CLI tools are thin wrappers around the core:
 
-Não deve conter lógica DSP principal.
+- `hftext_tx_wav`: generate a transmit WAV.
+- `hftext_rx_wav`: decode a WAV offline.
+- `hftext_stream_wav`: replay a WAV through the streaming receiver.
 
-Na operacao normal, a recepcao do app PC deve usar o `StreamingReceiver` em segundo plano, alimentado por blocos pequenos de audio capturado. A decodificacao de WAV fechado deve permanecer como ferramenta de debug e reproducao de casos de teste, nao como caminho principal de operacao em radio.
+They are useful for tests, packaging checks, and replaying field captures. They are not the primary operating UI.
 
-Aplicação Android
+## PC Application
 
-A aplicação Android deve usar:
+`pc-app/` is a Qt 6 Widgets application. It provides:
 
-Kotlin para interface;
-AudioTrack para transmissão;
-AudioRecord para recepção;
-JNI para chamar o núcleo C++.
-Dependências permitidas
-Core C++
+- a chat-style operation screen;
+- direct sound-card TX;
+- continuous sound-card RX;
+- waterfall and tone markers;
+- RX state/session/quality/level diagnostics;
+- settings, logs, WAV debug tools, and evidence export.
 
-Permitidas:
+`ModemController` connects the UI to the C++ core. It must not implement DSP logic itself.
 
-STL;
-CMake;
-biblioteca de testes leve.
+## Android Application
 
-Evitar:
+`android-app/` is reserved for a later phase. The desired Android architecture is:
 
-Qt;
-Android SDK;
-bibliotecas gráficas;
-dependências de áudio.
-PC
+```text
+Kotlin / Jetpack Compose UI
+        |
+AudioRecord / AudioTrack
+        |
+JNI bridge
+        |
+Portable C++ core
+```
 
-Permitidas:
+Android should reuse the same protocol and core behavior validated on PC.
 
-Qt;
-PortAudio, RtAudio ou API equivalente;
-biblioteca para gráficos simples.
-Python
+## Data Flow
 
-Permitidas:
+TX:
 
-NumPy;
-SciPy;
-Matplotlib;
-soundfile;
-sounddevice.
-Android
+```text
+operator text
+-> callsign prefix
+-> text sanitization and 6-bit symbols
+-> logical frame
+-> robust encoding and interleaving
+-> physical sync and length
+-> FSK modulation
+-> audio output
+```
 
-Permitidas:
+RX:
 
-Kotlin;
-Jetpack Compose;
-AudioTrack;
-AudioRecord;
-NDK;
-JNI.
+```text
+audio input blocks
+-> tone energy demodulation
+-> START_SYNC search
+-> PHYS_LENGTH recovery
+-> ROBUST_FRAME accumulation
+-> deinterleaving
+-> Viterbi decoding
+-> logical frame validation
+-> text display
+```
+
+## Build Targets
+
+The root CMake project builds the core, tests, CLI tools, and PC app when Qt 6 Widgets is available. The PC app should be skipped cleanly on machines without Qt.

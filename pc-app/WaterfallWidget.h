@@ -28,4 +28,5 @@ private:
 
     QImage image_;
     std::vector<double> markerFrequenciesHz_ = {1200.0, 1600.0};
+    double scrollAccumulator_ = 0.0;
 };

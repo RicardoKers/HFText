@@ -1,62 +1,75 @@
-# HFText Core
+# HFText C++ Core
 
-Nucleo C++ portavel do modem HFText.
+`core/` contains the portable C++ modem implementation. It must remain independent from Qt, Android, sound card APIs, and UI code.
 
 ## Build
 
-No Windows com Visual Studio Build Tools:
+From the repository root:
 
 ```powershell
-cmake -S core -B core\build
-cmake --build core\build
-ctest --test-dir core\build -C Debug --output-on-failure
+cmake -S . -B build-qt15
+cmake --build build-qt15 --config Release
+ctest --test-dir build-qt15 -C Release --output-on-failure
 ```
 
-O argumento `-C Debug` e necessario com geradores multi-config, como Visual Studio.
+The exact build directory name is not important. Existing local build folders such as `build-qt15` are used only for developer convenience.
 
-No MSVC, o CMake do core usa informacao de debug embutida para evitar arquivos PDB de compilacao travados durante builds locais.
-Se uma pasta de build ficar presa por algum processo, feche os executaveis abertos ou use outro diretorio temporario de build, por exemplo:
+## Main Components
+
+- `include/`: public core headers.
+- `src/`: encoder, frame, CRC, robust layer, modulation, demodulation, streaming RX.
+- `tests/`: C++ regression tests.
+- `tools/`: CLI tools for WAV transmit, WAV receive, and streaming WAV replay.
+
+## CLI Tools
+
+Generate a WAV:
 
 ```powershell
-cmake -S core -B core\build-temp
-cmake --build core\build-temp
-ctest --test-dir core\build-temp -C Debug --output-on-failure
+.\build-qt15\core\Release\hftext_tx_wav.exe --callsign pu5lrk "Test" generated\test.wav
 ```
 
-## CLI WAV
-
-Gerar WAV:
+Decode a WAV:
 
 ```powershell
-core\build\Debug\hftext_tx_wav.exe --callsign pu5lrk "Teste" python-sim\generated\cpp_tx.wav
+.\build-qt15\core\Release\hftext_rx_wav.exe generated\test.wav
 ```
 
-Decodificar WAV:
+Replay a WAV through the streaming receiver:
 
 ```powershell
-core\build\Debug\hftext_rx_wav.exe python-sim\generated\cpp_tx.wav
+.\build-qt15\core\Release\hftext_stream_wav.exe generated\test.wav
 ```
 
-Decodificar WAV com diagnostico de sincronismo:
+Use `--mode 2fsk`, `--mode 4fsk`, or `--mode 8fsk` to select the physical modulation. The operational default is `2fsk`.
 
-```powershell
-core\build\Debug\hftext_rx_wav.exe --verbose python-sim\generated\cpp_tx.wav
+## Robust Mode
+
+The CLI tools always use the current robust layer:
+
+```text
+logical frame v0.1
+-> convolutional code rate 1/2, K=3, generators 111 and 101
+-> deterministic rectangular interleaving
+-> PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME
 ```
 
-O CTest do core tambem executa um round-trip automatico `hftext_tx_wav` -> `hftext_rx_wav`.
+There is no supported transmit/receive mode without FEC and interleaving.
 
-Os CLIs usam sempre o modo robusto atual: frame logico HFText v0.1, codigo convolucional `conv_k3`, interleaving deterministico e fluxo fisico `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`. Nao ha opcao para transmitir ou receber sem FEC/interleaving. Quando a recepcao vem do demodulador C++, a busca de `START_SYNC`, a recuperacao de `PHYS_LENGTH` e o Viterbi podem usar a confianca de cada simbolo.
+## Modulation Settings
 
-Por padrao, a modulacao fisica e 2-FSK v0.1. Para testar a v0.2 experimental
-4-FSK, use `--mode 4fsk` nos CLIs:
+The modem configuration uses:
 
-```powershell
-core\build\Debug\hftext_tx_wav.exe --mode 4fsk --f0 1000 --f1 1200 --callsign pu5lrk "Teste" python-sim\generated\cpp_tx_4fsk.wav
-core\build\Debug\hftext_rx_wav.exe --mode 4fsk --f0 1000 --f1 1200 --verbose python-sim\generated\cpp_tx_4fsk.wav
-core\build\Debug\hftext_stream_wav.exe --mode 4fsk --f0 1000 --f1 1200 python-sim\generated\cpp_tx_4fsk.wav
-```
+- sample rate;
+- symbol duration;
+- base frequency;
+- tone spacing;
+- modulation mode;
+- amplitude;
+- preamble length.
 
-No modo 4-FSK, `f0` e `f1` definem os dois primeiros tons e o espacamento; os
-outros dois tons sao derivados automaticamente.
+In 2-FSK, the two tones are `base` and `base + toneSpacing`.
+In 4-FSK, the tones are `base + n * toneSpacing` for `n = 0..3`.
+In 8-FSK, the tones are `base + n * toneSpacing` for `n = 0..7`.
 
-`hftext_rx_wav` continua sendo ferramenta offline de debug. A recepcao operacional do app PC usa `StreamingReceiver`, que processa blocos de audio durante a captura e evita depender de um WAV fechado.
+All derived tones must stay below Nyquist and, for HF SSB operation, should remain in the useful radio audio passband.

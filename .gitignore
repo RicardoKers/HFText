@@ -8,11 +8,13 @@ venv/
 # Generated audio and logs
 python-sim/generated/
 logs/
+Logs/
 *.wav
 *.log
 
 # Release staging folders
 dist/HFText-win64-release-*/
+dist/HFText-win64-release-*.zip
 
 # C/C++ build
 build/

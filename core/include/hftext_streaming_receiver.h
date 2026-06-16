@@ -52,6 +52,7 @@ private:
         StreamingReceiverEventType type = StreamingReceiverEventType::SyncFound;
         int phaseOffsetSamples = 0;
         std::int64_t syncSample = -1;
+        std::int32_t syncBitIndex = -1;
         int bucket = 0;
 
         bool operator<(const EventKey& other) const;
@@ -65,7 +66,7 @@ private:
         std::size_t firstBitSample = 0;
         std::vector<BitDecision> decisions;
         std::vector<std::uint8_t> bits;
-        std::set<std::int64_t> rejectedSyncSamples;
+        std::set<std::int64_t> rejectedSyncBitKeys;
     };
 
     int samplesPerSymbol() const;

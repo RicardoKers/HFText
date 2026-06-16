@@ -18,15 +18,17 @@ int packedPayloadBytes(int payloadSymbols) {
 
 std::vector<std::uint8_t> preambleBits(const hftext::ModemConfig& config) {
     if (config.preambleBits < 0) {
-        throw std::invalid_argument("preambulo deve ser nao negativo");
+        throw std::invalid_argument("preamble must be non-negative");
     }
 
     std::vector<std::uint8_t> bits;
     bits.reserve(static_cast<std::size_t>(config.preambleBits));
-    if (config.modulationMode == hftext::ModulationMode::Fsk4) {
+    if (hftext::toneCount(config.modulationMode) > 2) {
+        const int bitsPerTone = hftext::bitsPerModulationSymbol(config.modulationMode);
+        const int tones = hftext::toneCount(config.modulationMode);
         for (int index = 0; index < config.preambleBits; ++index) {
-            const auto tone = static_cast<std::uint8_t>((index / 2) % 4);
-            const int bitIndex = 1 - (index % 2);
+            const auto tone = static_cast<std::uint8_t>((index / bitsPerTone) % tones);
+            const int bitIndex = bitsPerTone - 1 - (index % bitsPerTone);
             bits.push_back(static_cast<std::uint8_t>((tone >> bitIndex) & 0x01U));
         }
     } else {
@@ -56,7 +58,7 @@ const hftext::ModemConfig& ModemController::config() const {
 
 std::string ModemController::buildPayload(const std::string& callsign, const std::string& message) const {
     if (message.empty()) {
-        throw std::invalid_argument("mensagem vazia");
+        throw std::invalid_argument("message is empty");
     }
     if (callsign.empty()) {
         return message;

@@ -9,9 +9,9 @@ from field_replay import build_replay_cases, replay_case, replay_cases, write_re
 
 def evidence_text(wav_path: str, received_text: str = "pu5lrk Ola!") -> str:
     return (
-        "HFText evidencia RX\n"
+        "HFText RX evidence\n"
         "\n"
-        "--- Resumo CSV ---\n"
+        "--- Summary CSV ---\n"
         "generated_at,modulation,symbol_duration_s,f0_hz,f1_hz,rx_accepted,received_text,wav_path\n"
         f'"2026-06-06T17:59:11","4-FSK exp v0.2",0.300,1200.0,1600.0,1,"{received_text}","{wav_path}"\n'
         "\n"
@@ -54,6 +54,17 @@ def test_build_replay_cases_uses_accepted_evidence(tmp_path):
     assert cases[0].symbol_duration == "0.300"
     assert cases[0].f0 == "1200.0"
     assert cases[0].f1 == "1600.0"
+
+
+def test_build_replay_cases_detects_8fsk_mode_from_evidence(tmp_path):
+    wav_path = tmp_path / "capture.wav"
+    wav_path.write_bytes(b"fake")
+    evidence = tmp_path / "evidence.txt"
+    evidence.write_text(evidence_text(str(wav_path)).replace("4-FSK exp v0.2", "8-FSK exp v0.3"), encoding="utf-8")
+
+    cases = build_replay_cases(collect_summaries(tmp_path))
+
+    assert cases[0].mode == "8fsk"
 
 
 def test_replay_case_passes_when_decoder_matches_expected_text(tmp_path):

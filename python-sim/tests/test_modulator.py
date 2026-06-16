@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from hftext.modulator import modulate_bits_2fsk, modulate_bits_4fsk, save_wav
+from hftext.modulator import modulate_bits_2fsk, modulate_bits_4fsk, modulate_bits_8fsk, save_wav
 
 
 def tone_power(samples: np.ndarray, sample_rate: int, frequency: float) -> float:
@@ -59,6 +59,34 @@ def test_modulate_bits_4fsk_maps_pairs_to_four_tones():
 
     assert len(audio) == 4 * samples_per_symbol
     for symbol, frequency in enumerate([1_000.0, 1_200.0, 1_400.0, 1_600.0]):
+        window = audio[symbol * samples_per_symbol : (symbol + 1) * samples_per_symbol]
+        other = 1_000.0 if frequency != 1_000.0 else 1_200.0
+        assert tone_power(window, sample_rate, frequency) > tone_power(window, sample_rate, other)
+
+
+def test_modulate_bits_8fsk_maps_triples_to_eight_tones():
+    sample_rate = 8_000
+    symbol_duration = 0.1
+    samples_per_symbol = int(sample_rate * symbol_duration)
+    audio = modulate_bits_8fsk(
+        [
+            0, 0, 0,
+            0, 0, 1,
+            0, 1, 0,
+            0, 1, 1,
+            1, 0, 0,
+            1, 0, 1,
+            1, 1, 0,
+            1, 1, 1,
+        ],
+        sample_rate=sample_rate,
+        symbol_duration=symbol_duration,
+        f0=1_000.0,
+        f1=1_200.0,
+    )
+
+    assert len(audio) == 8 * samples_per_symbol
+    for symbol, frequency in enumerate([1_000.0, 1_200.0, 1_400.0, 1_600.0, 1_800.0, 2_000.0, 2_200.0, 2_400.0]):
         window = audio[symbol * samples_per_symbol : (symbol + 1) * samples_per_symbol]
         other = 1_000.0 if frequency != 1_000.0 else 1_200.0
         assert tone_power(window, sample_rate, frequency) > tone_power(window, sample_rate, other)

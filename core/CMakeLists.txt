@@ -199,8 +199,40 @@ if(HFTEXT_CORE_BUILD_TESTS)
             --f1 1200
             "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip_4fsk.wav"
     )
+    add_test(
+        NAME hftext_cli_tx_wav_8fsk_test
+        COMMAND hftext_tx_wav
+            --callsign pu5lrk
+            --sample-rate 8000
+            --symbol-duration 0.01
+            --mode 8fsk
+            --f0 1000
+            --f1 1200
+            "Teste"
+            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip_8fsk.wav"
+    )
+    add_test(
+        NAME hftext_cli_rx_wav_8fsk_test
+        COMMAND hftext_rx_wav
+            --verbose
+            --symbol-duration 0.01
+            --mode 8fsk
+            --f0 1000
+            --f1 1200
+            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip_8fsk.wav"
+    )
+    add_test(
+        NAME hftext_cli_stream_wav_8fsk_test
+        COMMAND hftext_stream_wav
+            --verbose
+            --symbol-duration 0.01
+            --mode 8fsk
+            --f0 1000
+            --f1 1200
+            "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip_8fsk.wav"
+    )
     set_tests_properties(hftext_cli_tx_wav_test PROPERTIES
-        PASS_REGULAR_EXPRESSION "Modo: robust"
+        PASS_REGULAR_EXPRESSION "Mode: robust"
     )
     set_tests_properties(hftext_cli_rx_wav_test PROPERTIES
         DEPENDS hftext_cli_tx_wav_test
@@ -211,7 +243,7 @@ if(HFTEXT_CORE_BUILD_TESTS)
         PASS_REGULAR_EXPRESSION "pu5lrk Teste"
     )
     set_tests_properties(hftext_cli_tx_wav_4fsk_test PROPERTIES
-        PASS_REGULAR_EXPRESSION "Modo: robust-v0.2-exp-4fsk"
+        PASS_REGULAR_EXPRESSION "Mode: robust-v0.2-exp-4fsk"
     )
     set_tests_properties(hftext_cli_rx_wav_4fsk_test PROPERTIES
         DEPENDS hftext_cli_tx_wav_4fsk_test
@@ -219,6 +251,17 @@ if(HFTEXT_CORE_BUILD_TESTS)
     )
     set_tests_properties(hftext_cli_stream_wav_4fsk_test PROPERTIES
         DEPENDS hftext_cli_tx_wav_4fsk_test
+        PASS_REGULAR_EXPRESSION "pu5lrk Teste"
+    )
+    set_tests_properties(hftext_cli_tx_wav_8fsk_test PROPERTIES
+        PASS_REGULAR_EXPRESSION "Mode: robust-v0.3-exp-8fsk"
+    )
+    set_tests_properties(hftext_cli_rx_wav_8fsk_test PROPERTIES
+        DEPENDS hftext_cli_tx_wav_8fsk_test
+        PASS_REGULAR_EXPRESSION "pu5lrk Teste"
+    )
+    set_tests_properties(hftext_cli_stream_wav_8fsk_test PROPERTIES
+        DEPENDS hftext_cli_tx_wav_8fsk_test
         PASS_REGULAR_EXPRESSION "pu5lrk Teste"
     )
 endif()

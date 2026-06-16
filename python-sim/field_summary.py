@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Iterable, TextIO
 
 
-SUMMARY_MARKER = "--- Resumo CSV ---"
-FRAMES_MARKER = "--- Quadros aceitos CSV ---"
+SUMMARY_MARKERS = ("--- Summary CSV ---", "--- Resumo CSV ---")
+FRAMES_MARKERS = ("--- Accepted Frames CSV ---", "--- Quadros aceitos CSV ---")
 DEFAULT_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
 DEFAULT_GROUP_BY = [
     "modulation",
@@ -44,11 +44,12 @@ class EvidenceSummary:
     frame_rows: list[dict[str, str]]
 
 
-def _read_csv_records(text: str, marker: str) -> list[list[str]] | None:
+def _read_csv_records(text: str, markers: str | tuple[str, ...]) -> list[list[str]] | None:
     """Return CSV records from a marked evidence TXT section, if present."""
+    marker_set = {markers} if isinstance(markers, str) else set(markers)
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        if line.strip() != marker:
+        if line.strip() not in marker_set:
             continue
 
         csv_lines = []
@@ -71,7 +72,7 @@ def _read_csv_records(text: str, marker: str) -> list[list[str]] | None:
 
 def _read_summary_records(text: str) -> tuple[list[str], list[str]] | None:
     """Return header/data CSV records from an evidence TXT, if present."""
-    records = _read_csv_records(text, SUMMARY_MARKER)
+    records = _read_csv_records(text, SUMMARY_MARKERS)
     if records is None or len(records) < 2:
         return None
     return records[0], records[1]
@@ -79,7 +80,7 @@ def _read_summary_records(text: str) -> tuple[list[str], list[str]] | None:
 
 def _read_frame_rows(text: str) -> list[dict[str, str]]:
     """Return one row per accepted RX frame from an evidence TXT, if present."""
-    records = _read_csv_records(text, FRAMES_MARKER)
+    records = _read_csv_records(text, FRAMES_MARKERS)
     if records is None:
         return []
     header, *values = records
@@ -91,7 +92,7 @@ def _read_frame_rows(text: str) -> list[dict[str, str]]:
 
 
 def parse_evidence_summary(path: str | Path) -> EvidenceSummary | None:
-    """Parse the `Resumo CSV` block from one field evidence TXT file."""
+    """Parse the `Summary CSV` block from one field evidence TXT file."""
     evidence_path = Path(path)
     text = evidence_path.read_text(encoding="utf-8-sig", errors="replace")
     summary_records = _read_summary_records(text)
@@ -349,14 +350,14 @@ def print_report(
         if quality is not None:
             qualities.append(quality)
 
-    print(f"evidencias,{len(summaries)}", file=stream)
-    print(f"quadros_aceitos,{accepted}", file=stream)
-    print(f"quadros_aceitos_unicos,{accepted_frame_rows}", file=stream)
+    print(f"evidence_files,{len(summaries)}", file=stream)
+    print(f"accepted_frames,{accepted}", file=stream)
+    print(f"unique_accepted_frames,{accepted_frame_rows}", file=stream)
     if accepted_frame_rows_raw != accepted_frame_rows:
-        print(f"linhas_quadros_aceitos_brutas,{accepted_frame_rows_raw}", file=stream)
+        print(f"raw_accepted_frame_rows,{accepted_frame_rows_raw}", file=stream)
     if qualities:
-        print(f"qualidade_media_pct,{sum(qualities) / len(qualities):.1f}", file=stream)
-        print(f"qualidade_min_pct,{min(qualities):.1f}", file=stream)
+        print(f"avg_quality_pct,{sum(qualities) / len(qualities):.1f}", file=stream)
+        print(f"min_quality_pct,{min(qualities):.1f}", file=stream)
     if output_path is not None:
         print(f"csv,{output_path}", file=stream)
     if group_output_path is not None:

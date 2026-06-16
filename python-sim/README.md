@@ -1,171 +1,98 @@
 # HFText Python Simulation
 
-Simulação inicial do HFText v0.1 em Python.
+`python-sim/` contains the original simulation and validation environment for HFText. It is useful for protocol experiments, channel sweeps, WAV debugging, and comparison with the C++ core.
 
-## Testes
+## Tests
 
 ```powershell
 python -B -m pytest
 ```
 
-Testes de canal com ruído branco:
+Channel tests with white noise:
 
 ```powershell
 python -B -m pytest tests\test_channel.py
 ```
 
-## Gerar WAV
+## Generate a WAV
 
 ```powershell
-python tx_wav.py --callsign pu5lrk "Teste" generated\teste.wav
+python tx_wav.py --callsign pu5lrk "Test" generated\test.wav
 ```
 
-O transmissor insere o indicativo no início do payload, seguido por um espaço.
+The transmitter inserts the callsign at the beginning of the payload, followed by one space. The generated WAV includes the physical preamble before the frame.
 
-O WAV gerado inclui um preâmbulo alternado antes do quadro. O preâmbulo ajuda o receptor a ignorar áudio/bits antes do `SYNC`.
-
-## Decodificar WAV
+## Decode a WAV
 
 ```powershell
-python rx_wav.py generated\teste.wav
+python rx_wav.py generated\test.wav
 ```
 
-Se o CRC falhar, o receptor não imprime a mensagem como válida.
+If the CRC fails, the receiver does not print the message as valid.
 
-O RX procura `SYNC` no fluxo de bits e, por padrão, tenta múltiplos offsets de símbolo. Para desabilitar a busca:
+The RX path searches for sync in the bit stream and, by default, tries multiple symbol offsets. To disable sync search:
 
 ```powershell
-python rx_wav.py --no-sync-search generated\teste.wav
+python rx_wav.py --no-sync-search generated\test.wav
 ```
 
-Para imprimir diagnosticos de recepcao, incluindo offset, tentativas e confianca media:
+To print receive diagnostics:
 
 ```powershell
-python rx_wav.py --verbose generated\teste.wav
+python rx_wav.py --verbose generated\test.wav
 ```
 
-## Varredura de ruído
+## Noise Sweep
 
 ```powershell
-python noise_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Teste HFText"
+python noise_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "HFText test"
 ```
 
-O script salva exemplos WAV, `summary.csv` agregado e `trials.csv` por tentativa em `generated\noise_sweep\`, medindo BER, CRC e validade do payload para cada SNR.
-Os CSVs tambem registram a confianca media estimada pelo demodulador.
+The script writes example WAVs, aggregate `summary.csv`, and per-trial `trials.csv` under `generated\noise_sweep\`. It reports BER, CRC success, payload validity, and demodulator confidence for each SNR.
 
-## Varredura experimental MFSK
-
-Para comparar 2-FSK e 4-FSK na camada fisica:
+## Experimental MFSK Sweep
 
 ```powershell
-python mfsk_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Teste HFText"
+python mfsk_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "HFText test"
 ```
 
-O script salva `summary.csv` e `trials.csv` em `generated\mfsk_sweep\`,
-registrando modulacao, tons usados, duracao relativa, BER, CRC e payload
-valido por SNR. A varredura usa o frame logico simples em Python para medir a
-camada fisica; a validacao operacional do modo 4-FSK continua dependendo do
-core robusto, dos CLIs e de capturas reais.
+The script compares 2-FSK, 4-FSK, and 8-FSK at the physical layer and writes results under `generated\mfsk_sweep\`. Operational validation of 4-FSK and 8-FSK still depends on the robust C++ core, CLI tools, and real captures.
 
-## Resumo de evidencias de campo
+## Field Evidence Summary
 
-Depois de salvar evidencias pelo app PC em `logs\`, e possivel consolidar os blocos `Resumo CSV` em uma unica tabela:
+After saving evidence from the PC app into `logs\`, aggregate the `Summary CSV` blocks:
 
 ```powershell
 python field_summary.py --input-dir ..\logs --output ..\logs\field_summary.csv
 ```
 
-Sem `--output`, o script grava `field_summary.csv` dentro da pasta informada por `--input-dir`. Use `--stdout` para imprimir o CSV agregado no terminal.
+Without `--output`, the script writes `field_summary.csv` in the input directory. Use `--stdout` to print the aggregate CSV. The parser also accepts older Portuguese evidence markers so previous field captures remain usable.
 
-Quando grava em arquivo, o script tambem cria `field_summary_groups.csv`, agrupando por duracao de simbolo, tons, amplitude, preambulo e estado do log detalhado. Esse resumo inclui quantidade de evidencias, quadros aceitos, taxa de aceite, qualidade media/minima e medias dos contadores RX. Use `--group-by` para escolher outras colunas de agrupamento, `--group-output` para escolher outro caminho ou `--no-groups` para gerar apenas a tabela linha a linha.
+When writing files, the script also creates:
 
-O agrupamento padrao tambem inclui a coluna `modulation`, quando presente, para
-comparar 2-FSK e 4-FSK sem misturar os resultados.
+- `field_summary_groups.csv`: grouped by modulation, symbol duration, tones, amplitude, preamble, and detailed-log state.
+- `field_frames.csv`: one deduplicated row per accepted RX frame.
 
-Quando o TXT de evidencia tiver a secao `Quadros aceitos CSV`, o script tambem
-grava `field_frames.csv`, com uma linha unica por mensagem aceita. Como
-evidencias salvas durante a mesma sessao acumulam quadros anteriores, esse CSV
-deduplica automaticamente quadros repetidos por instante/configuracao/texto.
-Use essa tabela para comparar transmissoes individuais quando uma mesma sessao
-misturou duracoes de simbolo, modulacoes ou tons. Use `--frames-output` para
-escolher outro caminho, `--no-frames` para desativar esse arquivo ou
-`--keep-duplicate-frames` para auditar as repeticoes brutas.
+Use `--group-by`, `--group-output`, `--no-groups`, `--frames-output`, `--no-frames`, and `--keep-duplicate-frames` to customize the output.
 
-Para reproduzir os WAVs das evidencias aceitas pelo decoder C++ de linha de comando:
+## Field Replay
+
+Replay accepted evidence WAVs through the C++ WAV decoder:
 
 ```powershell
 python field_replay.py --input-dir ..\logs --output ..\logs\field_replay.csv
 ```
 
-O script procura `hftext_rx_wav` nos builds conhecidos, usa os parametros registrados na evidencia e compara a primeira linha decodificada com o texto recebido salvo no TXT. Use `--rx-exe` se o executavel estiver em outro caminho. O resultado `field_replay.csv` permite transformar capturas reais em casos de regressao manual para o decoder offline.
+The script searches for `hftext_rx_wav`, uses the settings saved in the evidence TXT, and compares the decoded line with the received text saved by the app. Use `--rx-exe` when the executable is in another location.
 
-## Varredura experimental de repeticao
+## Historical Experiments
 
-```powershell
-python repetition_sweep.py "Teste HFText" --callsign pu5lrk --symbol-duration 0.05 --factor 1 3 --trials 20
-```
+The following scripts remain useful for controlled comparisons:
 
-Esse experimento compara fatores de repeticao por bit, como 1x e 3x, sob AWGN. Ele salva `summary.csv` e `trials.csv` em `generated\repetition_sweep\`, incluindo BER antes/depois do voto majoritario, sucesso de CRC/payload, confianca media e multiplicador relativo de duracao.
+- `repetition_sweep.py`: bit repetition experiments under AWGN and fading.
+- `interleaving_sweep.py`: interleaving geometry comparisons.
+- `fec_sweep.py`: no-FEC, Hamming(7,4), and convolutional-code comparisons.
+- `fec_interleaving_sweep.py`: FEC plus interleaving sweeps.
+- `channel_sweep.py`: named channel impairments such as AWGN, attenuation, DC offset, clipping, frequency offset, and block fading.
 
-Tambem e possivel combinar AWGN com fading por blocos:
-
-```powershell
-python repetition_sweep.py "Teste HFText" --callsign pu5lrk --factor 1 3 --snr -12 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0
-```
-
-Para avaliar interleaving experimental, use blocos que dividam exatamente o numero de bits do quadro:
-
-```powershell
-python repetition_sweep.py "Teste" --callsign pu5lrk --factor 3 --snr -12 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0 --interleave-rows 4 --interleave-columns 138
-```
-
-Para comparar varias geometrias de interleaving no mesmo cenario:
-
-```powershell
-python interleaving_sweep.py "Teste" --callsign pu5lrk --factor 3 --rows 4 6 --snr -12 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0
-```
-
-Sem `--rows`, o script testa automaticamente linhas que dividem exatamente o numero de bits repetidos, entre `--min-rows` e `--max-rows`.
-Por padrao, ele tambem inclui a linha de base com repeticao sem interleaving; use `--no-baseline` para comparar apenas geometrias.
-Alem de `summary.csv` e `trials.csv`, ele grava `best_summary.csv` com a melhor opcao por SNR, priorizando CRC, payload valido e BER.
-
-## FEC experimental
-
-O modulo `hftext.fec` contem um helper inicial Hamming(7,4), apenas para experimentos de validacao. Ele codifica blocos de 4 bits em 7 bits, corrige 1 erro por codeword e informa quantos blocos foram corrigidos.
-
-O mesmo modulo tambem contem o codigo convolucional rate 1/2, K=3, com geradores `111` e `101` e decoder Viterbi hard-decision usado nas varreduras historicas em Python.
-
-Esse FEC faz parte do modo robusto atual no core C++. No RX C++ por audio, o decoder pode usar Viterbi soft-decision com a confianca dos simbolos; os scripts Python historicos continuam uteis para experimentos e comparacoes.
-
-Para comparar o quadro sem FEC, Hamming(7,4) e o convolucional K=3:
-
-```powershell
-python fec_sweep.py "Teste" --callsign pu5lrk --snr -12 --trials 20 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0
-```
-
-O script salva `summary.csv` e `trials.csv` em `generated\fec_sweep\`, incluindo BER do canal codificado, BER recuperada do quadro original, CRC/payload, quantidade media de codewords corrigidas e distancia media do decoder Viterbi para o modo convolucional.
-
-Tambem e possivel aplicar interleaving experimental depois da codificacao FEC:
-
-```powershell
-python fec_sweep.py "Teste" --callsign pu5lrk --mode hamming74 --snr -12 --trials 20 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0 --interleave-rows 14 --interleave-columns 23
-```
-
-Para varrer varias geometrias de interleaving com um modo FEC:
-
-```powershell
-python fec_interleaving_sweep.py "Teste" --callsign pu5lrk --mode conv_k3 --snr -12 --trials 20 --fading-block-symbols 4 --fading-min-gain 0.3 --fading-max-gain 1.0
-```
-
-O script inclui por padrao a linha de base do modo FEC escolhido sem interleaving e grava `best_summary.csv` com a melhor geometria por SNR. Os modos aceitos sao `hamming74` e `conv_k3`.
-
-Use `--auto-shape` para testar a geometria deterministica inicial. Ela escolhe um divisor exato do tamanho codificado com numero de linhas mais proximo de `--preferred-rows`, cujo padrao atual e 6.
-
-## Varredura de canal
-
-```powershell
-python channel_sweep.py --callsign pu5lrk --symbol-duration 0.05 --trials 20 "Teste HFText"
-```
-
-O script executa cenários nomeados de canal, incluindo AWGN, atenuação, offset DC, clipping, desvio de frequência, fading por blocos e uma combinação moderada. Por padrão, ele salva apenas `summary.csv` e `trials.csv`; use `--save-wavs` para salvar exemplos WAV.
-Os CSVs tambem registram a confianca media estimada pelo demodulador.
+The Python FEC helpers include Hamming(7,4) for experiments and the current convolutional `conv_k3` code. The operational receiver in C++ may use soft-decision Viterbi when symbol confidence is available.

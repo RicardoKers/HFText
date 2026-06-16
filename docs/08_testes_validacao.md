@@ -1,359 +1,112 @@
-# Testes e validação
+# Testing and Validation
 
-## Objetivo
+## Automated Tests
 
-Definir como validar o funcionamento do modem e das aplicações.
+Run Python tests:
 
-## Testes unitários
-
-### Encoder
-
-- texto simples deve gerar símbolos corretos;
-- letras maiúsculas devem usar símbolo shift e voltar como maiúsculas na decodificação;
-- vogais acentuadas em português devem usar modificadores `acute` ou `tilde` e voltar como texto acentuado;
-- `ç` e `Ç` devem ser recuperados corretamente;
-- caracteres inválidos devem ser tratados;
-- decodificação deve recuperar texto original.
-
-### CRC
-
-- CRC de vetor conhecido deve bater com valor esperado;
-- alteração de um bit deve invalidar o CRC.
-
-### Frame
-
-- montar quadro;
-- desmontar quadro;
-- detectar tamanho;
-- validar payload;
-- detectar CRC incorreto.
-
-### Modulador
-
-- saída não deve ultrapassar -1.0 a +1.0;
-- duração do áudio deve corresponder ao número de símbolos;
-- frequência dominante deve corresponder ao bit transmitido;
-- no modo 4-FSK experimental, pares `00`, `01`, `10` e `11` devem mapear para os quatro tons esperados.
-
-### Demodulador
-
-- deve detectar tom 0;
-- deve detectar tom 1;
-- deve decodificar sequência conhecida;
-- deve recuperar quadro limpo;
-- no modo 4-FSK experimental, deve recuperar dois bits por simbolo de audio e informar confianca coerente com a separacao entre tons.
-
-## Testes de canal
-
-Simular:
-
-- ruído branco;
-- atenuação;
-- offset DC;
-- clipping;
-- desvio de frequência;
-- fading por blocos.
-
-## Métricas
-
-Registrar:
-
-- mensagem transmitida;
-- mensagem recebida;
-- número de bits;
-- número de erros;
-- BER;
-- sucesso/falha de CRC;
-- SNR estimado;
-- confianca media estimada pelo demodulador;
-- duração da transmissão.
-
-Na simulação Python inicial, as métricas mínimas são:
-
-- potência média do sinal;
-- número de erros de bit;
-- BER;
-- estado do CRC;
-- validade do payload.
-
-Os testes de canal iniciais devem cobrir recuperação em condições moderadas de:
-
-- AWGN;
-- atenuação;
-- offset DC;
-- clipping leve;
-- pequeno desvio de frequência;
-- desvio comum intermediario de frequencia entre os tons configurados e recebidos, como `7,5 Hz`;
-- fading leve por blocos.
-
-Para estimar desempenho por SNR, a varredura deve executar múltiplas sementes por nível de ruído e registrar:
-
-- taxa de sucesso de CRC;
-- taxa de payload válido;
-- BER média;
-- pior BER;
-- confianca media;
-- menor confianca;
-- mínimo e máximo de erros de bit.
-
-Para a v0.2 experimental, a comparacao 2-FSK vs 4-FSK deve registrar tambem:
-
-- modulacao usada;
-- tons efetivos;
-- duracao relativa da transmissao;
-- taxa de sucesso de CRC/payload por SNR;
-- BER media e pior BER por modo;
-- diferenca entre ganho de tempo e perda de sensibilidade, quando houver.
-
-Além da varredura por SNR, a simulação deve possuir uma varredura por cenários nomeados de canal, cobrindo efeitos isolados e combinação moderada de efeitos.
-
-## Teste mínimo de aceitação da Fase 1
-
-Configuração:
-
-```text
-indicativo = pu5lrk
-mensagem = Teste
+```powershell
+python -m pytest python-sim/tests
 ```
 
-Payload esperado:
+Run C++ tests:
 
-```text
-pu5lrk Teste
+```powershell
+cmake --build build-qt15 --config Release
+ctest --test-dir build-qt15 -C Release --output-on-failure
 ```
 
-Condições:
+The exact build directory may vary. Use the active CMake build directory for the current machine.
 
-- WAV gerado pelo transmissor Python;
-- WAV lido pelo receptor Python;
-- sem ruído;
-- CRC válido.
+## What Must Be Tested
 
-Resultado esperado:
+Core protocol behavior:
 
-```text
-pu5lrk Teste
+- text encoding and decoding;
+- unsupported-character replacement;
+- uppercase shift behavior;
+- acute/tilde and `ç` behavior;
+- payload length limits;
+- CRC correctness;
+- logical frame build/parse;
+- robust layer encode/decode;
+- modulation and demodulation for each supported physical mode;
+- streaming receiver event flow and frame acceptance.
+
+Application behavior:
+
+- English UI labels and logs;
+- direct TX from the message field;
+- TX cancellation;
+- automatic RX start;
+- RX restart when receive settings change;
+- evidence and log export;
+- waterfall tone markers;
+- default-settings button;
+- no console window in the packaged GUI application.
+
+## Field Validation
+
+Useful field test matrix:
+
+- 2-FSK, 4-FSK, and 8-FSK;
+- symbol durations such as 0.1 s, 0.3 s, and 0.5 s;
+- good signal, weak signal, noisy signal, and mistuned signal;
+- direct speaker/microphone path;
+- radio-to-SDR path;
+- partial packets for negative testing.
+
+For each test, save RX evidence from the app. Evidence should include the recent WAV, settings, logs, `Summary CSV`, and `Accepted Frames CSV`.
+
+## Evidence Aggregation
+
+Aggregate saved evidence:
+
+```powershell
+python python-sim\field_summary.py --input-dir logs --output logs\field_summary.csv
 ```
 
-## Teste com ruído
+Replay accepted WAV evidence through the offline C++ decoder:
 
-Configuração:
-
-```text
-indicativo = pu5lrk
-mensagem = cq cq
+```powershell
+python python-sim\field_replay.py --input-dir logs --rx-exe build-qt15\core\Release\hftext_rx_wav.exe
 ```
 
-Condição:
+The summary parser accepts both current English evidence markers and older Portuguese markers.
 
-- ruído branco moderado;
-- SNR inicial de referência: 6 dB em teste determinístico;
-- sem clipping;
-- sem fading severo.
+## Acceptance Criteria
 
-Resultado esperado:
+A receive test is successful only when:
 
-- payload `pu5lrk cq cq` recuperado corretamente ou CRC deve falhar;
-- nunca exibir mensagem errada como se fosse válida.
+- a frame is detected;
+- `PHYS_LENGTH` is valid;
+- Viterbi produces a logical frame;
+- logical `LENGTH` matches physical length;
+- payload is valid;
+- CRC is valid;
+- the displayed text matches the transmitted payload.
 
-## Regra importante
+No message should be shown as accepted without CRC and payload validation.
 
-Se o CRC falhar, o sistema não deve apresentar o texto como mensagem válida.
+## Manual Release Smoke Test
 
-Deve mostrar:
+After packaging:
 
-```text
-Quadro detectado, mas CRC inválido.
-```
+1. Start the packaged PC app.
+2. Confirm the UI is in English.
+3. Confirm RX starts automatically if an input device exists.
+4. Send a short message through the selected output device.
+5. Confirm TX progress reaches 100%.
+6. Decode a generated WAV through the app and CLI.
+7. Save a log and RX evidence bundle.
+8. Confirm the files contain English labels and CSV section names.
 
-## Testes com rádio real
+## Known Sources of Failure
 
-Etapas:
-
-- teste com cabo direto entre saída e entrada de áudio;
-- teste com dois dispositivos próximos sem RF;
-- teste com rádio em carga fantasma, se aplicável;
-- teste em VHF/FM para validação simples;
-- teste em HF/SSB;
-- teste com sinal fraco.
-
-## Roteiro atual de testes de campo
-
-Durante a validacao do RX continuo, salvar evidencias em uma pasta local `logs/`.
-Essa pasta e material temporario de campo e nao deve ser versionada.
-
-Usar log simples por padrao. O log detalhado deve ser ligado apenas quando:
-
-- uma transmissao audivelmente boa nao for decodificada;
-- a interface indicar muitos candidatos rejeitados;
-- houver demora anormal depois do fim audivel do pacote;
-- for necessario comparar fases internas do receptor.
-
-Sequencia recomendada para cada rodada:
-
-1. Alto-falante para microfone, simbolo 0.300 s, amplitude normal.
-   Esperado: uma mensagem aceita, pouca latencia apos o fim do TX, sem clipping.
-2. Alto-falante para microfone, mesma configuracao, amplitude menor.
-   Esperado: aceitar se o sinal ainda estiver claro; se falhar, salvar evidencia com log simples.
-3. Radio para SDR ou segundo computador, simbolo 0.300 s, amplitude normal.
-   Esperado: decodificacao logo apos o fim do pacote e `Sessao RX` com poucos candidatos fortes consolidados.
-4. Radio para SDR com sinal fraco ou ruido maior.
-   Esperado: mensagem aceita ou rejeicao limpa por CRC/payload, sem travar a interface.
-5. Pacote parcial: iniciar RX depois do inicio da transmissao ou interromper TX antes do fim.
-   Esperado: nenhuma mensagem falsa deve aparecer; a interface deve continuar responsiva.
-6. Repetir qualquer falha com `Log RX detalhado` ligado.
-   Esperado: salvar evidencia completa para analise de sync, `PHYS_LENGTH`, progresso e CRC.
-
-Em cada evidencia, registrar tambem:
-
-- duracao de simbolo;
-- amplitude aproximada usada no transmissor;
-- se foi alto-falante/microfone, cabo, radio local ou radio/SDR remoto;
-- se o sinal estava forte, medio ou fraco visualmente/auditivamente;
-- se houve ruido impulsivo, fading ou clipping aparente.
-
-## Logs
-
-Cada recepção deve salvar opcionalmente:
-
-- timestamp;
-- configuração do modem;
-- nível médio;
-- pico;
-- resultado do CRC;
-- texto recebido;
-- confiança estimada.
-
-Para testes de campo, o app PC deve permitir salvar manualmente um pacote de evidencia RX contendo o audio recente em WAV e um TXT com configuracao, resumo CSV, historico de texto recebido e log. Esse pacote deve ser acionado pelo operador e servir como material reproduzivel para investigar falhas de sincronismo, `PHYS_LENGTH`, CRC ou nivel de sinal. O resumo CSV deve ter uma linha de cabecalho e uma linha de valores para facilitar copiar varios testes para uma planilha. Quando houver quadro aceito na sessao, o CSV deve preservar os diagnosticos desse ultimo aceite, incluindo qualidade, tamanho aceito, offset em amostras e quantidade de fases/tentativas, mesmo que a linha visual `Estado RX` ja tenha voltado a outro estado.
-
-O TXT de evidencia tambem deve incluir uma tabela `Quadros aceitos CSV`, com uma
-linha por quadro aceito pelo RX continuo. Essa tabela preserva os parametros no
-momento do aceite e deve ser usada para comparar transmissoes individuais,
-principalmente quando a sessao tiver mudanca de duracao de simbolo, modulacao
-ou tons antes de salvar a evidencia.
-
-O utilitario `python-sim/field_summary.py` deve consolidar varios TXT de evidencia em um unico CSV agregado, preservando o caminho do arquivo original em `source_txt`. Isso permite comparar rodadas de campo por duracao de simbolo, contadores RX, qualidade, texto recebido e diagnosticos do ultimo quadro aceito. Quando gravar em arquivo, ele tambem deve gerar um CSV agrupado por parametros de modem para comparar taxa de aceite, qualidade media/minima e medias dos contadores RX entre configuracoes. Quando houver a secao `Quadros aceitos CSV`, o script tambem deve gerar `field_frames.csv`, com uma linha unica por quadro aceito. Como evidencias salvas durante a mesma sessao acumulam quadros anteriores, `field_frames.csv` deve deduplicar automaticamente quadros repetidos por instante, configuracao e texto.
-
-O agrupamento padrao do `field_summary.py` deve separar tambem por modulacao,
-para nao misturar evidencias 2-FSK v0.1 e 4-FSK v0.2 experimental no mesmo
-resumo.
-
-O utilitario `python-sim/field_replay.py` deve reproduzir os WAVs de evidencias aceitas usando o CLI C++ `hftext_rx_wav`, com duracao de simbolo e tons extraidos do `Resumo CSV`, e gravar `field_replay.csv` com texto esperado, texto decodificado, codigo de retorno e status. Esse replay nao substitui o RX continuo, mas permite verificar se capturas reais continuam decodificaveis pelo decoder offline apos alteracoes futuras.
-
-Quando uma evidencia de campo falhar no RX continuo mas for recuperada por `hftext_rx_wav`, ela deve ser tratada como caso de regressao para aproximar o `StreamingReceiver` do caminho offline sem alterar o protocolo. Nos testes de 2026-06-14 com simbolo de `0,5 s`, uma captura no limite de sinal exigiu o deslocamento comum intermediario de frequencia, reforcando a necessidade de manter essa tolerancia no RX em fluxo.
-
-Rodada posterior em 2026-06-14 com simbolo de `0,5 s` confirmou a melhoria: a condicao que falhava antes passou a receber, uma condicao ainda mais fraca foi recebida com qualidade baixa, e uma terceira condicao com muito ruido branco falhou tambem no decoder WAV offline. Esse tipo de falha deve ser interpretado inicialmente como limite real de SNR/canal, nao como problema especifico do RX continuo.
-
-Outra rodada de campo em 2026-06-14 comparou simbolos de `0,8 s`, `0,5 s` e `0,3 s` em sinal razoavel, sinal baixo e ruido. Os dois primeiros conjuntos foram recebidos; no conjunto com mais ruido, duas tentativas em `0,5 s` falharam tambem no decoder WAV offline, indicando perda real por canal/ruido e nao apenas falha do RX continuo. O teste tambem confirmou que simbolos muito longos ocupam o canal por tempo excessivo; portanto `0,8 s` deve permanecer como referencia de teste/robustez extrema, enquanto `0,5 s` continua como baseline operacional e `0,3 s` merece mais coleta como modo rapido em canal bom.
-
-Testes posteriores em 2026-06-14 com simbolo de `0,3 s`, variando nivel de sinal e ruido, mostraram recepcao muito boa; falhas isoladas tambem falharam no decoder WAV offline. Uma transmissao curta com simbolo de `0,1 s` e bastante ruido tambem foi recebida. A conclusao operacional provisoria e que `0,3 s` e candidato forte para modo normal/rapido, `0,5 s` permanece referencia robusta, e duracoes muito longas devem ser evitadas por ocuparem demais o canal.
-
-No app PC, cada linha do log deve incluir timestamp. Durante RX continuo, o log normal deve mostrar eventos consolidados suficientes para operacao: sync forte, `PHYS_LENGTH`, progresso do `ROBUST_FRAME`, rejeicoes agregadas, texto recebido, confianca e latencia estimada quando um quadro valido for publicado. O log normal deve omitir marcos repetidos por fases diferentes. A opcao `Log RX detalhado` deve preservar a telemetria completa por fase para debug.
-
-## Validacao no app PC
-
-No app PC, o fluxo atual de validacao com audio real e:
-
-- digitar a mensagem na aba `Operacao`;
-- transmitir explicitamente pelo botao de envio, sem salvar WAV manualmente;
-- confirmar que o RX iniciou automaticamente ao abrir o app ou clicar `Receber` se ele tiver sido parado;
-- aguardar a mensagem aparecer no historico de texto recebido durante a captura;
-- conferir se o texto recebido tambem aparece no log;
-- registrar offset/fase aceita, quantidade de fases testadas e confianca media estimada;
-- conferir no log a sequencia resumida `sync forte` -> `PHYS_LENGTH` -> acumulacao do `ROBUST_FRAME` -> quadro valido;
-- parar RX para encerrar a escuta;
-- registrar duracao, pico de audio e amostras proximas de clipping;
-- aceitar o texto recebido apenas se o CRC estiver valido.
-
-Ao abrir um WAV manualmente no app PC, a validacao tambem deve registrar duracao, sample rate, pico de audio e amostras proximas de clipping antes da decodificacao.
-
-Durante uma captura RX ativa, o app deve priorizar a reciclagem dos buffers de audio e enviar copias curtas para o `StreamingReceiver` em thread propria. A decodificacao deve acontecer durante a recepcao e publicar mensagens pouco depois do fim do quadro. WAV fechado deve ser usado apenas para debug e reproducao de casos de teste.
-
-O app deve permanecer responsivo mesmo quando o canal gerar muitos candidatos falsos. Para isso, a fila interna de audio RX e limitada, o worker processa blocos curtos, o waterfall pode descartar atualizacoes visuais atrasadas e o log detalhado pode resumir/omitir excesso de eventos por lote. Em teste manual, deixar RX ativo em ruido ou em uma transmissao fraca nao deve congelar a janela; se o processamento nao acompanhar o tempo real, o comportamento aceitavel e perder parte da recepcao atual e continuar operavel.
-
-Ao testar captura por placa de som, conferir no log do app:
-
-- `RX streaming iniciado` deve informar a taxa de captura RX;
-- `RX duracao` deve informar o sample rate usado na captura;
-- a duracao exibida deve bater com o tempo real de gravacao.
-
-Se o WAV recebido parecer comprimido ou esticado, a primeira verificacao e comparar o sample rate RX configurado com o sample rate mostrado no log e no arquivo WAV salvo. Em Windows, usar 48000 Hz para RX e o ponto de partida recomendado.
-
-## Testes manuais de interface PC
-
-A interface PC deve manter validacoes manuais simples:
-
-- ao digitar mensagem TX com letras maiusculas, o contador deve incluir os simbolos `shift`;
-- ao digitar vogais acentuadas, o contador deve incluir os modificadores `acute` ou `tilde`;
-- ao digitar `ç`, o contador deve tratar como um simbolo, e `Ç` como `shift` + `ç`;
-- ao digitar caracteres invalidos, o campo TX deve mostrar `?` antes de gerar WAV;
-- ao alterar duracao de simbolo ou preambulo, a duracao estimada deve atualizar;
-- ao abrir o app com dispositivo de entrada disponivel, o RX deve iniciar automaticamente sem acao manual do operador;
-- ao alterar modulacao, sample rate RX, duracao de simbolo, tom 0, tom 1, preambulo, dispositivo de entrada ou `Log RX detalhado` durante RX ativo, a escuta deve reiniciar sozinha e registrar o reinicio no log;
-- durante envio direto, a barra de progresso TX deve avancar ate o fim do audio gerado ou parar corretamente quando o mesmo botao for usado para cancelar TX;
-- durante RX, a barra `Progresso RX` deve avancar de forma monotona dentro de um candidato forte, sem oscilar com candidatos fracos ou fases internas, e voltar a zero apos rejeicao forte completa;
-- durante RX, a linha `Estado RX` deve mostrar o estado consolidado mais util do lote recente, ultimo `PHYS_LENGTH`, qualidade do ultimo candidato completo e ultimo motivo de rejeicao forte;
-- durante RX, a linha `Sessao RX` deve acumular duracao e contadores consolidados da recepcao atual, contando rejeicoes fortes no modo normal, reiniciar ao clicar `Receber` e aparecer no log ao parar RX;
-- a waterfall RX deve atualizar visualmente durante captura sem encurtar o WAV salvo nem atrapalhar a decodificacao ao parar RX;
-- a waterfall RX deve mostrar duas linhas verticais amarelas nos tons `Tom 0` e `Tom 1`, atualizando quando esses valores forem alterados;
-- no modo 4-FSK experimental, a waterfall RX deve mostrar quatro linhas verticais amarelas derivadas de `Tom 0`, `Tom 1` e do espacamento entre eles;
-- a waterfall RX deve mostrar trilhas de sinal fraco/normal em verde, puxar para amarelo quando o bloco de entrada estiver proximo de saturacao e ficar vermelha quando saturar;
-- a estimativa TX deve refletir sempre o fluxo robusto com FEC/interleaving;
-- a estimativa TX deve ficar menor no modo 4-FSK experimental para o mesmo texto e duracao de simbolo, pois cada simbolo de audio carrega dois bits;
-- o botao `Salvar Log` deve gerar um arquivo `.txt` contendo cabecalho de configuracao e o log atual com timestamps;
-- o botao `Limpar Log` deve limpar somente o log, sem apagar `Texto recebido` nem configuracoes;
-- o menu de contexto do historico RX deve oferecer `Limpar RX`;
-- o botao `Salvar Evidencia RX` deve criar um `.wav` com audio RX recente e um `.txt` associado com resumo CSV, sem parar automaticamente a recepcao, preservando os dados do ultimo quadro aceito quando houver;
-- `python-sim/field_summary.py` deve ler os TXT de evidencia e gerar um CSV agregado com uma linha por evidencia valida, alem de um CSV agrupado por parametros quando solicitado ou usado no modo padrao de arquivo;
-- `python-sim/field_summary.py` deve gerar tambem `field_frames.csv` quando houver quadros aceitos por transmissao individual;
-- `python-sim/field_replay.py` deve rodar os WAVs das evidencias aceitas pelo `hftext_rx_wav` e gerar um CSV de replay com passa/falha;
-- ao fechar e abrir novamente, o app deve restaurar indicativo, parametros do modem, dispositivos selecionados, estado do log detalhado e geometria da janela;
-- ao fechar e abrir novamente, a caixa de mensagem TX deve permanecer vazia;
-- no Windows, abrir `hftext_pc.exe` deve mostrar apenas a janela grafica do HFText, sem console adicional;
-- a janela e o executavel devem exibir o icone proprio do HFText.
-
-A waterfall e validada manualmente: durante `Receber`, tons proximos da faixa do modem devem aparecer como trilhas horizontais, e a duracao registrada ao parar RX deve continuar coerente com o tempo real de recepcao. As trilhas devem ficar proximas das linhas amarelas quando a sintonia estiver correta; deslocamentos visiveis indicam erro leve de sintonia, BFO ou SDR.
-
-Para validar o aviso visual de saturacao na waterfall, aumentar temporariamente o ganho de entrada ou reproduzir um sinal forte e observar se as trilhas passam de verde para amarelo perto de saturar e ficam vermelhas nos instantes em que o pico do bloco se aproxima do fundo de escala. Em nivel normal, as trilhas devem permanecer verdes.
-
-O indicador de clipping e aproximado e usa amostras com magnitude muito proxima do fundo de escala. O app deve registrar quantidade e porcentagem de amostras clipadas; picos isolados podem ser ruido impulsivo do canal, enquanto clipping frequente sugere reduzir ganho ou volume quando possivel.
-
-## Testes do modo robusto
-
-A simulacao Python deve continuar validando a camada robusta:
-
-- round-trip limpo com `conv_k3` sem interleaving;
-- round-trip limpo com `conv_k3 + interleaving`;
-- Viterbi recuperando quadros com erros esparsos antes da verificacao de CRC;
-- Viterbi soft-decision recuperando bits fracos quando a decisao dura escolhe um caminho incorreto;
-- ruido puro deve produzir baixa qualidade, mesmo quando a decisao dura escolher 0 ou 1;
-- deinterleaving restaurando exatamente o fluxo codificado antes do Viterbi;
-- geometria de interleaving derivada de forma deterministica a partir do tamanho codificado;
-- rejeicao de geometrias que nao encaixem exatamente no fluxo codificado;
-- varredura por SNR comparando frame logico sem FEC, repeticao 3x, Hamming(7,4), `conv_k3` e `conv_k3 + interleaving`;
-- comparacao por tamanho de payload curto, medio e longo;
-- registro de taxa de CRC, payload valido, BER recuperada, confianca media, pior BER e distancia media do Viterbi.
-
-No core C++, os testes automatizados devem cobrir:
-
-- helpers puros de `conv_k3`, Viterbi, interleaving e deinterleaving;
-- Viterbi soft-decision e parse robusto usando confianca por bit;
-- montagem e parse de frame robusto em bits;
-- deteccao de `START_SYNC` fisico em fluxo de bits com preambulo e bits extras;
-- deteccao de `START_SYNC` em audio com erros duros adicionais quando os bits divergentes possuem baixa qualidade;
-- recuperacao de `PHYS_LENGTH` repetido por voto duro e por voto ponderado por qualidade;
-- rejeicao de tamanho fisico invalido;
-- round-trip limpo via API publica `modulateText`/`demodulateSamples`;
-- recepcao continua por `StreamingReceiver`, incluindo atraso inicial arbitrario, pequeno deslocamento comum dos tons e mais de um quadro no mesmo fluxo;
-- recepcao continua depois de um quadro completo rejeitado por CRC/payload, garantindo que uma mensagem valida posterior ainda seja aceita;
-- round-trip WAV pelos CLIs `hftext_tx_wav` e `hftext_rx_wav`;
-- replay de WAV salvo pelo CLI `hftext_stream_wav`, validando o mesmo caminho incremental do `StreamingReceiver`;
-- round-trip manual no app PC gerando e decodificando o mesmo WAV.
-
-Para a v0.2 experimental, os mesmos caminhos devem ter testes especificos em
-4-FSK: modulador, demodulador, API publica, `StreamingReceiver` e CLIs
-`hftext_tx_wav`, `hftext_rx_wav` e `hftext_stream_wav` com `--mode 4fsk`.
-O preambulo 4-FSK deve ser validado como ciclo pelos quatro tons, nao como um
-unico tom produzido por bits alternados agrupados em pares.
-
-O modo robusto deve continuar aceitando texto recebido apenas quando o CRC do frame logico estiver valido. O decoder FEC, incluindo Viterbi soft-decision, nao substitui o CRC.
+- Low signal level.
+- Clipping or saturation.
+- Wrong sample rate.
+- Symbol duration mismatch.
+- Frequency/tone mismatch.
+- Radio/SDR filtering that attenuates one or more tones.
+- Propagation fading.
+- Excessive noise or local interference.

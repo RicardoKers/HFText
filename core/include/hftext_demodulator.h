@@ -59,6 +59,21 @@ std::vector<BitDecision> demodulateBitDecisions4Fsk(
     int startOffset = 0
 );
 
+std::vector<BitDecision> demodulateBitDecisions8Fsk(
+    const std::vector<float>& samples,
+    int sampleRate,
+    float symbolDurationSec,
+    float frequency0Hz,
+    float frequency1Hz,
+    int startOffset = 0
+);
+
+std::vector<BitDecision> demodulateBitDecisions8Fsk(
+    const std::vector<float>& samples,
+    const ModemConfig& config = ModemConfig{},
+    int startOffset = 0
+);
+
 std::vector<std::uint8_t> demodulateBitsFsk(
     const std::vector<float>& samples,
     const ModemConfig& config = ModemConfig{},
@@ -90,6 +105,21 @@ std::vector<std::uint8_t> demodulateBits4Fsk(
 );
 
 std::vector<std::uint8_t> demodulateBits4Fsk(
+    const std::vector<float>& samples,
+    const ModemConfig& config = ModemConfig{},
+    int startOffset = 0
+);
+
+std::vector<std::uint8_t> demodulateBits8Fsk(
+    const std::vector<float>& samples,
+    int sampleRate,
+    float symbolDurationSec,
+    float frequency0Hz,
+    float frequency1Hz,
+    int startOffset = 0
+);
+
+std::vector<std::uint8_t> demodulateBits8Fsk(
     const std::vector<float>& samples,
     const ModemConfig& config = ModemConfig{},
     int startOffset = 0

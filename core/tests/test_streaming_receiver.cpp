@@ -138,6 +138,51 @@ int main() {
     assert(fsk4Results.front().payloadValid);
     assert(fsk4Results.front().text == "pu5lrk fsk4");
 
+    hftext::ModemConfig fsk8Config = config;
+    fsk8Config.modulationMode = hftext::ModulationMode::Fsk8;
+    fsk8Config.frequency0Hz = 1000.0F;
+    fsk8Config.frequency1Hz = 1200.0F;
+    const auto fsk8Audio = hftext::modulateText("pu5lrk fsk8", fsk8Config);
+    hftext::StreamingReceiver fsk8Receiver(fsk8Config);
+    std::vector<hftext::DecodeResult> fsk8Results;
+    for (std::size_t offset = 0; offset < fsk8Audio.size(); offset += chunkSize) {
+        const auto end = std::min(fsk8Audio.size(), offset + chunkSize);
+        const std::vector<float> chunk(fsk8Audio.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       fsk8Audio.begin() + static_cast<std::ptrdiff_t>(end));
+        const auto results = fsk8Receiver.pushSamples(chunk);
+        fsk8Results.insert(fsk8Results.end(), results.begin(), results.end());
+    }
+    assert(fsk8Results.size() == 1);
+    assert(fsk8Results.front().crcOk);
+    assert(fsk8Results.front().payloadValid);
+    assert(fsk8Results.front().text == "pu5lrk fsk8");
+
+    hftext::ModemConfig longFsk8Config;
+    longFsk8Config.sampleRate = 1600;
+    longFsk8Config.symbolDurationSec = 0.2F;
+    longFsk8Config.frequency0Hz = 200.0F;
+    longFsk8Config.frequency1Hz = 240.0F;
+    longFsk8Config.preambleBits = 64;
+    longFsk8Config.modulationMode = hftext::ModulationMode::Fsk8;
+    auto longFsk8Audio = hftext::modulateText("pu5lrk 8fsk longo", longFsk8Config);
+    longFsk8Audio.insert(longFsk8Audio.begin(), 37, 0.0F);
+    hftext::StreamingReceiver longFsk8Receiver(longFsk8Config);
+    std::vector<hftext::DecodeResult> longFsk8Results;
+    const std::size_t longFsk8ChunkSize = 719;
+    for (std::size_t offset = 0; offset < longFsk8Audio.size(); offset += longFsk8ChunkSize) {
+        const auto end = std::min(longFsk8Audio.size(), offset + longFsk8ChunkSize);
+        const std::vector<float> chunk(
+            longFsk8Audio.begin() + static_cast<std::ptrdiff_t>(offset),
+            longFsk8Audio.begin() + static_cast<std::ptrdiff_t>(end)
+        );
+        const auto results = longFsk8Receiver.pushSamples(chunk);
+        longFsk8Results.insert(longFsk8Results.end(), results.begin(), results.end());
+    }
+    assert(longFsk8Results.size() == 1);
+    assert(longFsk8Results.front().crcOk);
+    assert(longFsk8Results.front().payloadValid);
+    assert(longFsk8Results.front().text == "pu5lrk 8fsk longo");
+
     const auto noMoreResults = receiver.pushSamples({0.0F, 0.0F, 0.0F});
     assert(noMoreResults.empty());
     assert(receiver.takeEvents().empty());
@@ -239,7 +284,7 @@ int main() {
 
     receiver.reset();
     const auto damagedAudio = damagedRobustFrameAudio(
-        "pu5lrk mensagem longa com crc ruim antes da proxima transmissao",
+        "pu5lrk long message with bad crc before the next transmission",
         config
     );
     const auto recoveredAudio = hftext::modulateText("pu5lrk recuperou", config);

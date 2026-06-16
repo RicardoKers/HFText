@@ -70,6 +70,27 @@ int main() {
         assert(fsk4Decisions[index].quality > 0.9F);
     }
 
+    const std::vector<std::uint8_t> fsk8Bits = {
+        0, 0, 0,
+        0, 0, 1,
+        0, 1, 0,
+        0, 1, 1,
+        1, 0, 0,
+        1, 0, 1,
+        1, 1, 0,
+        1, 1, 1,
+    };
+    audio = hftext::modulateBits8Fsk(fsk8Bits, 8000, 0.05F, 1000.0F, 1200.0F, 0.8F);
+    decoded = hftext::demodulateBits8Fsk(audio, 8000, 0.05F, 1000.0F, 1200.0F);
+    assert(decoded == fsk8Bits);
+    const auto fsk8Decisions = hftext::demodulateBitDecisions8Fsk(audio, 8000, 0.05F, 1000.0F, 1200.0F);
+    assert(fsk8Decisions.size() == fsk8Bits.size());
+    for (std::size_t index = 0; index < fsk8Decisions.size(); ++index) {
+        assert(fsk8Decisions[index].bit == fsk8Bits[index]);
+        assert(fsk8Decisions[index].confidence > 0.9F);
+        assert(fsk8Decisions[index].quality > 0.9F);
+    }
+
     std::uint32_t noiseState = 0xA53C19D2U;
     std::vector<float> noiseOnly(800);
     for (auto& sample : noiseOnly) {

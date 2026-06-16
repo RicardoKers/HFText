@@ -14,22 +14,22 @@ from field_summary import (
 
 def evidence_text(csv_row: str) -> str:
     return (
-        "HFText evidencia RX\n"
-        "Gerado em: 2026-06-06T17:59:11\n"
+        "HFText RX evidence\n"
+        "Generated at: 2026-06-06T17:59:11\n"
         "\n"
-        "--- Resumo CSV ---\n"
+        "--- Summary CSV ---\n"
         "generated_at,callsign,symbol_duration_s,f0_hz,f1_hz,amplitude,preamble_bits,detailed_log,"
         "rx_elapsed_s,rx_accepted,rx_rejected_strong,rx_phys_length,rx_sync,rx_quality,"
         "received_text,accepted_length\n"
         f"{csv_row}\n"
         "\n"
-        "--- Quadros aceitos CSV ---\n"
+        "--- Accepted Frames CSV ---\n"
         "accepted_at,rx_elapsed_s,modulation,symbol_duration_s,sample_rate_hz,"
         "f0_hz,f1_hz,amplitude,preamble_bits,length,quality,offset_samples,offsets_tried,text\n"
         '"2026-06-06T17:59:10",120.0,"2-FSK v0.1",0.300,48000,1200.0,1600.0,'
         '0.80,64,13,"68.8%",0,20,"pu5lrk Ola!"\n'
         "\n"
-        "--- Texto recebido ---\n"
+        "--- Received Text ---\n"
         "pu5lrk Ola!\n"
     )
 
@@ -67,7 +67,7 @@ def test_parse_evidence_summary_handles_multiline_received_text(tmp_path):
 
 
 def test_collect_summaries_skips_txt_without_csv_block(tmp_path):
-    (tmp_path / "empty.txt").write_text("sem resumo\n", encoding="utf-8")
+    (tmp_path / "empty.txt").write_text("no summary\n", encoding="utf-8")
     (tmp_path / "valid.txt").write_text(
         evidence_text('"2026-06-06T17:59:11","pu5lrk",0.300,1200.0,1600.0,0.80,64,0,121.9,1,0,4,4,"68.8%","pu5lrk Ola!",13'),
         encoding="utf-8",
@@ -183,9 +183,9 @@ def test_main_writes_aggregate_csv(tmp_path, capsys):
     assert output_path.exists()
     assert (input_dir / "field_summary_groups.csv").exists()
     assert (input_dir / "field_frames.csv").exists()
-    assert "evidencias,1" in output
-    assert "quadros_aceitos,1" in output
-    assert "quadros_aceitos_unicos,1" in output
-    assert "qualidade_media_pct,68.8" in output
+    assert "evidence_files,1" in output
+    assert "accepted_frames,1" in output
+    assert "unique_accepted_frames,1" in output
+    assert "avg_quality_pct,68.8" in output
     assert "groups_csv" in output
     assert "frames_csv" in output

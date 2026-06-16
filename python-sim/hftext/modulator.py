@@ -28,9 +28,9 @@ def _validate_common(sample_rate: int, symbol_duration: float, amplitude: float)
 
 
 def fsk_tones(f0: float, f1: float, tone_count: int) -> list[float]:
-    """Return FSK tones; for 4-FSK f0/f1 are the first two adjacent tones."""
-    if tone_count not in (2, 4):
-        raise ValueError("tone_count must be 2 or 4")
+    """Return FSK tones; for MFSK f0/f1 are the first two adjacent tones."""
+    if tone_count not in (2, 4, 8):
+        raise ValueError("tone_count must be 2, 4 or 8")
     if f0 <= 0 or f1 <= 0:
         raise ValueError("frequencies must be positive")
     if f0 == f1:
@@ -39,7 +39,7 @@ def fsk_tones(f0: float, f1: float, tone_count: int) -> list[float]:
         return [f0, f1]
     spacing = f1 - f0
     if spacing <= 0:
-        raise ValueError("4-FSK requires f1 greater than f0")
+        raise ValueError("MFSK requires f1 greater than f0")
     return [f0 + spacing * index for index in range(tone_count)]
 
 
@@ -54,8 +54,8 @@ def modulate_bits_fsk(
 ) -> np.ndarray:
     """Convert bits to normalized mono FSK audio."""
     samples_per_symbol = _validate_common(sample_rate, symbol_duration, amplitude)
-    if bits_per_symbol not in (1, 2):
-        raise ValueError("bits_per_symbol must be 1 or 2")
+    if bits_per_symbol not in (1, 2, 3):
+        raise ValueError("bits_per_symbol must be 1, 2 or 3")
     tones = fsk_tones(f0, f1, 1 << bits_per_symbol)
 
     symbol_count = (len(bits) + bits_per_symbol - 1) // bits_per_symbol
@@ -106,6 +106,18 @@ def modulate_bits_4fsk(
 ) -> np.ndarray:
     """Convert bits to normalized mono float32 4-FSK audio."""
     return modulate_bits_fsk(bits, sample_rate, symbol_duration, f0, f1, amplitude, bits_per_symbol=2)
+
+
+def modulate_bits_8fsk(
+    bits: list[int],
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    symbol_duration: float = DEFAULT_SYMBOL_DURATION,
+    f0: float = 1_000.0,
+    f1: float = 1_200.0,
+    amplitude: float = DEFAULT_AMPLITUDE,
+) -> np.ndarray:
+    """Convert bits to normalized mono float32 8-FSK audio."""
+    return modulate_bits_fsk(bits, sample_rate, symbol_duration, f0, f1, amplitude, bits_per_symbol=3)
 
 
 def save_wav(path: str | Path, samples: np.ndarray, sample_rate: int) -> None:

@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         f0=args.f0,
         f1=args.f1,
     )
-    print(f"WAV gerado: {args.output_wav}")
+    print(f"WAV generated: {args.output_wav}")
     print(f"Payload: {payload}")
     return 0
 

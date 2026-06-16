@@ -94,21 +94,21 @@ def run_receive(args: argparse.Namespace) -> int:
     result = receive_result.frame_result
 
     if not result.frame_detected:
-        print(f"Quadro nao detectado: {result.error}")
+        print(f"Frame not detected: {result.error}")
         if args.verbose:
             print_diagnostics(receive_result)
         return 1
     if not result.crc_ok:
-        print("Quadro detectado, mas CRC invalido.")
+        print("Frame detected, but CRC is invalid.")
         if result.error:
-            print(f"Erro: {result.error}")
+            print(f"Error: {result.error}")
         if args.verbose:
             print_diagnostics(receive_result)
         return 2
     if not result.payload_valid:
-        print("Quadro detectado, CRC valido, mas payload invalido.")
+        print("Frame detected, CRC is valid, but payload is invalid.")
         if result.error:
-            print(f"Erro: {result.error}")
+            print(f"Error: {result.error}")
         if args.verbose:
             print_diagnostics(receive_result)
         return 3

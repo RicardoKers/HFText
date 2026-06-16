@@ -1,147 +1,64 @@
-# Requisitos do projeto HFText
+# Requirements
 
-## Requisitos funcionais
+## Product Requirements
 
-### RF001 — Digitação de mensagem
+HFText must allow an operator to send and receive short text messages through an HF radio audio channel.
 
-O sistema deve permitir que o usuário digite uma mensagem curta de texto.
+The system must:
 
-Critérios de aceitação:
-- aceitar letras minúsculas;
-- aceitar letras maiúsculas por meio do símbolo shift;
-- aceitar números;
-- aceitar espaço;
-- aceitar pontuação básica;
-- aceitar `á`, `é`, `í`, `ó`, `ú`, `ã`, `õ` e `ç`, incluindo versões maiúsculas por meio de modificadores e `shift`;
-- limitar o tamanho máximo da mensagem a 127 símbolos codificados do alfabeto reduzido.
+- transmit only after an explicit operator action;
+- receive continuously for long sessions without unbounded memory growth;
+- display decoded messages clearly;
+- make invalid transmitted characters visible by replacing them with `?`;
+- include the configured callsign automatically at the beginning of the payload when present;
+- provide enough diagnostics for field testing without overwhelming normal operation;
+- keep WAV-based transmit/receive tools available for debugging.
 
-### RF002 — Codificação de texto em bits
+## Protocol Requirements
 
-O sistema deve converter a mensagem em uma sequência de bits.
+- Use HFText Basic v0.1 as the operational baseline.
+- Preserve the logical frame `SYNC | LENGTH | PAYLOAD | CRC16`.
+- Keep `LENGTH` in the 0 to 127 range and define it as the number of encoded 6-bit payload symbols.
+- Keep the callsign inside `PAYLOAD`, not as a separate protocol field.
+- Calculate CRC-16/CCITT-FALSE over the packed payload only.
+- Exclude `SYNC`, `LENGTH`, `START_SYNC`, and `PHYS_LENGTH` from the CRC.
+- Use the robust layer with convolutional coding and interleaving for normal operation.
+- Treat 4-FSK and 8-FSK as experimental physical modulation modes until enough field evidence supports promotion.
 
-Critérios de aceitação:
-- codificação determinística;
-- permitir decodificação reversa;
-- rejeitar ou substituir caracteres não suportados;
-- ter testes automatizados.
+## Text Requirements
 
-### RF003 — Geração de quadro
+- The supported alphabet is 64 symbols.
+- Lowercase letters are direct symbols.
+- Uppercase letters use `shift + lowercase`.
+- Acute and tilde modifiers encode supported accented vowels.
+- `ç` is a direct symbol; `Ç` uses `shift + ç`.
+- Unsupported input characters must become `?`.
+- The app must show the sanitized transmit text before transmission.
 
-O sistema deve montar o frame logico HFText Basic v0.1 contendo:
+## DSP Requirements
 
-- palavra de sincronismo;
-- tamanho da mensagem;
-- payload;
-- CRC.
+- Use normalized floating-point samples in the core.
+- Use non-coherent tone energy detection.
+- Support a configurable sample rate, symbol duration, base frequency, tone spacing, amplitude, and preamble length.
+- Keep all derived tones below Nyquist.
+- Prefer robust detection over speed, especially for real HF/SDR captures.
+- Do not perform long offline decoding passes during normal continuous RX.
 
-Na transmissao operacional, esse frame logico deve ser encapsulado pelo modo robusto atual:
+## PC Application Requirements
 
-- preambulo fisico;
-- marcador fisico de inicio;
-- tamanho fisico do bloco robusto;
-- FEC `conv_k3`;
-- interleaving deterministico.
+- The interface language must be English.
+- Normal operation should resemble a compact chat-style interface.
+- RX should start automatically when an input device is available.
+- TX should be direct through the sound card; saving WAV first must not be required.
+- The same send button may cancel TX while audio is playing.
+- Settings and diagnostics belong in a separate Settings tab.
+- RX state, RX session, quality, level, and waterfall must help the operator tune and debug.
+- Evidence export must include a WAV capture and a text report with settings, logs, summary CSV, and accepted-frame CSV.
 
-### RF004 — Modulação em áudio
+## Non-Functional Requirements
 
-O sistema deve converter bits em amostras de áudio PCM normalizadas.
-
-Critérios de aceitação:
-- saída em `float`, faixa -1.0 a +1.0;
-- taxa de amostragem configurável;
-- frequência dos tons configurável;
-- duração de símbolo configurável.
-
-### RF005 — Geração de WAV
-
-A versão de simulação deve gerar arquivo WAV contendo o áudio modulado.
-
-### RF006 — Leitura de WAV
-
-A versão de simulação deve ler arquivo WAV e tentar recuperar o texto.
-
-### RF007 — Demodulação
-
-O sistema deve identificar símbolos recebidos a partir do áudio.
-
-Critérios de aceitação:
-- detectar tons em áudio limpo;
-- recuperar bits em áudio limpo;
-- funcionar com ruído moderado em testes simulados.
-- no modo robusto, usar FEC/interleaving e validar o resultado final por CRC;
-- quando houver métrica de confiança por símbolo, permitir Viterbi soft-decision no RX C++.
-
-### RF008 — Validação por CRC
-
-O sistema deve calcular e verificar CRC16 do quadro recebido.
-
-Critérios de aceitação:
-- quadro correto deve passar;
-- quadro alterado deve falhar.
-
-### RF009 — Aplicação PC
-
-A aplicação PC deve permitir:
-
-- digitar mensagem;
-- transmitir áudio pela placa de som;
-- receber áudio pela placa de som;
-- mostrar texto recebido;
-- selecionar dispositivo de entrada e saída;
-- mostrar nível de áudio.
-- mostrar qualidade aproximada de RX;
-- mostrar waterfall simples para observação do sinal;
-- manter histórico de mensagens recebidas;
-- registrar log operacional com timestamp.
-
-### RF010 — Aplicação Android
-
-A aplicação Android deve permitir:
-
-- digitar mensagem;
-- transmitir áudio pela saída do celular;
-- receber áudio pela entrada de microfone ou interface de áudio;
-- mostrar texto recebido;
-- configurar parâmetros básicos do modem.
-
-## Requisitos não funcionais
-
-### RNF001 — Portabilidade
-
-O núcleo do modem deve ser portável entre PC e Android.
-
-### RNF002 — Independência da interface
-
-O núcleo DSP não deve depender de Qt, Android, Python ou APIs de áudio.
-
-### RNF003 — Robustez
-
-O sistema deve priorizar robustez em canal ruidoso em vez de taxa de transmissão.
-
-### RNF004 — Baixa complexidade inicial
-
-A primeira versão deve ser simples, mesmo que lenta.
-
-### RNF005 — Testabilidade
-
-Cada módulo do núcleo deve possuir testes automatizados.
-
-### RNF006 — Código didático
-
-O código deve ser claro, comentado e adequado para estudo.
-
-### RNF007 — Segurança operacional
-
-O software não deve transmitir automaticamente sem ação explícita do usuário.
-
-### RNF008 — Sem criptografia
-
-O projeto não deve implementar criptografia ou ocultação de conteúdo.
-
-## Requisitos de desempenho iniciais
-
-- Taxa bruta inicial: 1 a 10 bps.
-- Payload máximo: 127 símbolos codificados.
-- Faixa de áudio inicial: 1000 Hz a 2000 Hz.
-- Taxa de amostragem inicial: 48000 Hz.
-- Amostras normalizadas em ponto flutuante.
+- Keep the C++ core portable and UI-independent.
+- Keep tests close to every core behavior change.
+- Keep documentation synchronized with protocol and UI changes.
+- Prefer clear, conservative implementation over clever shortcuts.
+- Do not add cryptography.

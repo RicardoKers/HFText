@@ -58,8 +58,8 @@ def demodulate_bit_decisions_fsk(
         raise ValueError("symbol_duration must be positive")
     if start_offset < 0:
         raise ValueError("start_offset must be non-negative")
-    if bits_per_symbol not in (1, 2):
-        raise ValueError("bits_per_symbol must be 1 or 2")
+    if bits_per_symbol not in (1, 2, 3):
+        raise ValueError("bits_per_symbol must be 1, 2 or 3")
     tones = fsk_tones(f0, f1, 1 << bits_per_symbol)
 
     samples_per_symbol = int(round(sample_rate * symbol_duration))
@@ -102,6 +102,18 @@ def demodulate_bit_decisions_4fsk(
     return demodulate_bit_decisions_fsk(samples, sample_rate, symbol_duration, f0, f1, start_offset, bits_per_symbol=2)
 
 
+def demodulate_bit_decisions_8fsk(
+    samples: np.ndarray,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    symbol_duration: float = DEFAULT_SYMBOL_DURATION,
+    f0: float = 1_000.0,
+    f1: float = 1_200.0,
+    start_offset: int = 0,
+) -> list[BitDecision]:
+    """Demodulate normalized mono 8-FSK audio into bit decisions."""
+    return demodulate_bit_decisions_fsk(samples, sample_rate, symbol_duration, f0, f1, start_offset, bits_per_symbol=3)
+
+
 def demodulate_bits_2fsk(
     samples: np.ndarray,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
@@ -136,6 +148,28 @@ def demodulate_bits_4fsk(
     return [
         decision.bit
         for decision in demodulate_bit_decisions_4fsk(
+            samples,
+            sample_rate,
+            symbol_duration,
+            f0,
+            f1,
+            start_offset,
+        )
+    ]
+
+
+def demodulate_bits_8fsk(
+    samples: np.ndarray,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    symbol_duration: float = DEFAULT_SYMBOL_DURATION,
+    f0: float = 1_000.0,
+    f1: float = 1_200.0,
+    start_offset: int = 0,
+) -> list[int]:
+    """Demodulate normalized mono 8-FSK audio into bits."""
+    return [
+        decision.bit
+        for decision in demodulate_bit_decisions_8fsk(
             samples,
             sample_rate,
             symbol_duration,

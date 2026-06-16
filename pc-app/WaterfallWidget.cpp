@@ -16,6 +16,7 @@ constexpr double kMaxFrequencyHz = 3000.0;
 constexpr int kMaxAnalysisSamples = 2048;
 constexpr int kAxisHeight = 24;
 constexpr double kMinPower = 1.0e-8;
+constexpr double kScrollRowsPerUpdate = 1.2;
 constexpr std::array<double, 10> kAxisFrequenciesHz = {
     300.0,
     600.0,
@@ -77,16 +78,30 @@ void WaterfallWidget::addSamples(const std::vector<float>& samples, int sampleRa
         return;
     }
 
-    for (int y = 0; y < image_.height() - 1; ++y) {
-        std::memcpy(image_.scanLine(y), image_.constScanLine(y + 1), static_cast<std::size_t>(image_.bytesPerLine()));
+    scrollAccumulator_ += kScrollRowsPerUpdate;
+    int scrollRows = static_cast<int>(std::floor(scrollAccumulator_));
+    scrollAccumulator_ -= static_cast<double>(scrollRows);
+    scrollRows = std::clamp(scrollRows, 1, image_.height());
+
+    for (int y = 0; y < image_.height() - scrollRows; ++y) {
+        std::memcpy(
+            image_.scanLine(y),
+            image_.constScanLine(y + scrollRows),
+            static_cast<std::size_t>(image_.bytesPerLine())
+        );
     }
 
     const double inputPeak = peakLevel(samples);
-    auto* row = reinterpret_cast<QRgb*>(image_.scanLine(image_.height() - 1));
+    std::vector<QRgb> rowPixels(static_cast<std::size_t>(image_.width()));
     for (int x = 0; x < image_.width(); ++x) {
         const double ratio = image_.width() <= 1 ? 0.0 : static_cast<double>(x) / static_cast<double>(image_.width() - 1);
         const double frequency = kMinFrequencyHz + ratio * (kMaxFrequencyHz - kMinFrequencyHz);
-        row[x] = colorForLevel(toneLevel(samples, sampleRate, frequency), inputPeak);
+        rowPixels[static_cast<std::size_t>(x)] = colorForLevel(toneLevel(samples, sampleRate, frequency), inputPeak);
+    }
+
+    for (int y = image_.height() - scrollRows; y < image_.height(); ++y) {
+        auto* row = reinterpret_cast<QRgb*>(image_.scanLine(y));
+        std::memcpy(row, rowPixels.data(), static_cast<std::size_t>(image_.width()) * sizeof(QRgb));
     }
 
     update();
@@ -96,6 +111,7 @@ void WaterfallWidget::clear() {
     ensureImage();
     if (!image_.isNull()) {
         image_.fill(Qt::black);
+        scrollAccumulator_ = 0.0;
         update();
     }
 }
@@ -202,24 +218,36 @@ int WaterfallWidget::frequencyToX(double frequencyHz, const QRect& targetRect) c
 }
 
 QRgb WaterfallWidget::colorForLevel(double level, double inputPeak) const {
-    const double clamped = std::clamp(level, 0.0, 1.0);
-    if (clamped <= 0.03) {
-        return qRgb(0, 0, 18);
+    const double clamped = std::clamp(level * 1.22 + 0.025, 0.0, 1.0);
+    if (clamped <= 0.035) {
+        return qRgb(0, 4, 30);
     }
 
     if (inputPeak >= 0.98 && clamped > 0.08) {
-        const int green = static_cast<int>(std::clamp((1.0 - clamped) * 90.0, 20.0, 90.0));
+        const int green = static_cast<int>(std::clamp((1.0 - clamped) * 95.0, 18.0, 95.0));
         return qRgb(255, green, 0);
     }
 
-    int red = static_cast<int>(std::clamp((clamped - 0.72) * 0.70, 0.0, 1.0) * 90.0);
-    int green = static_cast<int>(std::clamp((clamped - 0.02) * 1.55, 0.0, 1.0) * 235.0);
-    int blue = static_cast<int>(std::clamp(0.05 + clamped * 0.22, 0.0, 0.24) * 255.0);
+    int red = 0;
+    int green = 0;
+    int blue = 0;
+
+    if (clamped < 0.76) {
+        const double t = std::clamp(clamped / 0.76, 0.0, 1.0);
+        red = static_cast<int>(8.0 + t * 34.0);
+        green = static_cast<int>(24.0 + t * 145.0);
+        blue = static_cast<int>(78.0 + t * 177.0);
+    } else {
+        const double t = std::clamp((clamped - 0.76) / 0.24, 0.0, 1.0);
+        red = static_cast<int>(42.0 + t * 213.0);
+        green = static_cast<int>(169.0 + t * 71.0);
+        blue = static_cast<int>(255.0 - t * 225.0);
+    }
 
     if (inputPeak >= 0.85 && clamped > 0.08) {
         red = (std::max)(red, 240);
         green = (std::max)(green, 190);
-        blue = (std::min)(blue, 24);
+        blue = (std::min)(blue, 48);
     }
 
     return qRgb(red, green, blue);

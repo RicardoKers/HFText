@@ -1,4 +1,4 @@
-"""Compare experimental HFText 2-FSK and 4-FSK physical modulation under AWGN."""
+"""Compare experimental HFText 2-FSK, 4-FSK and 8-FSK physical modulation under AWGN."""
 
 from __future__ import annotations
 
@@ -70,7 +70,9 @@ def mode_label(bits_per_symbol: int) -> str:
         return "2fsk-v0.1"
     if bits_per_symbol == 2:
         return "4fsk-v0.2-exp"
-    raise ValueError("bits_per_symbol must be 1 or 2")
+    if bits_per_symbol == 3:
+        return "8fsk-v0.3-exp"
+    raise ValueError("bits_per_symbol must be 1, 2 or 3")
 
 
 def snr_label(snr_db: float | None) -> str:
@@ -90,12 +92,14 @@ def run_mfsk_sweep(
     f1_2fsk: float = 1600.0,
     f0_4fsk: float = 1000.0,
     f1_4fsk: float = 1200.0,
+    f0_8fsk: float = 1000.0,
+    f1_8fsk: float = 1200.0,
     amplitude: float = DEFAULT_AMPLITUDE,
     seed: int = 12345,
     trials: int = 10,
     include_clean: bool = True,
 ) -> list[MfskTrialResult]:
-    """Run 2-FSK and 4-FSK AWGN trials and write CSV files."""
+    """Run 2-FSK, 4-FSK and 8-FSK AWGN trials and write CSV files."""
     if trials <= 0:
         raise ValueError("trials must be positive")
 
@@ -112,6 +116,7 @@ def run_mfsk_sweep(
     configs = [
         (1, f0_2fsk, f1_2fsk),
         (2, f0_4fsk, f1_4fsk),
+        (3, f0_8fsk, f1_8fsk),
     ]
 
     results: list[MfskTrialResult] = []
@@ -294,6 +299,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--f1-2fsk", type=float, default=1600.0)
     parser.add_argument("--f0-4fsk", type=float, default=1000.0)
     parser.add_argument("--f1-4fsk", type=float, default=1200.0)
+    parser.add_argument("--f0-8fsk", type=float, default=1000.0)
+    parser.add_argument("--f1-8fsk", type=float, default=1200.0)
     parser.add_argument("--amplitude", type=float, default=DEFAULT_AMPLITUDE)
     parser.add_argument("--no-clean", action="store_true")
     return parser.parse_args(argv)
@@ -312,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
         f1_2fsk=args.f1_2fsk,
         f0_4fsk=args.f0_4fsk,
         f1_4fsk=args.f1_4fsk,
+        f0_8fsk=args.f0_8fsk,
+        f1_8fsk=args.f1_8fsk,
         amplitude=args.amplitude,
         seed=args.seed,
         trials=args.trials,

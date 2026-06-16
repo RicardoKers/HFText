@@ -176,6 +176,33 @@ int main() {
     assert(fsk4Result.syncIndex == config.preambleBits + static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
     assert(fsk4Result.confidence > 0.9F);
 
+    hftext::ModemConfig fsk8Config = config;
+    fsk8Config.modulationMode = hftext::ModulationMode::Fsk8;
+    fsk8Config.frequency0Hz = 1000.0F;
+    fsk8Config.frequency1Hz = 1200.0F;
+    const auto fsk8Audio = hftext::modulateText("pu5lrk Teste", fsk8Config);
+    assert(fsk8Audio.size() < fsk4Audio.size());
+    const auto fsk8Bits = hftext::demodulateBitsFsk(fsk8Audio, fsk8Config);
+    const std::vector<std::uint8_t> expectedFsk8PreamblePrefix{
+        0, 0, 0,
+        0, 0, 1,
+        0, 1, 0,
+        0, 1, 1,
+        1, 0, 0,
+        1, 0, 1,
+        1, 1, 0,
+        1, 1, 1,
+    };
+    assert(std::vector<std::uint8_t>(fsk8Bits.begin(), fsk8Bits.begin() + expectedFsk8PreamblePrefix.size())
+        == expectedFsk8PreamblePrefix);
+    const auto fsk8Result = hftext::demodulateSamples(fsk8Audio, fsk8Config);
+    assert(fsk8Result.frameDetected);
+    assert(fsk8Result.crcOk);
+    assert(fsk8Result.payloadValid);
+    assert(fsk8Result.text == "pu5lrk Teste");
+    assert(fsk8Result.syncIndex == config.preambleBits + static_cast<int>(hftext::startSyncBits().size()) + physicalLengthBitCount);
+    assert(fsk8Result.confidence > 0.9F);
+
     const int halfSymbolSamples = static_cast<int>(config.sampleRate * config.symbolDurationSec / 2.0F);
     std::vector<float> delayedAudio(static_cast<std::size_t>(halfSymbolSamples), 0.0F);
     delayedAudio.insert(delayedAudio.end(), audio.begin(), audio.end());

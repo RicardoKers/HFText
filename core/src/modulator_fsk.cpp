@@ -35,8 +35,8 @@ void validateFrequencies(const ModemConfig& config) {
     if (config.frequency0Hz == config.frequency1Hz) {
         throw std::invalid_argument("frequencies must be different");
     }
-    if (config.modulationMode == ModulationMode::Fsk4 && modulationToneSpacingHz(config) <= 0.0F) {
-        throw std::invalid_argument("4-FSK requires f1 greater than f0");
+    if (toneCount(config.modulationMode) > 2 && modulationToneSpacingHz(config) <= 0.0F) {
+        throw std::invalid_argument("MFSK requires f1 greater than f0");
     }
     const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
     for (int tone = 0; tone < toneCount(config.modulationMode); ++tone) {
@@ -139,6 +139,30 @@ std::vector<float> modulateBits4Fsk(const std::vector<std::uint8_t>& bits, const
     ModemConfig fsk4Config = config;
     fsk4Config.modulationMode = ModulationMode::Fsk4;
     return modulateBitsWithConfig(bits, fsk4Config);
+}
+
+std::vector<float> modulateBits8Fsk(
+    const std::vector<std::uint8_t>& bits,
+    int sampleRate,
+    float symbolDurationSec,
+    float frequency0Hz,
+    float frequency1Hz,
+    float amplitude
+) {
+    ModemConfig config;
+    config.sampleRate = sampleRate;
+    config.symbolDurationSec = symbolDurationSec;
+    config.frequency0Hz = frequency0Hz;
+    config.frequency1Hz = frequency1Hz;
+    config.amplitude = amplitude;
+    config.modulationMode = ModulationMode::Fsk8;
+    return modulateBitsWithConfig(bits, config);
+}
+
+std::vector<float> modulateBits8Fsk(const std::vector<std::uint8_t>& bits, const ModemConfig& config) {
+    ModemConfig fsk8Config = config;
+    fsk8Config.modulationMode = ModulationMode::Fsk8;
+    return modulateBitsWithConfig(bits, fsk8Config);
 }
 
 std::vector<float> modulateBitsFsk(const std::vector<std::uint8_t>& bits, const ModemConfig& config) {

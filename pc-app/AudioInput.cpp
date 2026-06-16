@@ -61,7 +61,7 @@ AudioInput::~AudioInput() {
 std::vector<AudioInput::DeviceInfo> AudioInput::devices() const {
 #ifdef _WIN32
     std::vector<DeviceInfo> result;
-    result.push_back(DeviceInfo{kDefaultDeviceId, "Dispositivo padrao do Windows"});
+    result.push_back(DeviceInfo{kDefaultDeviceId, "Windows default device"});
 
     const UINT count = waveInGetNumDevs();
     for (UINT id = 0; id < count; ++id) {
@@ -83,7 +83,7 @@ void AudioInput::setSamplesCallback(SamplesCallback callback) {
 
 void AudioInput::start(unsigned int deviceId, int sampleRate) {
     if (sampleRate <= 0) {
-        throw std::invalid_argument("sample rate invalido");
+        throw std::invalid_argument("invalid sample rate");
     }
     (void)stopAndSave({});
 
@@ -167,7 +167,7 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
         format.nBlockAlign = static_cast<WORD>(format.nChannels * format.wBitsPerSample / 8);
         format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
 
-        checkMmResult(waveInOpen(&handle, deviceId, &format, 0, 0, CALLBACK_NULL), "falha ao abrir entrada de audio");
+        checkMmResult(waveInOpen(&handle, deviceId, &format, 0, 0, CALLBACK_NULL), "failed to open audio input");
         {
             std::lock_guard<std::mutex> lock(mutex_);
             currentHandle_ = handle;
@@ -183,11 +183,11 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
             buffers[index].resize(samplesPerBuffer);
             headers[index].lpData = reinterpret_cast<LPSTR>(buffers[index].data());
             headers[index].dwBufferLength = static_cast<DWORD>(buffers[index].size() * sizeof(std::int16_t));
-            checkMmResult(waveInPrepareHeader(handle, &headers[index], sizeof(WAVEHDR)), "falha ao preparar buffer RX");
-            checkMmResult(waveInAddBuffer(handle, &headers[index], sizeof(WAVEHDR)), "falha ao adicionar buffer RX");
+            checkMmResult(waveInPrepareHeader(handle, &headers[index], sizeof(WAVEHDR)), "failed to prepare RX buffer");
+            checkMmResult(waveInAddBuffer(handle, &headers[index], sizeof(WAVEHDR)), "failed to add RX buffer");
         }
 
-        checkMmResult(waveInStart(handle), "falha ao iniciar RX");
+        checkMmResult(waveInStart(handle), "failed to start RX");
 
         while (!stopRequested_) {
             for (int index = 0; index < kBufferCount; ++index) {
@@ -230,7 +230,7 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
 
                 header.dwBytesRecorded = 0;
                 header.dwFlags &= ~WHDR_DONE;
-                checkMmResult(waveInAddBuffer(handle, &header, sizeof(WAVEHDR)), "falha ao reciclar buffer RX");
+                checkMmResult(waveInAddBuffer(handle, &header, sizeof(WAVEHDR)), "failed to recycle RX buffer");
 
                 SamplesCallback callback;
                 {
@@ -272,7 +272,7 @@ void AudioInput::recordThread(unsigned int deviceId, int sampleRate) {
     (void)deviceId;
     (void)sampleRate;
     std::lock_guard<std::mutex> lock(mutex_);
-    lastError_ = "captura de audio ainda nao suportada nesta plataforma";
+    lastError_ = "audio capture is not supported on this platform yet";
     recording_ = false;
 #endif
 }

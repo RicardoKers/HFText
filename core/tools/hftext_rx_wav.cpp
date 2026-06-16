@@ -11,15 +11,15 @@ namespace {
 
 void printUsage(const char* program) {
     std::cerr
-        << "Uso: " << program << " [opcoes] <entrada.wav>\n"
+        << "Usage: " << program << " [options] <input.wav>\n"
         << "\n"
-        << "Opcoes:\n"
-        << "  --symbol-duration <s>       padrao: 0.5\n"
-        << "  --mode <2fsk|4fsk>          padrao: 2fsk; 4fsk e experimental v0.2\n"
-        << "  --f0 <Hz>                   padrao: 1200\n"
-        << "  --f1 <Hz>                   padrao: 1600; em 4fsk define o segundo tom e o espacamento\n"
-        << "  --no-sync-search            nao tenta offsets iniciais de amostra\n"
-        << "  --verbose                   imprime diagnostico de sincronismo\n";
+        << "Options:\n"
+        << "  --symbol-duration <s>       default: 0.5\n"
+        << "  --mode <2fsk|4fsk|8fsk>     default: 2fsk; 4fsk/8fsk are experimental\n"
+        << "  --f0 <Hz>                   default: 1200\n"
+        << "  --f1 <Hz>                   default: 1600; in MFSK defines the second tone and spacing\n"
+        << "  --no-sync-search            do not try initial sample offsets\n"
+        << "  --verbose                   print synchronization diagnostics\n";
 }
 
 void setMode(hftext::ModemConfig& config, const std::string& value) {
@@ -31,11 +31,23 @@ void setMode(hftext::ModemConfig& config, const std::string& value) {
         config.modulationMode = hftext::ModulationMode::Fsk4;
         return;
     }
-    throw std::invalid_argument("modo invalido: " + value);
+    if (value == "8fsk") {
+        config.modulationMode = hftext::ModulationMode::Fsk8;
+        return;
+    }
+    throw std::invalid_argument("invalid mode: " + value);
 }
 
 const char* modeName(hftext::ModulationMode mode) {
-    return mode == hftext::ModulationMode::Fsk4 ? "robust-v0.2-exp-4fsk" : "robust-v0.1-2fsk";
+    switch (mode) {
+    case hftext::ModulationMode::Fsk8:
+        return "robust-v0.3-exp-8fsk";
+    case hftext::ModulationMode::Fsk4:
+        return "robust-v0.2-exp-4fsk";
+    case hftext::ModulationMode::Fsk2:
+    default:
+        return "robust-v0.1-2fsk";
+    }
 }
 
 }  // namespace
@@ -50,7 +62,7 @@ int main(int argc, char** argv) {
             const std::string arg = argv[index];
             auto requireValue = [&](const std::string& option) -> std::string {
                 if (index + 1 >= argc) {
-                    throw std::invalid_argument("opcao sem valor: " + option);
+                    throw std::invalid_argument("missing value for option: " + option);
                 }
                 return argv[++index];
             };
@@ -74,7 +86,7 @@ int main(int argc, char** argv) {
             } else if (inputPath.empty()) {
                 inputPath = arg;
             } else {
-                throw std::invalid_argument("argumento inesperado: " + arg);
+                throw std::invalid_argument("unexpected argument: " + arg);
             }
         }
 
@@ -90,7 +102,7 @@ int main(int argc, char** argv) {
             if (!verbose) {
                 return;
             }
-            std::cout << "Modo: " << modeName(config.modulationMode) << "\n";
+            std::cout << "Mode: " << modeName(config.modulationMode) << "\n";
             std::cout << "Sample rate: " << config.sampleRate << " Hz\n";
             std::cout << "Start offset: " << result.startOffset << " samples\n";
             std::cout << "Offsets tried: " << result.offsetsTried << "\n";
@@ -100,22 +112,22 @@ int main(int argc, char** argv) {
         };
 
         if (!result.frameDetected) {
-            std::cout << "Quadro nao detectado: " << result.error << "\n";
+            std::cout << "Frame not detected: " << result.error << "\n";
             printDiagnostics();
             return 1;
         }
         if (!result.crcOk) {
-            std::cout << "Quadro detectado, mas CRC invalido.\n";
+            std::cout << "Frame detected, but CRC is invalid.\n";
             if (!result.error.empty()) {
-                std::cout << "Erro: " << result.error << "\n";
+                std::cout << "Error: " << result.error << "\n";
             }
             printDiagnostics();
             return 2;
         }
         if (!result.payloadValid) {
-            std::cout << "Quadro detectado, CRC valido, mas payload invalido.\n";
+            std::cout << "Frame detected, CRC is valid, but payload is invalid.\n";
             if (!result.error.empty()) {
-                std::cout << "Erro: " << result.error << "\n";
+                std::cout << "Error: " << result.error << "\n";
             }
             printDiagnostics();
             return 3;
@@ -125,7 +137,7 @@ int main(int argc, char** argv) {
         printDiagnostics();
         return 0;
     } catch (const std::exception& exc) {
-        std::cerr << "Erro: " << exc.what() << "\n";
+        std::cerr << "Error: " << exc.what() << "\n";
         return 1;
     }
 }
