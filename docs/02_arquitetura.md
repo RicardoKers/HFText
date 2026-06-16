@@ -70,11 +70,12 @@ They are useful for tests, packaging checks, and replaying field captures. They 
 `pc-app/` is a Qt 6 Widgets application. It provides:
 
 - a chat-style operation screen;
+- a Fast/Slow operating profile selector;
 - direct sound-card TX;
 - continuous sound-card RX;
 - waterfall and tone markers;
-- RX state/session/quality/level diagnostics;
-- settings, logs, WAV debug tools, and evidence export.
+- a local editable `hftext.ini` file for advanced modem parameters;
+- compact settings, logs, and evidence export.
 
 `ModemController` connects the UI to the C++ core. It must not implement DSP logic itself.
 

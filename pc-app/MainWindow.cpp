@@ -4,6 +4,7 @@
 #include "hftext_version.h"
 #include "wav_io.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
@@ -20,11 +21,8 @@
 #include <QScrollArea>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QDoubleSpinBox>
 #include <QFile>
 #include <QSettings>
-#include <QSignalBlocker>
-#include <QSpinBox>
 #include <QStringList>
 #include <QStyle>
 #include <QTabWidget>
@@ -55,11 +53,12 @@ constexpr int kAcceptedRxStateHoldSeconds = 60;
 constexpr int kNormalRxProgressLogStepPercent = 10;
 constexpr float kRejectedCandidateUiConfidenceFloor = 0.10F;
 constexpr int kDefaultSampleRate = 48000;
-constexpr double kDefaultSymbolDurationSec = 0.5;
-constexpr double kDefaultBaseFrequencyHz = 1200.0;
-constexpr double kDefaultToneSpacingHz = 400.0;
-constexpr double kDefaultAmplitude = 0.80;
-constexpr int kDefaultPreambleBits = 64;
+constexpr double kDefaultFastSymbolDurationSec = 0.100;
+constexpr double kDefaultSlowSymbolDurationSec = 0.300;
+constexpr double kDefaultBaseFrequencyHz = 1050.0;
+constexpr double kDefaultToneSpacingHz = 130.0;
+constexpr double kDefaultAmplitude = 0.05;
+constexpr int kDefaultPreambleBits = 72;
 
 void validateTonesBelowNyquist(const hftext::ModemConfig& config) {
     const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
@@ -68,17 +67,34 @@ void validateTonesBelowNyquist(const hftext::ModemConfig& config) {
     }
 }
 
-hftext::ModulationMode modulationModeFromCombo(const QComboBox* combo) {
-    if (combo == nullptr) {
-        return hftext::ModulationMode::Fsk2;
+QString modulationModeIniName(hftext::ModulationMode mode) {
+    switch (mode) {
+    case hftext::ModulationMode::Fsk8:
+        return "8fsk";
+    case hftext::ModulationMode::Fsk4:
+        return "4fsk";
+    case hftext::ModulationMode::Fsk2:
+    default:
+        return "2fsk";
     }
-    if (combo->currentData().toInt() == 8) {
+}
+
+hftext::ModulationMode modulationModeFromIniValue(const QString& value, hftext::ModulationMode fallback) {
+    QString normalized = value.trimmed().toLower();
+    normalized.remove('-');
+    normalized.remove('_');
+    normalized.remove(' ');
+
+    if (normalized == "8" || normalized == "8fsk") {
         return hftext::ModulationMode::Fsk8;
     }
-    if (combo->currentData().toInt() == 4) {
+    if (normalized == "4" || normalized == "4fsk") {
         return hftext::ModulationMode::Fsk4;
     }
-    return hftext::ModulationMode::Fsk2;
+    if (normalized == "2" || normalized == "2fsk") {
+        return hftext::ModulationMode::Fsk2;
+    }
+    return fallback;
 }
 
 QString modulationModeName(hftext::ModulationMode mode) {
@@ -582,16 +598,23 @@ MainWindow::MainWindow(QWidget* parent)
     waterfallWidget_ = new WaterfallWidget(this);
     operationLayout->addWidget(waterfallWidget_, 2);
 
+    auto* txStatusLayout = new QHBoxLayout();
+    txStatusLayout->addWidget(new QLabel("Speed", this));
+    speedProfileCombo_ = new QComboBox(this);
+    speedProfileCombo_->addItem("Fast", "fast");
+    speedProfileCombo_->addItem("Slow", "slow");
+    txStatusLayout->addWidget(speedProfileCombo_);
+    txEstimateLabel_ = new QLabel(this);
+    txEstimateLabel_->setWordWrap(true);
+    txStatusLayout->addWidget(txEstimateLabel_, 1);
+    operationLayout->addLayout(txStatusLayout);
+
     txProgressBar_ = new QProgressBar(this);
     txProgressBar_->setRange(0, 1000);
     txProgressBar_->setValue(0);
     txProgressBar_->setTextVisible(false);
     txProgressBar_->setMaximumHeight(10);
     operationLayout->addWidget(txProgressBar_);
-
-    txEstimateLabel_ = new QLabel(this);
-    txEstimateLabel_->setWordWrap(true);
-    operationLayout->addWidget(txEstimateLabel_);
 
     auto* composerLayout = new QHBoxLayout();
     messageEdit_ = new QPlainTextEdit(this);
@@ -616,64 +639,6 @@ MainWindow::MainWindow(QWidget* parent)
     versionLabel->setWordWrap(true);
     configForm->addRow("Version", versionLabel);
 
-    modulationModeCombo_ = new QComboBox(this);
-    modulationModeCombo_->addItem("2-FSK robust v0.1", 2);
-    modulationModeCombo_->addItem("4-FSK experimental v0.2", 4);
-    modulationModeCombo_->addItem("8-FSK experimental v0.3", 8);
-    configForm->addRow("Modulation", modulationModeCombo_);
-
-    sampleRateSpin_ = new QSpinBox(this);
-    sampleRateSpin_->setRange(8000, 192000);
-    sampleRateSpin_->setSingleStep(1000);
-    sampleRateSpin_->setSuffix(" Hz");
-    sampleRateSpin_->setValue(controller_.config().sampleRate);
-    configForm->addRow("Sample rate TX", sampleRateSpin_);
-
-    rxSampleRateSpin_ = new QSpinBox(this);
-    rxSampleRateSpin_->setRange(8000, 192000);
-    rxSampleRateSpin_->setSingleStep(1000);
-    rxSampleRateSpin_->setSuffix(" Hz");
-    rxSampleRateSpin_->setValue(48000);
-    configForm->addRow("Sample rate RX", rxSampleRateSpin_);
-
-    symbolDurationSpin_ = new QDoubleSpinBox(this);
-    symbolDurationSpin_->setRange(0.005, 5.0);
-    symbolDurationSpin_->setSingleStep(0.05);
-    symbolDurationSpin_->setDecimals(3);
-    symbolDurationSpin_->setSuffix(" s");
-    symbolDurationSpin_->setValue(controller_.config().symbolDurationSec);
-    configForm->addRow("Symbol duration", symbolDurationSpin_);
-
-    frequency0Spin_ = new QDoubleSpinBox(this);
-    frequency0Spin_->setRange(20.0, 20000.0);
-    frequency0Spin_->setSingleStep(50.0);
-    frequency0Spin_->setDecimals(1);
-    frequency0Spin_->setSuffix(" Hz");
-    frequency0Spin_->setValue(controller_.config().frequency0Hz);
-    configForm->addRow("Base frequency", frequency0Spin_);
-
-    frequency1Spin_ = new QDoubleSpinBox(this);
-    frequency1Spin_->setRange(1.0, 5000.0);
-    frequency1Spin_->setSingleStep(10.0);
-    frequency1Spin_->setDecimals(1);
-    frequency1Spin_->setSuffix(" Hz");
-    frequency1Spin_->setValue(controller_.config().frequency1Hz - controller_.config().frequency0Hz);
-    configForm->addRow("Tone spacing", frequency1Spin_);
-
-    amplitudeSpin_ = new QDoubleSpinBox(this);
-    amplitudeSpin_->setRange(0.0, 1.0);
-    amplitudeSpin_->setSingleStep(0.05);
-    amplitudeSpin_->setDecimals(2);
-    amplitudeSpin_->setValue(controller_.config().amplitude);
-    configForm->addRow("Amplitude", amplitudeSpin_);
-
-    preambleBitsSpin_ = new QSpinBox(this);
-    preambleBitsSpin_->setRange(0, 256);
-    preambleBitsSpin_->setSingleStep(8);
-    preambleBitsSpin_->setSuffix(" bits");
-    preambleBitsSpin_->setValue(controller_.config().preambleBits);
-    configForm->addRow("Preamble", preambleBitsSpin_);
-
     outputDeviceCombo_ = new QComboBox(this);
     configForm->addRow("Audio output", outputDeviceCombo_);
     populateOutputDevices();
@@ -690,28 +655,28 @@ MainWindow::MainWindow(QWidget* parent)
     rxLevelBar_->setRange(0, 100);
     rxLevelBar_->setValue(0);
     rxLevelBar_->setTextVisible(false);
-    configForm->addRow("RX level", rxLevelBar_);
+    rxLevelBar_->setVisible(false);
 
     rxFrameProgressBar_ = new QProgressBar(this);
     rxFrameProgressBar_->setRange(0, 1000);
     rxFrameProgressBar_->setValue(0);
     rxFrameProgressBar_->setFormat("%p%");
-    configForm->addRow("RX progress", rxFrameProgressBar_);
+    rxFrameProgressBar_->setVisible(false);
 
     rxQualityBar_ = new QProgressBar(this);
     rxQualityBar_->setRange(0, 1000);
     rxQualityBar_->setValue(0);
     rxQualityBar_->setFormat("%p%");
-    configForm->addRow("RX quality", rxQualityBar_);
+    rxQualityBar_->setVisible(false);
 
     rxDiagnosticLabel_ = new QLabel(this);
     rxDiagnosticLabel_->setWordWrap(true);
-    configForm->addRow("RX state", rxDiagnosticLabel_);
+    rxDiagnosticLabel_->setVisible(false);
     resetRxDiagnostic("Stopped");
 
     rxSessionLabel_ = new QLabel(this);
     rxSessionLabel_->setWordWrap(true);
-    configForm->addRow("RX session", rxSessionLabel_);
+    rxSessionLabel_->setVisible(false);
     resetRxSessionCounters();
 
     configLayout->addLayout(configForm);
@@ -729,14 +694,6 @@ MainWindow::MainWindow(QWidget* parent)
     rxButtons->addWidget(stopReceiveButton_);
     rxButtons->addStretch(1);
     configLayout->addLayout(rxButtons);
-
-    auto* wavButtons = new QHBoxLayout();
-    generateButton_ = new QPushButton("Generate WAV", this);
-    decodeButton_ = new QPushButton("Decode WAV", this);
-    wavButtons->addWidget(generateButton_);
-    wavButtons->addWidget(decodeButton_);
-    wavButtons->addStretch(1);
-    configLayout->addLayout(wavButtons);
 
     auto* logHeader = new QHBoxLayout();
     logHeader->addWidget(new QLabel("Log", this));
@@ -763,13 +720,13 @@ MainWindow::MainWindow(QWidget* parent)
 
     setCentralWidget(central);
     resize(720, 520);
+    loadModemConfigFile();
     loadSettings();
+    applySelectedSpeedProfile();
 
-    connect(generateButton_, &QPushButton::clicked, this, &MainWindow::generateWav);
     connect(transmitButton_, &QPushButton::clicked, this, &MainWindow::transmitWav);
     connect(startReceiveButton_, &QPushButton::clicked, this, &MainWindow::startReceive);
     connect(stopReceiveButton_, &QPushButton::clicked, this, &MainWindow::stopReceive);
-    connect(decodeButton_, &QPushButton::clicked, this, &MainWindow::decodeWav);
     connect(saveLogButton_, &QPushButton::clicked, this, &MainWindow::saveLog);
     connect(clearLogButton_, &QPushButton::clicked, this, &MainWindow::clearLog);
     connect(saveEvidenceButton_, &QPushButton::clicked, this, &MainWindow::saveFieldEvidence);
@@ -784,18 +741,7 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(callsignEdit_, &QLineEdit::textChanged, this, &MainWindow::updateTxEstimate);
     connect(messageEdit_, &QPlainTextEdit::textChanged, this, &MainWindow::sanitizeTxMessage);
-    connect(modulationModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::updateTxEstimate);
-    connect(modulationModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::updateWaterfallMarkers);
-    connect(modulationModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::restartReceiveIfActive);
-    connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
-    connect(symbolDurationSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
-    connect(frequency0Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateWaterfallMarkers);
-    connect(frequency0Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
-    connect(frequency1Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::updateWaterfallMarkers);
-    connect(frequency1Spin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
-    connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::updateTxEstimate);
-    connect(preambleBitsSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
-    connect(rxSampleRateSpin_, qOverload<int>(&QSpinBox::valueChanged), this, &MainWindow::restartReceiveIfActive);
+    connect(speedProfileCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::applySelectedSpeedProfile);
     connect(inputDeviceCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &MainWindow::restartReceiveIfActive);
     connect(detailedRxLogCheck_, &QCheckBox::toggled, this, &MainWindow::restartReceiveIfActive);
 
@@ -810,6 +756,11 @@ MainWindow::MainWindow(QWidget* parent)
     updateWaterfallMarkers();
     setReceiveControlsRecording(false);
     appendLog("Application: " + versionDisplayText());
+    appendLog("Modem config: " + modemConfigPath_);
+    if (!modemConfigWarning_.isEmpty()) {
+        appendLog("Modem config warning: " + modemConfigWarning_);
+    }
+    appendLog("Speed profile: " + speedProfileDescription(selectedSpeedProfileKey()));
     QTimer::singleShot(0, this, [this]() {
         if (inputDeviceCombo_ != nullptr && inputDeviceCombo_->isEnabled() && inputDeviceCombo_->count() > 0) {
             startReceive();
@@ -1067,7 +1018,7 @@ void MainWindow::updateTxProgress() {
         txProgressTimer_->stop();
         txProgressBar_->setValue(1000);
         setTransmitButtonTransmitting(false);
-        appendLog("TX concluido.");
+        appendLog("TX completed.");
     }
 }
 
@@ -1123,20 +1074,32 @@ void MainWindow::updateTxEstimate() {
 }
 
 void MainWindow::updateWaterfallMarkers() {
-    if (waterfallWidget_ == nullptr || frequency0Spin_ == nullptr || frequency1Spin_ == nullptr) {
+    if (waterfallWidget_ == nullptr) {
         return;
     }
 
     hftext::ModemConfig config;
-    config.frequency0Hz = static_cast<float>(frequency0Spin_->value());
-    config.frequency1Hz = static_cast<float>(frequency0Spin_->value() + frequency1Spin_->value());
-    config.modulationMode = modulationModeFromCombo(modulationModeCombo_);
+    try {
+        config = readConfig();
+    } catch (const std::exception&) {
+        return;
+    }
     std::vector<double> frequencies;
     frequencies.reserve(static_cast<std::size_t>(hftext::toneCount(config.modulationMode)));
     for (int tone = 0; tone < hftext::toneCount(config.modulationMode); ++tone) {
         frequencies.push_back(hftext::modulationToneFrequencyHz(config, tone));
     }
     waterfallWidget_->setMarkerFrequencies(frequencies);
+}
+
+void MainWindow::applySelectedSpeedProfile() {
+    const bool wasRecording = audioInput_.isRecording();
+    updateTxEstimate();
+    updateWaterfallMarkers();
+    if (wasRecording) {
+        appendLog("RX restarted to apply speed profile: " + speedProfileDescription(selectedSpeedProfileKey()));
+        restartReceiveIfActive();
+    }
 }
 
 void MainWindow::restartReceiveIfActive() {
@@ -1154,32 +1117,17 @@ void MainWindow::restartReceiveIfActive() {
 void MainWindow::applyDefaultSettings() {
     const bool wasRecording = audioInput_.isRecording();
 
-    const QSignalBlocker modeBlocker(modulationModeCombo_);
-    const QSignalBlocker sampleRateBlocker(sampleRateSpin_);
-    const QSignalBlocker rxSampleRateBlocker(rxSampleRateSpin_);
-    const QSignalBlocker symbolDurationBlocker(symbolDurationSpin_);
-    const QSignalBlocker baseFrequencyBlocker(frequency0Spin_);
-    const QSignalBlocker spacingBlocker(frequency1Spin_);
-    const QSignalBlocker amplitudeBlocker(amplitudeSpin_);
-    const QSignalBlocker preambleBlocker(preambleBitsSpin_);
-    const QSignalBlocker detailedLogBlocker(detailedRxLogCheck_);
-
-    const int modeIndex = modulationModeCombo_->findData(2);
-    if (modeIndex >= 0) {
-        modulationModeCombo_->setCurrentIndex(modeIndex);
+    if (!writeDefaultModemConfigFile()) {
+        QMessageBox::warning(this, "HFText", "Could not write hftext.ini.");
+        appendLog("Error while writing modem defaults: " + modemConfigPath_);
+        return;
     }
-    sampleRateSpin_->setValue(kDefaultSampleRate);
-    rxSampleRateSpin_->setValue(kDefaultSampleRate);
-    symbolDurationSpin_->setValue(kDefaultSymbolDurationSec);
-    frequency0Spin_->setValue(kDefaultBaseFrequencyHz);
-    frequency1Spin_->setValue(kDefaultToneSpacingHz);
-    amplitudeSpin_->setValue(kDefaultAmplitude);
-    preambleBitsSpin_->setValue(kDefaultPreambleBits);
-    detailedRxLogCheck_->setChecked(false);
 
+    loadModemConfigFile();
+    detailedRxLogCheck_->setChecked(false);
     updateTxEstimate();
     updateWaterfallMarkers();
-    appendLog("Default parameters loaded.");
+    appendLog("Default modem configuration written: " + modemConfigPath_);
     if (wasRecording) {
         restartReceiveIfActive();
     }
@@ -1290,23 +1238,26 @@ void MainWindow::appendReceivedLine(const QString& text) {
 }
 
 void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
+    const auto txConfig = readConfig();
+    const auto rxConfig = readRxConfig();
+
     stream << title << '\n';
     stream << "Generated at: " << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
     stream << "HFText version: " << hftext::kVersion << '\n';
     stream << "Release track: " << hftext::kReleaseTrack << '\n';
     stream << "Protocol: " << hftext::kProtocolVersion << '\n';
     stream << "Callsign: " << callsignEdit_->text().trimmed() << '\n';
-    stream << "Modulation: " << modulationModeName(modulationModeFromCombo(modulationModeCombo_)) << '\n';
-    stream << "Sample rate TX/WAV: " << sampleRateSpin_->value() << " Hz\n";
-    stream << "Sample rate RX: " << rxSampleRateSpin_->value() << " Hz\n";
-    stream << "Symbol duration: " << QString::number(symbolDurationSpin_->value(), 'f', 3) << " s\n";
-    stream << "Base frequency: " << QString::number(frequency0Spin_->value(), 'f', 1) << " Hz\n";
-    stream << "Tone spacing: " << QString::number(frequency1Spin_->value(), 'f', 1) << " Hz\n";
-    stream << "Derived second tone: "
-           << QString::number(frequency0Spin_->value() + frequency1Spin_->value(), 'f', 1)
-           << " Hz\n";
-    stream << "Amplitude: " << QString::number(amplitudeSpin_->value(), 'f', 2) << '\n';
-    stream << "Preamble: " << preambleBitsSpin_->value() << " bits\n";
+    stream << "Speed profile: " << speedProfileDescription(selectedSpeedProfileKey()) << '\n';
+    stream << "Modem config file: " << modemConfigPath_ << '\n';
+    stream << "Modulation: " << modulationModeName(txConfig.modulationMode) << '\n';
+    stream << "Sample rate TX/WAV: " << txConfig.sampleRate << " Hz\n";
+    stream << "Sample rate RX: " << rxConfig.sampleRate << " Hz\n";
+    stream << "Symbol duration: " << QString::number(txConfig.symbolDurationSec, 'f', 3) << " s\n";
+    stream << "Base frequency: " << QString::number(txConfig.frequency0Hz, 'f', 1) << " Hz\n";
+    stream << "Tone spacing: " << QString::number(hftext::modulationToneSpacingHz(txConfig), 'f', 1) << " Hz\n";
+    stream << "Derived second tone: " << QString::number(txConfig.frequency1Hz, 'f', 1) << " Hz\n";
+    stream << "Amplitude: " << QString::number(txConfig.amplitude, 'f', 2) << '\n';
+    stream << "Preamble: " << txConfig.preambleBits << " bits\n";
     stream << "Audio output: " << outputDeviceCombo_->currentText() << '\n';
     stream << "Audio input: " << inputDeviceCombo_->currentText() << '\n';
     stream << "Detailed RX log: " << (detailedRxLogCheck_->isChecked() ? "yes" : "no") << '\n';
@@ -1325,6 +1276,8 @@ void MainWindow::writeFieldSummaryCsv(
     std::size_t sampleCount,
     int sampleRate
 ) const {
+    const auto txConfig = readConfig();
+    const auto rxConfig = readRxConfig();
     const auto elapsedMsecs = rxSessionStartedAtMsecs_ <= 0
         ? 0
         : QDateTime::currentMSecsSinceEpoch() - rxSessionStartedAtMsecs_;
@@ -1340,7 +1293,7 @@ void MainWindow::writeFieldSummaryCsv(
     stream << "--- Summary CSV ---\n";
     stream
         << "generated_at,hftext_version,release_track,protocol,callsign,modulation,"
-        << "symbol_duration_s,tx_sample_rate_hz,rx_sample_rate_hz,"
+        << "speed_profile,modem_config_file,symbol_duration_s,tx_sample_rate_hz,rx_sample_rate_hz,"
         << "f0_hz,f1_hz,tone_spacing_hz,amplitude,preamble_bits,detailed_log,"
         << "rx_elapsed_s,rx_accepted,accepted_frames,rx_rejected_strong,rx_phys_length,rx_sync,"
         << "rx_quality,last_phys_length,last_reject,received_lines,received_text,"
@@ -1356,15 +1309,17 @@ void MainWindow::writeFieldSummaryCsv(
         << csvCell(QString::fromLatin1(hftext::kReleaseTrack)) << ','
         << csvCell(QString::fromLatin1(hftext::kProtocolVersion)) << ','
         << csvCell(callsignEdit_->text().trimmed()) << ','
-        << csvCell(modulationModeName(modulationModeFromCombo(modulationModeCombo_))) << ','
-        << QString::number(symbolDurationSpin_->value(), 'f', 3) << ','
-        << sampleRateSpin_->value() << ','
-        << rxSampleRateSpin_->value() << ','
-        << QString::number(frequency0Spin_->value(), 'f', 1) << ','
-        << QString::number(frequency0Spin_->value() + frequency1Spin_->value(), 'f', 1) << ','
-        << QString::number(frequency1Spin_->value(), 'f', 1) << ','
-        << QString::number(amplitudeSpin_->value(), 'f', 2) << ','
-        << preambleBitsSpin_->value() << ','
+        << csvCell(modulationModeName(txConfig.modulationMode)) << ','
+        << csvCell(selectedSpeedProfileKey()) << ','
+        << csvCell(modemConfigPath_) << ','
+        << QString::number(txConfig.symbolDurationSec, 'f', 3) << ','
+        << txConfig.sampleRate << ','
+        << rxConfig.sampleRate << ','
+        << QString::number(txConfig.frequency0Hz, 'f', 1) << ','
+        << QString::number(txConfig.frequency1Hz, 'f', 1) << ','
+        << QString::number(hftext::modulationToneSpacingHz(txConfig), 'f', 1) << ','
+        << QString::number(txConfig.amplitude, 'f', 2) << ','
+        << txConfig.preambleBits << ','
         << csvBool(detailedRxLogCheck_->isChecked()) << ','
         << QString::number(elapsedSeconds, 'f', 2) << ','
         << rxSessionAcceptedCount_ << ','
@@ -1704,29 +1659,122 @@ void MainWindow::setReceiveControlsRecording(bool recording) {
     }
 }
 
+QString MainWindow::selectedSpeedProfileKey() const {
+    if (speedProfileCombo_ == nullptr) {
+        return "slow";
+    }
+    const QString key = speedProfileCombo_->currentData().toString().trimmed().toLower();
+    return key == "fast" ? "fast" : "slow";
+}
+
+QString MainWindow::speedProfileDescription(const QString& profileKey) const {
+    const QString normalized = profileKey.trimmed().toLower();
+    const hftext::ModulationMode mode = normalized == "fast" ? fastModulationMode_ : slowModulationMode_;
+    const double symbolDuration = normalized == "fast" ? fastSymbolDurationSec_ : slowSymbolDurationSec_;
+    return QString("%1 (%2, %3 s/symbol)")
+        .arg(normalized == "fast" ? "Fast" : "Slow")
+        .arg(modulationModeName(mode))
+        .arg(symbolDuration, 0, 'f', 3);
+}
+
+bool MainWindow::writeDefaultModemConfigFile() const {
+    QFile file(modemConfigPath_);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return false;
+    }
+
+    QTextStream stream(&file);
+    stream
+        << "; HFText modem configuration.\n"
+        << "; Edit this file for debug or field experiments, then restart HFText or press Load defaults to recreate it.\n"
+        << "; Supported modulation values: 2fsk, 4fsk, 8fsk.\n\n"
+        << "[common]\n"
+        << "tx_sample_rate_hz=" << kDefaultSampleRate << '\n'
+        << "rx_sample_rate_hz=" << kDefaultSampleRate << '\n'
+        << "base_frequency_hz=" << QString::number(kDefaultBaseFrequencyHz, 'f', 1) << '\n'
+        << "tone_spacing_hz=" << QString::number(kDefaultToneSpacingHz, 'f', 1) << '\n'
+        << "amplitude=" << QString::number(kDefaultAmplitude, 'f', 2) << '\n'
+        << "preamble_bits=" << kDefaultPreambleBits << "\n\n"
+        << "[slow]\n"
+        << "modulation=8fsk\n"
+        << "symbol_duration_s=" << QString::number(kDefaultSlowSymbolDurationSec, 'f', 3) << "\n\n"
+        << "[fast]\n"
+        << "modulation=8fsk\n"
+        << "symbol_duration_s=" << QString::number(kDefaultFastSymbolDurationSec, 'f', 3) << '\n';
+
+    return true;
+}
+
+void MainWindow::loadModemConfigFile() {
+    modemConfigPath_ = QDir(QCoreApplication::applicationDirPath()).filePath("hftext.ini");
+    modemConfigWarning_.clear();
+
+    if (!QFile::exists(modemConfigPath_) && !writeDefaultModemConfigFile()) {
+        modemConfigWarning_ = "could not create hftext.ini; using built-in defaults";
+    }
+
+    txSampleRate_ = kDefaultSampleRate;
+    rxSampleRate_ = kDefaultSampleRate;
+    baseFrequencyHz_ = kDefaultBaseFrequencyHz;
+    toneSpacingHz_ = kDefaultToneSpacingHz;
+    amplitude_ = kDefaultAmplitude;
+    preambleBits_ = kDefaultPreambleBits;
+    slowModulationMode_ = hftext::ModulationMode::Fsk8;
+    fastModulationMode_ = hftext::ModulationMode::Fsk8;
+    slowSymbolDurationSec_ = kDefaultSlowSymbolDurationSec;
+    fastSymbolDurationSec_ = kDefaultFastSymbolDurationSec;
+
+    QSettings ini(modemConfigPath_, QSettings::IniFormat);
+    txSampleRate_ = ini.value("common/tx_sample_rate_hz", txSampleRate_).toInt();
+    rxSampleRate_ = ini.value("common/rx_sample_rate_hz", rxSampleRate_).toInt();
+    baseFrequencyHz_ = ini.value("common/base_frequency_hz", baseFrequencyHz_).toDouble();
+    toneSpacingHz_ = ini.value("common/tone_spacing_hz", toneSpacingHz_).toDouble();
+    amplitude_ = ini.value("common/amplitude", amplitude_).toDouble();
+    preambleBits_ = ini.value("common/preamble_bits", preambleBits_).toInt();
+    slowModulationMode_ = modulationModeFromIniValue(
+        ini.value("slow/modulation", modulationModeIniName(slowModulationMode_)).toString(),
+        slowModulationMode_
+    );
+    fastModulationMode_ = modulationModeFromIniValue(
+        ini.value("fast/modulation", modulationModeIniName(fastModulationMode_)).toString(),
+        fastModulationMode_
+    );
+    slowSymbolDurationSec_ = ini.value("slow/symbol_duration_s", slowSymbolDurationSec_).toDouble();
+    fastSymbolDurationSec_ = ini.value("fast/symbol_duration_s", fastSymbolDurationSec_).toDouble();
+}
+
+hftext::ModemConfig MainWindow::configForSpeedProfile(const QString& profileKey, int sampleRate) const {
+    const QString normalized = profileKey.trimmed().toLower();
+    hftext::ModemConfig config;
+    config.sampleRate = sampleRate;
+    config.symbolDurationSec = static_cast<float>(
+        normalized == "fast" ? fastSymbolDurationSec_ : slowSymbolDurationSec_
+    );
+    config.frequency0Hz = static_cast<float>(baseFrequencyHz_);
+    config.frequency1Hz = static_cast<float>(baseFrequencyHz_ + toneSpacingHz_);
+    config.amplitude = static_cast<float>(amplitude_);
+    config.preambleBits = preambleBits_;
+    config.modulationMode = normalized == "fast" ? fastModulationMode_ : slowModulationMode_;
+    validateTonesBelowNyquist(config);
+    if (config.frequency0Hz == config.frequency1Hz) {
+        throw std::invalid_argument("tone spacing must be positive");
+    }
+    if (hftext::toneCount(config.modulationMode) > 2 && hftext::modulationToneSpacingHz(config) <= 0.0F) {
+        throw std::invalid_argument("MFSK requires positive tone spacing");
+    }
+    return config;
+}
+
 void MainWindow::loadSettings() {
     QSettings settings("HFText", "HFText");
 
     restoreGeometry(settings.value("windowGeometry").toByteArray());
     callsignEdit_->setText(settings.value("callsign", callsignEdit_->text()).toString());
-    const int savedMode = settings.value("modulationMode", 2).toInt();
-    const int modeIndex = modulationModeCombo_->findData(savedMode);
-    if (modeIndex >= 0) {
-        modulationModeCombo_->setCurrentIndex(modeIndex);
+    const QString savedSpeed = settings.value("speedProfile", "slow").toString().toLower();
+    const int speedIndex = speedProfileCombo_->findData(savedSpeed == "fast" ? "fast" : "slow");
+    if (speedIndex >= 0) {
+        speedProfileCombo_->setCurrentIndex(speedIndex);
     }
-    sampleRateSpin_->setValue(settings.value("sampleRate", sampleRateSpin_->value()).toInt());
-    rxSampleRateSpin_->setValue(settings.value("rxSampleRate", rxSampleRateSpin_->value()).toInt());
-    symbolDurationSpin_->setValue(settings.value("symbolDuration", symbolDurationSpin_->value()).toDouble());
-    const double baseFrequency = settings.value("frequency0", frequency0Spin_->value()).toDouble();
-    frequency0Spin_->setValue(baseFrequency);
-    if (settings.contains("toneSpacing")) {
-        frequency1Spin_->setValue(settings.value("toneSpacing", frequency1Spin_->value()).toDouble());
-    } else {
-        const double savedFrequency1 = settings.value("frequency1", baseFrequency + frequency1Spin_->value()).toDouble();
-        frequency1Spin_->setValue(savedFrequency1 > baseFrequency ? savedFrequency1 - baseFrequency : savedFrequency1);
-    }
-    amplitudeSpin_->setValue(settings.value("amplitude", amplitudeSpin_->value()).toDouble());
-    preambleBitsSpin_->setValue(settings.value("preambleBits", preambleBitsSpin_->value()).toInt());
     detailedRxLogCheck_->setChecked(settings.value("detailedRxLog", detailedRxLogCheck_->isChecked()).toBool());
     selectComboText(outputDeviceCombo_, settings.value("outputDevice").toString());
     selectComboText(inputDeviceCombo_, settings.value("inputDevice").toString());
@@ -1737,15 +1785,7 @@ void MainWindow::saveSettings() const {
 
     settings.setValue("windowGeometry", saveGeometry());
     settings.setValue("callsign", callsignEdit_->text());
-    settings.setValue("modulationMode", modulationModeCombo_->currentData().toInt());
-    settings.setValue("sampleRate", sampleRateSpin_->value());
-    settings.setValue("rxSampleRate", rxSampleRateSpin_->value());
-    settings.setValue("symbolDuration", symbolDurationSpin_->value());
-    settings.setValue("frequency0", frequency0Spin_->value());
-    settings.setValue("frequency1", frequency0Spin_->value() + frequency1Spin_->value());
-    settings.setValue("toneSpacing", frequency1Spin_->value());
-    settings.setValue("amplitude", amplitudeSpin_->value());
-    settings.setValue("preambleBits", preambleBitsSpin_->value());
+    settings.setValue("speedProfile", selectedSpeedProfileKey());
     settings.setValue("detailedRxLog", detailedRxLogCheck_->isChecked());
     settings.setValue("outputDevice", outputDeviceCombo_->currentText());
     settings.setValue("inputDevice", inputDeviceCombo_->currentText());
@@ -1966,29 +2006,11 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
 }
 
 hftext::ModemConfig MainWindow::readConfig() const {
-    hftext::ModemConfig config;
-    config.sampleRate = sampleRateSpin_->value();
-    config.symbolDurationSec = static_cast<float>(symbolDurationSpin_->value());
-    config.frequency0Hz = static_cast<float>(frequency0Spin_->value());
-    config.frequency1Hz = static_cast<float>(frequency0Spin_->value() + frequency1Spin_->value());
-    config.amplitude = static_cast<float>(amplitudeSpin_->value());
-    config.preambleBits = preambleBitsSpin_->value();
-    config.modulationMode = modulationModeFromCombo(modulationModeCombo_);
-    validateTonesBelowNyquist(config);
-    if (config.frequency0Hz == config.frequency1Hz) {
-        throw std::invalid_argument("tone spacing must be positive");
-    }
-    if (hftext::toneCount(config.modulationMode) > 2 && hftext::modulationToneSpacingHz(config) <= 0.0F) {
-        throw std::invalid_argument("MFSK requires positive tone spacing");
-    }
-    return config;
+    return configForSpeedProfile(selectedSpeedProfileKey(), txSampleRate_);
 }
 
 hftext::ModemConfig MainWindow::readRxConfig() const {
-    hftext::ModemConfig config = readConfig();
-    config.sampleRate = rxSampleRateSpin_->value();
-    validateTonesBelowNyquist(config);
-    return config;
+    return configForSpeedProfile(selectedSpeedProfileKey(), rxSampleRate_);
 }
 
 void MainWindow::showDecodeResult(const hftext::DecodeResult& result) {

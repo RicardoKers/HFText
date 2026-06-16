@@ -51,8 +51,10 @@ The system must:
 - RX should start automatically when an input device is available.
 - TX should be direct through the sound card; saving WAV first must not be required.
 - The same send button may cancel TX while audio is playing.
-- Settings and diagnostics belong in a separate Settings tab.
-- RX state, RX session, quality, level, and waterfall must help the operator tune and debug.
+- A Fast/Slow speed selector should be available in the Operation tab.
+- Advanced modem parameters should live in an editable `hftext.ini` file instead of cluttering normal operation.
+- Settings and logs belong in a separate Settings tab.
+- Waterfall markers, logs, and evidence export must help the operator tune and debug without overwhelming normal operation.
 - Evidence export must include a WAV capture and a text report with settings, logs, summary CSV, and accepted-frame CSV.
 
 ## Non-Functional Requirements

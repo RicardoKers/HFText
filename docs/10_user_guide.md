@@ -20,19 +20,21 @@ The Operation tab is for normal use:
 
 - received messages at the top;
 - RX waterfall in the middle;
+- Fast/Slow speed selector;
 - short TX estimate and progress;
 - message field and send button at the bottom.
 
-The Settings tab is for configuration, diagnostics, logs, evidence export, and WAV debug tools.
-It scrolls when the window is short, so all controls remain available without forcing the main window to a tall minimum height.
+The Settings tab is for callsign, audio devices, RX control, detailed log toggle, logs, and evidence export.
+
+Advanced modem parameters are stored in `hftext.ini`, created automatically next to `hftext_pc.exe` when missing.
 
 ## Basic Transmit
 
 1. Open Settings.
 2. Confirm the callsign.
 3. Select the audio output device.
-4. Select the modulation and tone settings.
-5. Return to Operation.
+4. Return to Operation.
+5. Select `Fast` or `Slow`.
 6. Type a message.
 7. Press the send button.
 
@@ -50,26 +52,26 @@ Blue waterfall traces are weak/normal energy, yellow indicates strong energy nea
 
 ## Recommended Test Settings
 
-Conservative baseline:
+Default profiles:
 
 ```text
-Modulation: 2-FSK robust v0.1
-Symbol duration: 0.300 s or 0.500 s
-Base frequency: 1200 Hz
-Tone spacing: 400 Hz
-Preamble: 64 bits
+Slow: 8-FSK experimental v0.3, 0.300 s/symbol
+Fast: 8-FSK experimental v0.3, 0.100 s/symbol
 ```
 
-Experimental faster modes:
+Default common modem settings in `hftext.ini`:
 
 ```text
-4-FSK experimental v0.2
-8-FSK experimental v0.3
-Base frequency: 1000 Hz
-Tone spacing: 200 Hz
+TX/RX sample rate: 48000 Hz
+Base frequency: 1050 Hz
+Tone spacing: 130 Hz
+Amplitude: 0.05
+Preamble: 72 bits
 ```
 
-Use real field evidence before trusting an experimental mode for regular operation.
+For debug or field experiments, edit `hftext.ini` and restart HFText. Supported modulation values are `2fsk`, `4fsk`, and `8fsk`.
+
+`Load defaults` in Settings rewrites `hftext.ini` with the default Fast and Slow profiles.
 
 ## Save Evidence
 
@@ -88,7 +90,7 @@ The normal log is filtered for operation: long-frame progress appears in coarse 
 
 ## WAV Debug Tools
 
-`Generate WAV` and `Decode WAV` are debug tools in Settings. Normal operation should use direct TX and continuous RX.
+Normal operation should use direct TX and continuous RX. WAV generation and decoding are debug workflows handled by the CLI tools:
 
 The CLI tools can also be used from a terminal:
 

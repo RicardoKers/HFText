@@ -11,6 +11,7 @@ logs/
 Logs/
 *.wav
 *.log
+hftext.ini
 
 # Release staging folders
 dist/HFText-win64-release-*/

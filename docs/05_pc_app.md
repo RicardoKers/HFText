@@ -23,6 +23,7 @@ The normal operation tab is chat-like:
 
 - received messages at the top;
 - RX waterfall in the middle;
+- Fast/Slow speed selector;
 - compact TX progress and estimate;
 - message field at the bottom;
 - icon send button at the right;
@@ -31,23 +32,37 @@ The normal operation tab is chat-like:
 The Settings tab contains:
 
 - callsign;
-- modulation mode;
-- TX/WAV sample rate;
-- RX sample rate;
-- symbol duration;
-- base frequency;
-- tone spacing;
-- amplitude;
-- preamble length;
 - audio output and input device;
 - detailed RX log toggle;
-- RX level, progress, quality, state, and session diagnostics;
 - manual Start RX / Stop RX controls;
-- WAV debug buttons;
 - log and evidence export buttons;
-- a Load Defaults button.
+- a Load Defaults button that rewrites the default `hftext.ini`.
 
-The Settings tab is scrollable. This keeps the Operation tab usable on shorter window heights while preserving all configuration, diagnostic, log, and evidence controls.
+Advanced modem parameters are stored in `hftext.ini`, created automatically next to `hftext_pc.exe` when missing. This keeps normal operation clean while still allowing debug and field experiments.
+
+Default profiles:
+
+```ini
+[slow]
+modulation=8fsk
+symbol_duration_s=0.300
+
+[fast]
+modulation=8fsk
+symbol_duration_s=0.100
+```
+
+Common defaults:
+
+```ini
+[common]
+tx_sample_rate_hz=48000
+rx_sample_rate_hz=48000
+base_frequency_hz=1050.0
+tone_spacing_hz=130.0
+amplitude=0.05
+preamble_bits=72
+```
 
 ## Normal Operation
 
@@ -55,7 +70,7 @@ RX starts automatically when the app opens and an input device is available. RX 
 
 TX is direct through the selected audio output. The operator does not need to save a WAV first. Transmission happens only after pressing the send button.
 
-If RX-affecting settings change while RX is active, the app restarts RX automatically so the streaming receiver uses the new configuration.
+If the Fast/Slow profile or RX-affecting Settings values change while RX is active, the app restarts RX automatically so the streaming receiver uses the new configuration.
 
 ## Text Handling
 
@@ -70,21 +85,13 @@ The callsign is configured separately and inserted automatically at the beginnin
 
 ## Diagnostics
 
-The Settings tab shows compact live diagnostics:
-
-- RX level;
-- RX progress;
-- RX quality;
-- RX state;
-- RX session counters.
-
 Normal logs are compact and timestamped. Robust-frame progress is summarized in coarse progress milestones, and low-confidence rejected candidates are kept out of the normal log. Detailed RX log shows raw telemetry such as sync candidates, recovered physical length, every robust-frame progress event, candidate rejection, and accepted frames.
 
 The received-message history also prefixes each displayed line with the local date and time, so unattended receive sessions show when each message or decode result arrived.
 
 ## RX State and Session
 
-`RX state` summarizes the most useful recent event:
+The current RX state is no longer shown as a large always-visible Settings field. It is still written to logs and evidence reports. It summarizes the most useful recent event:
 
 - listening;
 - sync detected;
@@ -96,7 +103,7 @@ The received-message history also prefixes each displayed line with the local da
 
 After an accepted message, `RX state` keeps the successful frame visible briefly and labels its quality as `CRC OK` plus the decoder confidence. This prevents weak idle-channel candidates from immediately replacing a valid reception with an invalid-length status.
 
-`RX session` shows elapsed time and consolidated counters:
+`RX session` is also written to logs and evidence reports. It shows elapsed time and consolidated counters:
 
 - accepted frames;
 - strong rejected candidates;
@@ -146,22 +153,18 @@ The Python field-summary parser also accepts older Portuguese section names so p
 The app stores locally:
 
 - callsign;
-- modulation;
-- sample rates;
-- symbol duration;
-- base frequency;
-- tone spacing;
-- amplitude;
-- preamble length;
+- selected Fast/Slow speed profile;
 - selected audio devices;
 - detailed-log state;
 - window geometry.
+
+Advanced modem profile parameters are stored in `hftext.ini` beside the executable rather than in the Qt settings store.
 
 The typed TX message is not persisted. This avoids reopening the app with stale text ready to transmit.
 
 ## Debug WAV Tools
 
-WAV generation and WAV decoding remain in Settings as debug tools. Normal operation should use direct TX and continuous RX.
+Normal operation should use direct TX and continuous RX. WAV generation and decoding remain available through the CLI tools and tests for debug/replay workflows.
 
 ## Release Packaging
 

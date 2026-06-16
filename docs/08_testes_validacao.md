@@ -40,7 +40,9 @@ Application behavior:
 - direct TX from the message field;
 - TX cancellation;
 - automatic RX start;
-- RX restart when receive settings change;
+- Fast/Slow speed profile selection from Operation;
+- automatic `hftext.ini` creation when missing;
+- RX restart when the speed profile, input device, or detailed-log setting changes;
 - evidence and log export;
 - waterfall tone markers;
 - default-settings button;
@@ -96,12 +98,14 @@ After packaging:
 1. Start the packaged PC app.
 2. Confirm the UI is in English.
 3. Confirm RX starts automatically if an input device exists.
-4. Send a short message through the selected output device.
-5. Confirm TX progress reaches 100%.
-6. Decode a generated WAV through the app and CLI.
-7. Save a log and RX evidence bundle.
-8. Confirm the files contain English labels and CSV section names.
-9. Confirm version and protocol metadata appear in the app, logs, evidence, CLI tools, and `PACKAGE.txt`.
+4. Confirm `hftext.ini` exists beside `hftext_pc.exe`.
+5. Switch between Fast and Slow in Operation and confirm the estimate and waterfall markers update.
+6. Send a short message through the selected output device.
+7. Confirm TX progress reaches 100%.
+8. Decode a generated WAV through the CLI tools.
+9. Save a log and RX evidence bundle.
+10. Confirm the files contain English labels, speed profile, modem config path, and CSV section names.
+11. Confirm version and protocol metadata appear in the app, logs, evidence, CLI tools, and `PACKAGE.txt`.
 
 ## Release Packaging
 

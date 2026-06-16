@@ -41,13 +41,14 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 
 - Qt 6 Widgets app.
 - Chat-like Operation tab.
-- Settings tab for configuration, diagnostics, logs, and WAV debug tools.
+- Settings tab for callsign, audio devices, RX control, logs, and evidence export.
+- Fast/Slow speed profile selector in Operation.
+- Editable `hftext.ini` for advanced modem parameters.
 - Direct sound-card TX.
 - Continuous sound-card RX.
 - Automatic RX start.
 - Automatic RX restart when receive settings change.
 - TX progress and cancel behavior.
-- RX progress, quality, state, and session lines.
 - Waterfall from 300 Hz to 3 kHz with tone markers.
 - Blue/yellow/red waterfall palette for signal level and saturation hints.
 - RX evidence export with WAV, log, summary CSV, and accepted-frame CSV.
@@ -72,6 +73,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Review final English wording in the packaged app.
 - Keep `docs/10_user_guide.md` aligned with the current interface.
 - Keep the Operation tab visually simple.
+- Keep advanced modem parameters in `hftext.ini` unless field operation proves a setting belongs in the UI.
 - Improve message history only if field use shows a need.
 - Consider a clearer receive/tuning aid if waterfall markers are not enough.
 - Keep debug tools in Settings, not in the normal operation path.
