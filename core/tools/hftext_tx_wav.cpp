@@ -1,5 +1,6 @@
 #include "hftext_config.h"
-#include "hftext_core.h"
+#include "hftext_app_settings.h"
+#include "hftext_app_tx.h"
 #include "hftext_version.h"
 #include "wav_io.h"
 
@@ -24,41 +25,6 @@ void printUsage(const char* program) {
         << "  --f0 <Hz>                   default: 1200\n"
         << "  --f1 <Hz>                   default: 1600; in MFSK defines the second tone and spacing\n"
         << "  --amplitude <0..1>          default: 0.8\n";
-}
-
-std::string buildPayload(const std::string& message, const std::string& callsign) {
-    if (callsign.empty()) {
-        return message;
-    }
-    return callsign + " " + message;
-}
-
-void setMode(hftext::ModemConfig& config, const std::string& value) {
-    if (value == "2fsk") {
-        config.modulationMode = hftext::ModulationMode::Fsk2;
-        return;
-    }
-    if (value == "4fsk") {
-        config.modulationMode = hftext::ModulationMode::Fsk4;
-        return;
-    }
-    if (value == "8fsk") {
-        config.modulationMode = hftext::ModulationMode::Fsk8;
-        return;
-    }
-    throw std::invalid_argument("invalid mode: " + value);
-}
-
-const char* modeName(hftext::ModulationMode mode) {
-    switch (mode) {
-    case hftext::ModulationMode::Fsk8:
-        return "robust-v0.3-exp-8fsk";
-    case hftext::ModulationMode::Fsk4:
-        return "robust-v0.2-exp-4fsk";
-    case hftext::ModulationMode::Fsk2:
-    default:
-        return "robust-v0.1-2fsk";
-    }
 }
 
 }  // namespace
@@ -95,7 +61,7 @@ int main(int argc, char** argv) {
             } else if (arg == "--symbol-duration") {
                 config.symbolDurationSec = std::stof(requireValue(arg));
             } else if (arg == "--mode") {
-                setMode(config, requireValue(arg));
+                config.modulationMode = hftext::parseModulationModeKey(requireValue(arg));
             } else if (arg == "--f0") {
                 config.frequency0Hz = std::stof(requireValue(arg));
             } else if (arg == "--f1") {
@@ -116,13 +82,13 @@ int main(int argc, char** argv) {
             return 2;
         }
 
-        const std::string payload = buildPayload(message, callsign);
-        const auto audio = hftext::modulateText(payload, config);
+        const std::string payload = hftext::buildTransmitPayload(callsign, message);
+        const auto audio = hftext::generateTransmitAudio(callsign, message, config);
         hftext::tools::writeMonoPcm16Wav(outputPath, audio, config.sampleRate);
 
         std::cout << "WAV generated: " << outputPath << "\n";
         std::cout << "HFText version: " << hftext::kVersion << "\n";
-        std::cout << "Mode: " << modeName(config.modulationMode) << "\n";
+        std::cout << "Mode: " << hftext::modulationModeProtocolName(config.modulationMode) << "\n";
         std::cout << "Payload: " << payload << "\n";
         return 0;
     } catch (const std::exception& exc) {

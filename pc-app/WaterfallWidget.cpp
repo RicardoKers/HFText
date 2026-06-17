@@ -140,7 +140,7 @@ void WaterfallWidget::paintEvent(QPaintEvent* event) {
 
     painter.save();
     painter.setClipRect(waterfallRect);
-    QPen markerPen(QColor(255, 220, 0, 210), 2);
+    QPen markerPen(QColor(190, 155, 0, 150), 1);
     painter.setPen(markerPen);
     for (const double frequency : markerFrequenciesHz_) {
         if (frequency < kMinFrequencyHz || frequency > kMaxFrequencyHz) {
@@ -170,13 +170,13 @@ void WaterfallWidget::paintEvent(QPaintEvent* event) {
         painter.drawText(labelX, axisRect.top() + 18, label);
     }
 
-    painter.setPen(QPen(QColor(255, 220, 0), 2));
+    painter.setPen(QPen(QColor(190, 155, 0, 190), 1));
     for (const double frequency : markerFrequenciesHz_) {
         if (frequency < kMinFrequencyHz || frequency > kMaxFrequencyHz) {
             continue;
         }
         const int x = frequencyToX(frequency, axisRect);
-        painter.drawLine(x, axisRect.top(), x, axisRect.top() + 7);
+        painter.drawLine(x, axisRect.top(), x, axisRect.top() + 6);
     }
 }
 

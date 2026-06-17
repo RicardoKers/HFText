@@ -40,6 +40,10 @@ The Settings tab contains:
 
 Advanced modem parameters are stored in `hftext.ini`, created automatically next to `hftext_pc.exe` when missing. This keeps normal operation clean while still allowing debug and field experiments.
 
+The PC app owns the local file storage, but the default values and validation rules for these profiles come from the portable C++ core so future interfaces can reuse the same modem behavior.
+
+Tone markers, audio peak, duration, and clipping summaries use shared core helpers. The PC app only formats those values for the Qt interface and saved reports.
+
 Default profiles:
 
 ```ini

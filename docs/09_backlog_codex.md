@@ -34,6 +34,10 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - 2-FSK baseline.
 - Experimental 4-FSK and 8-FSK.
 - Confidence-aware demodulation and streaming receiver.
+- Shared application modem settings for Fast/Slow profiles and default validation.
+- Shared application TX helpers for callsign insertion, estimates, and audio generation.
+- Shared audio statistics and tone-frequency helpers for diagnostics.
+- Shared RX event summary helpers for progress, quality, and session counters.
 - CLI tools for TX WAV, RX WAV, and streaming WAV replay.
 - Regression tests.
 
@@ -102,11 +106,15 @@ These require explicit protocol-version planning:
 Android should start only after the PC/core path is stable:
 
 1. Minimal Kotlin/Compose shell.
-2. JNI bridge to the C++ core.
-3. AudioTrack TX.
-4. AudioRecord RX.
-5. Continuous receiver integration.
-6. Evidence/log export where practical.
+2. Reuse shared C++ Fast/Slow modem profiles through the JNI layer.
+3. Reuse shared C++ TX helpers through the JNI layer.
+4. Reuse shared C++ tone-frequency and audio-statistics helpers for tuning and level UI.
+5. Reuse shared C++ RX event summary helpers for status and logs.
+6. JNI bridge to the C++ core.
+7. AudioTrack TX.
+8. AudioRecord RX.
+9. Continuous receiver integration.
+10. Evidence/log export where practical.
 
 ## Release Tasks
 

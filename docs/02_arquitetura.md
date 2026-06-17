@@ -28,6 +28,14 @@ Text codec, frame, robust layer, modulation, demodulation
 
 The core must not depend on Qt, Android, Windows audio APIs, or GUI classes. Platform-specific audio and UI code live outside `core/`.
 
+Operating profile defaults and modem-setting validation also live in the portable core. This keeps the PC app and the future Android app aligned on Fast/Slow profiles, modulation names, tone spacing, amplitude, and preamble defaults without duplicating modem rules in each interface.
+
+The core also exposes application-level TX helpers for callsign payload insertion, transmit-duration estimation, preamble generation, and audio generation. Interfaces should use these helpers instead of rebuilding TX behavior locally.
+
+Shared audio helpers provide sample peak, clipping percentage, duration, and modem tone-frequency lists. These values are used by the PC waterfall, logs, and evidence reports and can be reused by Android for level and tuning displays.
+
+Shared RX event helpers summarize streaming receiver events into UI-friendly counters, progress, quality, and best-candidate selections. Interfaces should format their own text, but use the common helper decisions so PC and Android diagnostics stay consistent.
+
 ## Python Simulation
 
 `python-sim/` contains:
@@ -50,6 +58,10 @@ Python is used for quick validation and exploration. Operational behavior should
 - robust transmission builder;
 - modulation and demodulation for 2-FSK, 4-FSK, and 8-FSK;
 - streaming receiver;
+- shared Fast/Slow profile defaults and modem configuration validation;
+- shared transmit helpers for payload construction, estimates, and audio generation;
+- shared audio statistics and tone-frequency helpers for diagnostics and tuning displays;
+- shared RX event summary helpers for progress, quality, and session counters;
 - WAV I/O helpers for CLI/debug tools;
 - tests for all main behaviors.
 
@@ -79,6 +91,8 @@ They are useful for tests, packaging checks, and replaying field captures. They 
 
 `ModemController` connects the UI to the C++ core. It must not implement DSP logic itself.
 
+The PC app reads and writes its local `hftext.ini`, but the meaning of profile settings is provided by the core-level application settings helpers.
+
 ## Android Application
 
 `android-app/` is reserved for a later phase. The desired Android architecture is:
@@ -93,7 +107,7 @@ JNI bridge
 Portable C++ core
 ```
 
-Android should reuse the same protocol and core behavior validated on PC.
+Android should reuse the same protocol and core behavior validated on PC. It should also reuse the core-level application settings helpers so the Android Fast/Slow profiles match the PC defaults unless a deliberate product decision changes them.
 
 ## Data Flow
 

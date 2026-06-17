@@ -1,5 +1,7 @@
 #include "MainWindow.h"
 
+#include "hftext_app_rx.h"
+#include "hftext_audio_stats.h"
 #include "hftext_encoder.h"
 #include "hftext_version.h"
 #include "wav_io.h"
@@ -50,63 +52,17 @@ constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
 constexpr int kRxEvidenceSeconds = 300;
 constexpr int kMaxAcceptedRxSnapshots = 512;
 constexpr int kAcceptedRxStateHoldSeconds = 60;
-constexpr int kNormalRxProgressLogStepPercent = 10;
-constexpr float kRejectedCandidateUiConfidenceFloor = 0.10F;
-constexpr int kDefaultSampleRate = 48000;
-constexpr double kDefaultFastSymbolDurationSec = 0.100;
-constexpr double kDefaultSlowSymbolDurationSec = 0.300;
-constexpr double kDefaultBaseFrequencyHz = 1050.0;
-constexpr double kDefaultToneSpacingHz = 130.0;
-constexpr double kDefaultAmplitude = 0.05;
-constexpr int kDefaultPreambleBits = 72;
-
-void validateTonesBelowNyquist(const hftext::ModemConfig& config) {
-    const float nyquistHz = static_cast<float>(config.sampleRate) / 2.0F;
-    if (hftext::highestModulationToneHz(config) >= nyquistHz) {
-        throw std::invalid_argument("tones must stay below half the sample rate");
-    }
-}
 
 QString modulationModeIniName(hftext::ModulationMode mode) {
-    switch (mode) {
-    case hftext::ModulationMode::Fsk8:
-        return "8fsk";
-    case hftext::ModulationMode::Fsk4:
-        return "4fsk";
-    case hftext::ModulationMode::Fsk2:
-    default:
-        return "2fsk";
-    }
+    return QString::fromLatin1(hftext::modulationModeKey(mode));
 }
 
 hftext::ModulationMode modulationModeFromIniValue(const QString& value, hftext::ModulationMode fallback) {
-    QString normalized = value.trimmed().toLower();
-    normalized.remove('-');
-    normalized.remove('_');
-    normalized.remove(' ');
-
-    if (normalized == "8" || normalized == "8fsk") {
-        return hftext::ModulationMode::Fsk8;
-    }
-    if (normalized == "4" || normalized == "4fsk") {
-        return hftext::ModulationMode::Fsk4;
-    }
-    if (normalized == "2" || normalized == "2fsk") {
-        return hftext::ModulationMode::Fsk2;
-    }
-    return fallback;
+    return hftext::modulationModeFromKey(value.toStdString(), fallback);
 }
 
 QString modulationModeName(hftext::ModulationMode mode) {
-    switch (mode) {
-    case hftext::ModulationMode::Fsk8:
-        return QStringLiteral("8-FSK exp v0.3");
-    case hftext::ModulationMode::Fsk4:
-        return QStringLiteral("4-FSK exp v0.2");
-    case hftext::ModulationMode::Fsk2:
-    default:
-        return QStringLiteral("2-FSK v0.1");
-    }
+    return QString::fromStdString(hftext::modulationModeDisplayName(mode));
 }
 
 QString versionDisplayText() {
@@ -117,10 +73,7 @@ QString versionDisplayText() {
 }
 
 QString audioPeakPercent(const std::vector<float>& samples) {
-    float peak = 0.0F;
-    for (const float sample : samples) {
-        peak = (std::max)(peak, std::abs(sample));
-    }
+    const float peak = hftext::analyzeAudioSamples(samples).peak;
     return QString::number(peak * 100.0F, 'f', 1) + "%";
 }
 
@@ -169,16 +122,9 @@ QString csvBool(bool value) {
     return value ? "1" : "0";
 }
 
-double clippingPercent(std::size_t clippedSamples, std::size_t sampleCount) {
-    if (sampleCount == 0) {
-        return 0.0;
-    }
-    return 100.0 * static_cast<double>(clippedSamples) / static_cast<double>(sampleCount);
-}
-
 QString formatClippingSummary(std::size_t clippedSamples, std::size_t sampleCount) {
     return QString::number(static_cast<qulonglong>(clippedSamples))
-        + " samples (" + QString::number(clippingPercent(clippedSamples, sampleCount), 'f', 4) + "%)";
+        + " samples (" + QString::number(hftext::clippingPercent(clippedSamples, sampleCount), 'f', 4) + "%)";
 }
 
 QString frameRejectionReason(const hftext::StreamingReceiverEvent& event) {
@@ -207,7 +153,7 @@ QString clippingAdvice(std::size_t clippedSamples, std::size_t sampleCount) {
         return {};
     }
 
-    const double percent = clippingPercent(clippedSamples, sampleCount);
+    const double percent = hftext::clippingPercent(clippedSamples, sampleCount);
     if (percent < 0.01) {
         return "RX: isolated clipping peaks detected; probably impulse noise.";
     }
@@ -226,6 +172,16 @@ void selectComboText(QComboBox* combo, const QString& text) {
     if (index >= 0) {
         combo->setCurrentIndex(index);
     }
+}
+
+const hftext::StreamingReceiverEvent* selectedRxEvent(
+    const std::vector<hftext::StreamingReceiverEvent>& events,
+    int index
+) {
+    if (index < 0 || static_cast<std::size_t>(index) >= events.size()) {
+        return nullptr;
+    }
+    return &events[static_cast<std::size_t>(index)];
 }
 
 QString formatStreamingEvent(const hftext::StreamingReceiverEvent& event) {
@@ -275,70 +231,6 @@ QString formatStreamingEvent(const hftext::StreamingReceiverEvent& event) {
     return "RX: unknown event";
 }
 
-bool isStrongSyncEvent(const hftext::StreamingReceiverEvent& event) {
-    return event.syncMismatches <= 4;
-}
-
-bool isDisplayableRejectedEvent(const hftext::StreamingReceiverEvent& event) {
-    return isStrongSyncEvent(event) && event.confidence >= kRejectedCandidateUiConfidenceFloor;
-}
-
-int frameProgressPercent(const hftext::StreamingReceiverEvent& event) {
-    if (event.bitsExpected <= 0) {
-        return 0;
-    }
-
-    if (event.bitsAvailable >= event.bitsExpected) {
-        return 100;
-    }
-
-    const double ratio = static_cast<double>(event.bitsAvailable) / static_cast<double>(event.bitsExpected);
-    return static_cast<int>(std::clamp(ratio, 0.0, 1.0) * 100.0);
-}
-
-int frameProgressLogMilestone(int percent) {
-    if (percent >= 100) {
-        return 100;
-    }
-    return std::clamp(
-        (std::max(0, percent) / kNormalRxProgressLogStepPercent) * kNormalRxProgressLogStepPercent,
-        0,
-        100
-    );
-}
-
-bool isBetterSyncEvent(
-    const hftext::StreamingReceiverEvent& candidate,
-    const hftext::StreamingReceiverEvent* current
-) {
-    if (current == nullptr) {
-        return true;
-    }
-    if (candidate.syncMismatches != current->syncMismatches) {
-        return candidate.syncMismatches < current->syncMismatches;
-    }
-    return candidate.confidence > current->confidence;
-}
-
-bool isBetterWaitingEvent(
-    const hftext::StreamingReceiverEvent& candidate,
-    const hftext::StreamingReceiverEvent* current
-) {
-    if (current == nullptr) {
-        return true;
-    }
-    const double candidateProgress = candidate.bitsExpected <= 0
-        ? 0.0
-        : static_cast<double>(candidate.bitsAvailable) / static_cast<double>(candidate.bitsExpected);
-    const double currentProgress = current->bitsExpected <= 0
-        ? 0.0
-        : static_cast<double>(current->bitsAvailable) / static_cast<double>(current->bitsExpected);
-    if (candidateProgress != currentProgress) {
-        return candidateProgress > currentProgress;
-    }
-    return candidate.syncMismatches < current->syncMismatches;
-}
-
 QString normalRxStatusKey(const QString& line) {
     if (line.startsWith("RX: strong sync")) {
         return line;
@@ -352,7 +244,7 @@ QString normalRxStatusKey(const QString& line) {
         bool ok = false;
         const int percent = line.mid(prefixLength, percentEnd - prefixLength).toInt(&ok);
         if (ok) {
-            return QString("RX: frame %1").arg(frameProgressLogMilestone(percent));
+            return QString("RX: frame %1").arg(hftext::frameProgressLogMilestone(percent));
         }
         return "RX: frame";
     }
@@ -387,82 +279,6 @@ std::vector<QString> filterRepeatedNormalRxStatus(
     return filtered;
 }
 
-int rxQualityPermille(const std::vector<hftext::StreamingReceiverEvent>& events) {
-    int bestQuality = -1;
-    for (const auto& event : events) {
-        switch (event.type) {
-        case hftext::StreamingReceiverEventType::FrameDecoded:
-        case hftext::StreamingReceiverEventType::FrameRejected:
-            if (event.type == hftext::StreamingReceiverEventType::FrameRejected
-                && !isDisplayableRejectedEvent(event)) {
-                break;
-            }
-            bestQuality = std::max(
-                bestQuality,
-                static_cast<int>(std::clamp(event.confidence, 0.0F, 1.0F) * 1000.0F)
-            );
-            break;
-        case hftext::StreamingReceiverEventType::SyncFound:
-        case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
-        case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
-        case hftext::StreamingReceiverEventType::FrameWaiting:
-            break;
-        }
-    }
-    return bestQuality;
-}
-
-struct RxSessionEventCounts {
-    int sync = 0;
-    int length = 0;
-    int rejected = 0;
-};
-
-RxSessionEventCounts rxSessionEventCounts(const std::vector<hftext::StreamingReceiverEvent>& events) {
-    RxSessionEventCounts counts;
-    const hftext::StreamingReceiverEvent* bestLength = nullptr;
-    const hftext::StreamingReceiverEvent* bestSync = nullptr;
-    const hftext::StreamingReceiverEvent* bestRejected = nullptr;
-
-    for (const auto& event : events) {
-        switch (event.type) {
-        case hftext::StreamingReceiverEventType::FrameDecoded:
-            break;
-        case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isDisplayableRejectedEvent(event)
-                && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
-                bestRejected = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestLength)) {
-                bestLength = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::SyncFound:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestSync)) {
-                bestSync = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
-        case hftext::StreamingReceiverEventType::FrameWaiting:
-            break;
-        }
-    }
-
-    if (bestLength != nullptr) {
-        counts.sync = 1;
-        counts.length = 1;
-    } else if (bestSync != nullptr) {
-        counts.sync = 1;
-    }
-    if (bestRejected != nullptr) {
-        counts.rejected = 1;
-    }
-
-    return counts;
-}
-
 std::vector<QString> formatStreamingEvents(
     const std::vector<hftext::StreamingReceiverEvent>& events,
     bool detailed,
@@ -486,47 +302,12 @@ std::vector<QString> formatStreamingEvents(
         return lines;
     }
 
-    const hftext::StreamingReceiverEvent* bestDecoded = nullptr;
-    const hftext::StreamingReceiverEvent* bestLength = nullptr;
-    const hftext::StreamingReceiverEvent* bestWaiting = nullptr;
-    const hftext::StreamingReceiverEvent* bestSync = nullptr;
-    const hftext::StreamingReceiverEvent* bestRejected = nullptr;
-    int rejectedCount = 0;
-
-    for (const auto& event : events) {
-        switch (event.type) {
-        case hftext::StreamingReceiverEventType::FrameDecoded:
-            if (bestDecoded == nullptr || event.confidence > bestDecoded->confidence) {
-                bestDecoded = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isDisplayableRejectedEvent(event)) {
-                ++rejectedCount;
-                if (bestRejected == nullptr || event.confidence > bestRejected->confidence) {
-                    bestRejected = &event;
-                }
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestLength)) {
-                bestLength = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::FrameWaiting:
-            if (isStrongSyncEvent(event) && isBetterWaitingEvent(event, bestWaiting)) {
-                bestWaiting = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::SyncFound:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestSync)) {
-                bestSync = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
-            break;
-        }
-    }
+    const auto selection = hftext::selectRxEvents(events);
+    const auto* bestDecoded = selectedRxEvent(events, selection.bestDecoded);
+    const auto* bestLength = selectedRxEvent(events, selection.bestLength);
+    const auto* bestWaiting = selectedRxEvent(events, selection.bestWaiting);
+    const auto* bestSync = selectedRxEvent(events, selection.bestSync);
+    const auto* bestRejected = selectedRxEvent(events, selection.bestRejected);
 
     if (bestDecoded != nullptr) {
         lines.push_back(formatStreamingEvent(*bestDecoded));
@@ -548,7 +329,7 @@ std::vector<QString> formatStreamingEvents(
     }
 
     if (bestWaiting != nullptr) {
-        const int progress = frameProgressLogMilestone(frameProgressPercent(*bestWaiting));
+        const int progress = hftext::frameProgressLogMilestone(hftext::frameProgressPercent(*bestWaiting));
         lines.push_back(
             QString("RX: frame %1% (%2/%3 bits)")
                 .arg(progress)
@@ -557,10 +338,10 @@ std::vector<QString> formatStreamingEvents(
         );
     }
 
-    if (rejectedCount > 0) {
+    if (selection.rejectedCount > 0) {
         lines.push_back(
             QString("RX: %1 candidate(s) rejected by CRC/payload (best %2, %3).")
-                .arg(rejectedCount)
+                .arg(selection.rejectedCount)
                 .arg(formatConfidence(bestRejected->confidence))
                 .arg(frameRejectionReason(*bestRejected))
         );
@@ -1084,10 +865,11 @@ void MainWindow::updateWaterfallMarkers() {
     } catch (const std::exception&) {
         return;
     }
+    const auto toneFrequencies = hftext::modulationToneFrequenciesHz(config);
     std::vector<double> frequencies;
-    frequencies.reserve(static_cast<std::size_t>(hftext::toneCount(config.modulationMode)));
-    for (int tone = 0; tone < hftext::toneCount(config.modulationMode); ++tone) {
-        frequencies.push_back(hftext::modulationToneFrequencyHz(config, tone));
+    frequencies.reserve(toneFrequencies.size());
+    for (const float frequency : toneFrequencies) {
+        frequencies.push_back(frequency);
     }
     waterfallWidget_->setMarkerFrequencies(frequencies);
 }
@@ -1383,39 +1165,11 @@ void MainWindow::resetRxFrameProgress() {
 }
 
 void MainWindow::updateRxFrameProgressFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events) {
-    const hftext::StreamingReceiverEvent* bestDecoded = nullptr;
-    const hftext::StreamingReceiverEvent* bestWaiting = nullptr;
-    const hftext::StreamingReceiverEvent* bestLength = nullptr;
-    const hftext::StreamingReceiverEvent* bestRejected = nullptr;
-
-    for (const auto& event : events) {
-        switch (event.type) {
-        case hftext::StreamingReceiverEventType::FrameDecoded:
-            if (bestDecoded == nullptr || event.confidence > bestDecoded->confidence) {
-                bestDecoded = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::FrameWaiting:
-            if (isStrongSyncEvent(event) && isBetterWaitingEvent(event, bestWaiting)) {
-                bestWaiting = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestLength)) {
-                bestLength = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isDisplayableRejectedEvent(event)
-                && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
-                bestRejected = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::SyncFound:
-        case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
-            break;
-        }
-    }
+    const auto selection = hftext::selectRxEvents(events);
+    const auto* bestDecoded = selectedRxEvent(events, selection.bestDecoded);
+    const auto* bestWaiting = selectedRxEvent(events, selection.bestWaiting);
+    const auto* bestLength = selectedRxEvent(events, selection.bestLength);
+    const auto* bestRejected = selectedRxEvent(events, selection.bestRejected);
 
     if (bestDecoded != nullptr) {
         rxProgressSyncSample_ = -1;
@@ -1429,10 +1183,7 @@ void MainWindow::updateRxFrameProgressFromEvents(const std::vector<hftext::Strea
             rxProgressSyncSample_ = bestWaiting->syncSample;
             rxDisplayedFrameProgressPermille_ = 0;
         }
-        const double ratio = bestWaiting->bitsExpected <= 0
-            ? 0.0
-            : static_cast<double>(bestWaiting->bitsAvailable) / static_cast<double>(bestWaiting->bitsExpected);
-        const int progress = static_cast<int>(std::clamp(ratio, 0.0, 1.0) * 1000.0);
+        const int progress = hftext::frameProgressPermille(*bestWaiting);
         rxDisplayedFrameProgressPermille_ = std::max(rxDisplayedFrameProgressPermille_, progress);
         rxFrameProgressBar_->setValue(rxDisplayedFrameProgressPermille_);
         return;
@@ -1455,46 +1206,12 @@ void MainWindow::updateRxFrameProgressFromEvents(const std::vector<hftext::Strea
 }
 
 void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events) {
-    const hftext::StreamingReceiverEvent* bestDecoded = nullptr;
-    const hftext::StreamingReceiverEvent* bestWaiting = nullptr;
-    const hftext::StreamingReceiverEvent* bestLength = nullptr;
-    const hftext::StreamingReceiverEvent* bestSync = nullptr;
-    const hftext::StreamingReceiverEvent* bestRejected = nullptr;
-    bool hasInvalidLength = false;
-
-    for (const auto& event : events) {
-        switch (event.type) {
-        case hftext::StreamingReceiverEventType::SyncFound:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestSync)) {
-                bestSync = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
-            if (isStrongSyncEvent(event) && isBetterSyncEvent(event, bestLength)) {
-                bestLength = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
-            hasInvalidLength = true;
-            break;
-        case hftext::StreamingReceiverEventType::FrameWaiting:
-            if (isStrongSyncEvent(event) && isBetterWaitingEvent(event, bestWaiting)) {
-                bestWaiting = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::FrameRejected:
-            if (isDisplayableRejectedEvent(event)
-                && (bestRejected == nullptr || event.confidence > bestRejected->confidence)) {
-                bestRejected = &event;
-            }
-            break;
-        case hftext::StreamingReceiverEventType::FrameDecoded:
-            if (bestDecoded == nullptr || event.confidence > bestDecoded->confidence) {
-                bestDecoded = &event;
-            }
-            break;
-        }
-    }
+    const auto selection = hftext::selectRxEvents(events);
+    const auto* bestDecoded = selectedRxEvent(events, selection.bestDecoded);
+    const auto* bestWaiting = selectedRxEvent(events, selection.bestWaiting);
+    const auto* bestLength = selectedRxEvent(events, selection.bestLength);
+    const auto* bestSync = selectedRxEvent(events, selection.bestSync);
+    const auto* bestRejected = selectedRxEvent(events, selection.bestRejected);
 
     if (bestRejected != nullptr) {
         lastRxRejectText_ = frameRejectionReason(*bestRejected);
@@ -1509,7 +1226,7 @@ void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::Streamin
         state = "Valid frame";
     } else if (bestWaiting != nullptr) {
         displayEvent = bestWaiting;
-        state = QString("Receiving frame %1%").arg(frameProgressPercent(*bestWaiting));
+        state = QString("Receiving frame %1%").arg(hftext::frameProgressPercent(*bestWaiting));
     } else if (bestLength != nullptr) {
         displayEvent = bestLength;
         state = "PHYS_LENGTH recovered";
@@ -1519,7 +1236,7 @@ void MainWindow::updateRxDiagnosticFromEvents(const std::vector<hftext::Streamin
     } else if (bestRejected != nullptr) {
         displayEvent = bestRejected;
         state = "Candidate rejected";
-    } else if (hasInvalidLength) {
+    } else if (selection.hasInvalidLength) {
         if (hasRecentAcceptedRx()) {
             return;
         }
@@ -1572,7 +1289,7 @@ void MainWindow::resetRxSessionCounters() {
 }
 
 void MainWindow::updateRxSessionFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events) {
-    const auto counts = rxSessionEventCounts(events);
+    const auto counts = hftext::rxSessionEventCounts(events);
     rxSessionSyncCount_ += counts.sync;
     rxSessionLengthCount_ += counts.length;
     rxSessionRejectedCount_ += counts.rejected;
@@ -1668,13 +1385,12 @@ QString MainWindow::selectedSpeedProfileKey() const {
 }
 
 QString MainWindow::speedProfileDescription(const QString& profileKey) const {
-    const QString normalized = profileKey.trimmed().toLower();
-    const hftext::ModulationMode mode = normalized == "fast" ? fastModulationMode_ : slowModulationMode_;
-    const double symbolDuration = normalized == "fast" ? fastSymbolDurationSec_ : slowSymbolDurationSec_;
-    return QString("%1 (%2, %3 s/symbol)")
-        .arg(normalized == "fast" ? "Fast" : "Slow")
-        .arg(modulationModeName(mode))
-        .arg(symbolDuration, 0, 'f', 3);
+    return QString::fromStdString(
+        hftext::speedProfileDisplayName(
+            modemProfiles_,
+            hftext::speedProfileFromKey(profileKey.toStdString())
+        )
+    );
 }
 
 bool MainWindow::writeDefaultModemConfigFile() const {
@@ -1683,24 +1399,25 @@ bool MainWindow::writeDefaultModemConfigFile() const {
         return false;
     }
 
+    const auto defaults = hftext::defaultAppModemProfiles();
     QTextStream stream(&file);
     stream
         << "; HFText modem configuration.\n"
         << "; Edit this file for debug or field experiments, then restart HFText or press Load defaults to recreate it.\n"
         << "; Supported modulation values: 2fsk, 4fsk, 8fsk.\n\n"
         << "[common]\n"
-        << "tx_sample_rate_hz=" << kDefaultSampleRate << '\n'
-        << "rx_sample_rate_hz=" << kDefaultSampleRate << '\n'
-        << "base_frequency_hz=" << QString::number(kDefaultBaseFrequencyHz, 'f', 1) << '\n'
-        << "tone_spacing_hz=" << QString::number(kDefaultToneSpacingHz, 'f', 1) << '\n'
-        << "amplitude=" << QString::number(kDefaultAmplitude, 'f', 2) << '\n'
-        << "preamble_bits=" << kDefaultPreambleBits << "\n\n"
+        << "tx_sample_rate_hz=" << defaults.txSampleRate << '\n'
+        << "rx_sample_rate_hz=" << defaults.rxSampleRate << '\n'
+        << "base_frequency_hz=" << QString::number(defaults.baseFrequencyHz, 'f', 1) << '\n'
+        << "tone_spacing_hz=" << QString::number(defaults.toneSpacingHz, 'f', 1) << '\n'
+        << "amplitude=" << QString::number(defaults.amplitude, 'f', 2) << '\n'
+        << "preamble_bits=" << defaults.preambleBits << "\n\n"
         << "[slow]\n"
-        << "modulation=8fsk\n"
-        << "symbol_duration_s=" << QString::number(kDefaultSlowSymbolDurationSec, 'f', 3) << "\n\n"
+        << "modulation=" << modulationModeIniName(defaults.slow.modulationMode) << '\n'
+        << "symbol_duration_s=" << QString::number(defaults.slow.symbolDurationSec, 'f', 3) << "\n\n"
         << "[fast]\n"
-        << "modulation=8fsk\n"
-        << "symbol_duration_s=" << QString::number(kDefaultFastSymbolDurationSec, 'f', 3) << '\n';
+        << "modulation=" << modulationModeIniName(defaults.fast.modulationMode) << '\n'
+        << "symbol_duration_s=" << QString::number(defaults.fast.symbolDurationSec, 'f', 3) << '\n';
 
     return true;
 }
@@ -1713,56 +1430,35 @@ void MainWindow::loadModemConfigFile() {
         modemConfigWarning_ = "could not create hftext.ini; using built-in defaults";
     }
 
-    txSampleRate_ = kDefaultSampleRate;
-    rxSampleRate_ = kDefaultSampleRate;
-    baseFrequencyHz_ = kDefaultBaseFrequencyHz;
-    toneSpacingHz_ = kDefaultToneSpacingHz;
-    amplitude_ = kDefaultAmplitude;
-    preambleBits_ = kDefaultPreambleBits;
-    slowModulationMode_ = hftext::ModulationMode::Fsk8;
-    fastModulationMode_ = hftext::ModulationMode::Fsk8;
-    slowSymbolDurationSec_ = kDefaultSlowSymbolDurationSec;
-    fastSymbolDurationSec_ = kDefaultFastSymbolDurationSec;
+    modemProfiles_ = hftext::defaultAppModemProfiles();
 
     QSettings ini(modemConfigPath_, QSettings::IniFormat);
-    txSampleRate_ = ini.value("common/tx_sample_rate_hz", txSampleRate_).toInt();
-    rxSampleRate_ = ini.value("common/rx_sample_rate_hz", rxSampleRate_).toInt();
-    baseFrequencyHz_ = ini.value("common/base_frequency_hz", baseFrequencyHz_).toDouble();
-    toneSpacingHz_ = ini.value("common/tone_spacing_hz", toneSpacingHz_).toDouble();
-    amplitude_ = ini.value("common/amplitude", amplitude_).toDouble();
-    preambleBits_ = ini.value("common/preamble_bits", preambleBits_).toInt();
-    slowModulationMode_ = modulationModeFromIniValue(
-        ini.value("slow/modulation", modulationModeIniName(slowModulationMode_)).toString(),
-        slowModulationMode_
+    modemProfiles_.txSampleRate = ini.value("common/tx_sample_rate_hz", modemProfiles_.txSampleRate).toInt();
+    modemProfiles_.rxSampleRate = ini.value("common/rx_sample_rate_hz", modemProfiles_.rxSampleRate).toInt();
+    modemProfiles_.baseFrequencyHz = ini.value("common/base_frequency_hz", modemProfiles_.baseFrequencyHz).toFloat();
+    modemProfiles_.toneSpacingHz = ini.value("common/tone_spacing_hz", modemProfiles_.toneSpacingHz).toFloat();
+    modemProfiles_.amplitude = ini.value("common/amplitude", modemProfiles_.amplitude).toFloat();
+    modemProfiles_.preambleBits = ini.value("common/preamble_bits", modemProfiles_.preambleBits).toInt();
+    modemProfiles_.slow.modulationMode = modulationModeFromIniValue(
+        ini.value("slow/modulation", modulationModeIniName(modemProfiles_.slow.modulationMode)).toString(),
+        modemProfiles_.slow.modulationMode
     );
-    fastModulationMode_ = modulationModeFromIniValue(
-        ini.value("fast/modulation", modulationModeIniName(fastModulationMode_)).toString(),
-        fastModulationMode_
+    modemProfiles_.fast.modulationMode = modulationModeFromIniValue(
+        ini.value("fast/modulation", modulationModeIniName(modemProfiles_.fast.modulationMode)).toString(),
+        modemProfiles_.fast.modulationMode
     );
-    slowSymbolDurationSec_ = ini.value("slow/symbol_duration_s", slowSymbolDurationSec_).toDouble();
-    fastSymbolDurationSec_ = ini.value("fast/symbol_duration_s", fastSymbolDurationSec_).toDouble();
+    modemProfiles_.slow.symbolDurationSec =
+        ini.value("slow/symbol_duration_s", modemProfiles_.slow.symbolDurationSec).toFloat();
+    modemProfiles_.fast.symbolDurationSec =
+        ini.value("fast/symbol_duration_s", modemProfiles_.fast.symbolDurationSec).toFloat();
 }
 
 hftext::ModemConfig MainWindow::configForSpeedProfile(const QString& profileKey, int sampleRate) const {
-    const QString normalized = profileKey.trimmed().toLower();
-    hftext::ModemConfig config;
-    config.sampleRate = sampleRate;
-    config.symbolDurationSec = static_cast<float>(
-        normalized == "fast" ? fastSymbolDurationSec_ : slowSymbolDurationSec_
+    return hftext::modemConfigForProfile(
+        modemProfiles_,
+        hftext::speedProfileFromKey(profileKey.toStdString()),
+        sampleRate
     );
-    config.frequency0Hz = static_cast<float>(baseFrequencyHz_);
-    config.frequency1Hz = static_cast<float>(baseFrequencyHz_ + toneSpacingHz_);
-    config.amplitude = static_cast<float>(amplitude_);
-    config.preambleBits = preambleBits_;
-    config.modulationMode = normalized == "fast" ? fastModulationMode_ : slowModulationMode_;
-    validateTonesBelowNyquist(config);
-    if (config.frequency0Hz == config.frequency1Hz) {
-        throw std::invalid_argument("tone spacing must be positive");
-    }
-    if (hftext::toneCount(config.modulationMode) > 2 && hftext::modulationToneSpacingHz(config) <= 0.0F) {
-        throw std::invalid_argument("MFSK requires positive tone spacing");
-    }
-    return config;
 }
 
 void MainWindow::loadSettings() {
@@ -1926,12 +1622,8 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
         const auto results = receiver.pushSamples(chunk);
         const auto events = receiver.takeEvents();
         if (!events.empty()) {
-            const int frameQuality = rxQualityPermille(events);
-            const bool hasTerminalCandidate = std::any_of(events.begin(), events.end(), [](const auto& event) {
-                return event.type == hftext::StreamingReceiverEventType::FrameDecoded
-                    || (event.type == hftext::StreamingReceiverEventType::FrameRejected
-                        && isDisplayableRejectedEvent(event));
-            });
+            const int frameQuality = hftext::rxQualityPermille(events);
+            const bool hasTerminalCandidate = hftext::hasTerminalRxCandidate(events);
             auto lines = formatStreamingEvents(
                 events,
                 detailedRxLog,
@@ -2006,11 +1698,11 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
 }
 
 hftext::ModemConfig MainWindow::readConfig() const {
-    return configForSpeedProfile(selectedSpeedProfileKey(), txSampleRate_);
+    return configForSpeedProfile(selectedSpeedProfileKey(), modemProfiles_.txSampleRate);
 }
 
 hftext::ModemConfig MainWindow::readRxConfig() const {
-    return configForSpeedProfile(selectedSpeedProfileKey(), rxSampleRate_);
+    return configForSpeedProfile(selectedSpeedProfileKey(), modemProfiles_.rxSampleRate);
 }
 
 void MainWindow::showDecodeResult(const hftext::DecodeResult& result) {

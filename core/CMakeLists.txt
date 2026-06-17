@@ -8,6 +8,10 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedd
 project(hftext_core LANGUAGES CXX)
 
 add_library(hftext_core STATIC
+    src/app_rx.cpp
+    src/app_settings.cpp
+    src/app_tx.cpp
+    src/audio_stats.cpp
     src/crc16.cpp
     src/demodulator_fsk.cpp
     src/encoder.cpp
@@ -72,6 +76,18 @@ if(HFTEXT_CORE_BUILD_TESTS)
     add_executable(hftext_core_types_test
         tests/test_core_types.cpp
     )
+    add_executable(hftext_audio_stats_test
+        tests/test_audio_stats.cpp
+    )
+    add_executable(hftext_app_rx_test
+        tests/test_app_rx.cpp
+    )
+    add_executable(hftext_app_settings_test
+        tests/test_app_settings.cpp
+    )
+    add_executable(hftext_app_tx_test
+        tests/test_app_tx.cpp
+    )
     add_executable(hftext_core_encoder_test
         tests/test_encoder.cpp
     )
@@ -101,6 +117,10 @@ if(HFTEXT_CORE_BUILD_TESTS)
     )
 
     target_link_libraries(hftext_core_types_test PRIVATE hftext_core)
+    target_link_libraries(hftext_audio_stats_test PRIVATE hftext_core)
+    target_link_libraries(hftext_app_rx_test PRIVATE hftext_core)
+    target_link_libraries(hftext_app_settings_test PRIVATE hftext_core)
+    target_link_libraries(hftext_app_tx_test PRIVATE hftext_core)
     target_link_libraries(hftext_core_encoder_test PRIVATE hftext_core)
     target_link_libraries(hftext_core_crc16_test PRIVATE hftext_core)
     target_link_libraries(hftext_core_frame_test PRIVATE hftext_core)
@@ -114,6 +134,10 @@ if(HFTEXT_CORE_BUILD_TESTS)
     if(MSVC)
         set_target_properties(
             hftext_core_types_test
+            hftext_audio_stats_test
+            hftext_app_rx_test
+            hftext_app_settings_test
+            hftext_app_tx_test
             hftext_core_encoder_test
             hftext_core_crc16_test
             hftext_core_frame_test
@@ -129,6 +153,10 @@ if(HFTEXT_CORE_BUILD_TESTS)
     endif()
 
     add_test(NAME hftext_core_types_test COMMAND hftext_core_types_test)
+    add_test(NAME hftext_audio_stats_test COMMAND hftext_audio_stats_test)
+    add_test(NAME hftext_app_rx_test COMMAND hftext_app_rx_test)
+    add_test(NAME hftext_app_settings_test COMMAND hftext_app_settings_test)
+    add_test(NAME hftext_app_tx_test COMMAND hftext_app_tx_test)
     add_test(NAME hftext_core_encoder_test COMMAND hftext_core_encoder_test)
     add_test(NAME hftext_core_crc16_test COMMAND hftext_core_crc16_test)
     add_test(NAME hftext_core_frame_test COMMAND hftext_core_frame_test)

@@ -25,6 +25,10 @@
 - Repeatable Windows release packaging script.
 - Basic GitHub Actions CI for Python simulation and C++ core tests.
 - Visible app, CLI, log, and evidence version metadata.
+- Shared core-level Fast/Slow profile defaults and modem-setting validation for PC and future Android reuse.
+- Shared core-level TX helpers for PC, CLI, and future Android reuse.
+- Shared core-level tone-frequency and audio-statistics helpers for diagnostics and future Android reuse.
+- Shared core-level RX event summary helpers for PC and future Android diagnostics.
 
 ## Current Focus
 

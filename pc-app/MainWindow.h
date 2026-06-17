@@ -4,6 +4,7 @@
 #include "AudioOutput.h"
 #include "ModemController.h"
 #include "WaterfallWidget.h"
+#include "hftext_app_settings.h"
 #include "hftext_streaming_receiver.h"
 
 #include <QMainWindow>
@@ -120,16 +121,7 @@ private:
     QString lastRxWavPath_;
     QString modemConfigPath_;
     QString modemConfigWarning_;
-    int txSampleRate_ = 48000;
-    int rxSampleRate_ = 48000;
-    double baseFrequencyHz_ = 1050.0;
-    double toneSpacingHz_ = 130.0;
-    double amplitude_ = 0.05;
-    int preambleBits_ = 72;
-    hftext::ModulationMode fastModulationMode_ = hftext::ModulationMode::Fsk8;
-    hftext::ModulationMode slowModulationMode_ = hftext::ModulationMode::Fsk8;
-    double fastSymbolDurationSec_ = 0.100;
-    double slowSymbolDurationSec_ = 0.300;
+    hftext::AppModemProfiles modemProfiles_;
     QLineEdit* callsignEdit_ = nullptr;
     QPlainTextEdit* messageEdit_ = nullptr;
     QComboBox* speedProfileCombo_ = nullptr;

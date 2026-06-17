@@ -22,10 +22,22 @@ JNI bridge
 Portable C++ core
 ```
 
+Fast/Slow profile defaults, modulation keys, display names, tone spacing, amplitude, preamble length, and modem configuration validation should come from the shared C++ application settings helpers in `core/`. Android-specific storage may be different, but the interpretation of modem settings should not be duplicated in Kotlin.
+
+Transmit behavior should also use the shared C++ TX helpers for callsign insertion, payload validation, duration estimates, and audio generation. Kotlin should provide text, selected profile, and audio output plumbing, not a separate modem implementation.
+
+Android tuning and level indicators should reuse the shared C++ tone-frequency and audio-statistics helpers where practical.
+
+Android RX status and logs should reuse the shared C++ RX event summary helpers. Kotlin may choose different wording or layout, but strong-sync thresholds, rejected-candidate filtering, progress, and session counters should come from the same core logic used by the PC app.
+
 ## Requirements
 
 - Reuse the C++ core.
 - Keep the same protocol and modem settings as the PC application.
+- Reuse the shared C++ Fast/Slow profile defaults and validation.
+- Reuse the shared C++ TX helpers.
+- Reuse shared C++ tone-frequency and audio-statistics helpers for diagnostics.
+- Reuse shared C++ RX event summary helpers for status and session diagnostics.
 - Support direct audio TX after explicit operator action.
 - Support continuous RX without unbounded memory growth.
 - Provide a compact operation screen and a separate settings/debug area.
