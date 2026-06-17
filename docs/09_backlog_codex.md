@@ -38,7 +38,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Shared application TX helpers for callsign insertion, estimates, and audio generation.
 - Shared audio statistics and tone-frequency helpers for diagnostics.
 - Shared RX event summary helpers for progress, quality, and session counters.
-- Portable C ABI foundation for future JNI integration, including generated TX audio buffers.
+- Portable C ABI foundation for future JNI integration, including prepared TX text, tone frequencies, audio statistics, generated TX audio buffers, and streaming RX block processing.
 - CLI tools for TX WAV, RX WAV, and streaming WAV replay.
 - Regression tests.
 
@@ -114,7 +114,7 @@ Android should start only after the PC/core path is stable:
 6. Reuse shared C++ RX event summary helpers for status and logs.
 7. AudioTrack TX.
 8. AudioRecord RX.
-9. Continuous receiver integration.
+9. Continuous receiver integration through the C ABI streaming receiver.
 10. Evidence/log export where practical.
 
 ## Release Tasks

@@ -37,10 +37,14 @@ The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is i
 - application and protocol version metadata;
 - default Fast/Slow modem profiles;
 - validated modem configuration for a selected profile and sample rate;
+- sanitized TX text, payload preview, and payload symbol counts;
+- modem tone frequencies for tuning displays;
+- audio peak, clipping, and duration statistics;
 - transmit estimates for callsign plus message text;
 - generated normalized floating-point TX audio, with explicit native buffer release.
+- an opaque streaming receiver handle that accepts audio blocks and returns decoded messages plus RX events.
 
-Continuous RX, evidence export, and receiver events should be added to this C ABI incrementally as the Android app needs them.
+Evidence export and higher-level Android UI state should be added around this C ABI incrementally as the Android app needs them.
 
 ## Requirements
 

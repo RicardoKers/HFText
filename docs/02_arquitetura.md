@@ -36,7 +36,7 @@ Shared audio helpers provide sample peak, clipping percentage, duration, and mod
 
 Shared RX event helpers summarize streaming receiver events into UI-friendly counters, progress, quality, and best-candidate selections. Interfaces should format their own text, but use the common helper decisions so PC and Android diagnostics stay consistent.
 
-The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, transmit-duration estimates, and generated TX audio buffers.
+The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events.
 
 ## Python Simulation
 

@@ -2,16 +2,29 @@
 
 #include "hftext_app_settings.h"
 #include "hftext_app_tx.h"
+#include "hftext_audio_stats.h"
+#include "hftext_encoder.h"
+#include "hftext_streaming_receiver.h"
 #include "hftext_version.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <iterator>
 #include <limits>
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <vector>
+
+struct HFTextStreamingReceiver {
+    explicit HFTextStreamingReceiver(const hftext::ModemConfig& config)
+        : receiver(config) {}
+
+    hftext::StreamingReceiver receiver;
+};
 
 namespace {
 
@@ -29,6 +42,17 @@ void writeError(char* errorMessage, std::size_t errorMessageSize, const std::str
     const auto count = (std::min)(message.size(), errorMessageSize - 1);
     std::memcpy(errorMessage, message.data(), count);
     errorMessage[count] = '\0';
+}
+
+bool copyStringToBuffer(const std::string& value, char* buffer, std::size_t bufferSize) {
+    if (buffer == nullptr || bufferSize == 0) {
+        return !value.empty();
+    }
+
+    const auto count = (std::min)(value.size(), bufferSize - 1);
+    std::memcpy(buffer, value.data(), count);
+    buffer[count] = '\0';
+    return count < value.size();
 }
 
 hftext::ModulationMode toCppModulation(HFTextModulationMode mode) {
@@ -143,6 +167,75 @@ HFTextTransmissionEstimate fromCppEstimate(const hftext::TransmissionEstimate& e
     };
 }
 
+HFTextStreamingReceiverEventType fromCppEventType(hftext::StreamingReceiverEventType type) {
+    switch (type) {
+    case hftext::StreamingReceiverEventType::SyncFound:
+        return HFTEXT_RX_EVENT_SYNC_FOUND;
+    case hftext::StreamingReceiverEventType::PhysicalLengthRecovered:
+        return HFTEXT_RX_EVENT_PHYSICAL_LENGTH_RECOVERED;
+    case hftext::StreamingReceiverEventType::PhysicalLengthInvalid:
+        return HFTEXT_RX_EVENT_PHYSICAL_LENGTH_INVALID;
+    case hftext::StreamingReceiverEventType::FrameWaiting:
+        return HFTEXT_RX_EVENT_FRAME_WAITING;
+    case hftext::StreamingReceiverEventType::FrameRejected:
+        return HFTEXT_RX_EVENT_FRAME_REJECTED;
+    case hftext::StreamingReceiverEventType::FrameDecoded:
+    default:
+        return HFTEXT_RX_EVENT_FRAME_DECODED;
+    }
+}
+
+void fillDecodeResult(const hftext::DecodeResult& source, HFTextDecodeResult& target) {
+    char* textBuffer = target.text_utf8;
+    const std::size_t textBufferSize = target.text_size;
+
+    target.frame_detected = source.frameDetected ? 1 : 0;
+    target.crc_ok = source.crcOk ? 1 : 0;
+    target.payload_valid = source.payloadValid ? 1 : 0;
+    target.length = source.length;
+    target.sync_index = source.syncIndex;
+    target.start_offset = source.startOffset;
+    target.offsets_tried = source.offsetsTried;
+    target.confidence = source.confidence;
+    target.text_utf8 = textBuffer;
+    target.text_size = textBufferSize;
+    target.text_bytes = source.text.size();
+    target.text_truncated = copyStringToBuffer(source.text, textBuffer, textBufferSize) ? 1 : 0;
+}
+
+HFTextStreamingReceiverEvent fromCppEvent(const hftext::StreamingReceiverEvent& event) {
+    return {
+        fromCppEventType(event.type),
+        event.phaseOffsetSamples,
+        event.syncSample,
+        event.syncBitIndex,
+        event.syncMismatches,
+        event.payloadLength,
+        event.decodedLength,
+        event.bitsAvailable,
+        event.bitsExpected,
+        event.crcOk ? 1 : 0,
+        event.payloadValid ? 1 : 0,
+        event.confidence,
+        event.latencySeconds,
+    };
+}
+
+void resetPreparedText(HFTextPreparedText* text) {
+    if (text == nullptr) {
+        return;
+    }
+    text->message_empty = 1;
+    text->payload_too_long = 0;
+    text->message_symbols = 0;
+    text->payload_symbols = 0;
+    text->max_payload_symbols = hftext::kMaxPayloadSymbols;
+    text->sanitized_message_bytes = 0;
+    text->payload_bytes = 0;
+    text->sanitized_message_truncated = 0;
+    text->payload_truncated = 0;
+}
+
 void resetAudio(HFTextFloatAudio* audio) {
     if (audio == nullptr) {
         return;
@@ -151,6 +244,25 @@ void resetAudio(HFTextFloatAudio* audio) {
     audio->sample_count = 0;
     audio->sample_rate = 0;
     audio->duration_seconds = 0.0;
+}
+
+void resetToneFrequencies(HFTextToneFrequencies* frequencies) {
+    if (frequencies == nullptr) {
+        return;
+    }
+    std::fill(std::begin(frequencies->frequencies_hz), std::end(frequencies->frequencies_hz), 0.0F);
+    frequencies->tone_count = 0;
+}
+
+void resetAudioStats(HFTextAudioStats* stats) {
+    if (stats == nullptr) {
+        return;
+    }
+    stats->sample_count = 0;
+    stats->peak = 0.0F;
+    stats->clipped_samples = 0;
+    stats->clipping_percent = 0.0;
+    stats->duration_seconds = 0.0;
 }
 
 int32_t exceptionStatus(const std::exception& exc, char* errorMessage, std::size_t errorMessageSize) {
@@ -218,6 +330,117 @@ int32_t hftext_c_modem_config_for_profile(
     }
 }
 
+int32_t hftext_c_prepare_text(
+    const char* callsignUtf8,
+    const char* messageUtf8,
+    char* sanitizedMessageUtf8,
+    size_t sanitizedMessageSize,
+    char* payloadUtf8,
+    size_t payloadSize,
+    HFTextPreparedText* outText,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    resetPreparedText(outText);
+    if (messageUtf8 == nullptr || outText == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        const std::string callsign = callsignUtf8 == nullptr ? std::string() : std::string(callsignUtf8);
+        const std::string sanitizedCallsign = hftext::sanitizeText(callsign);
+        const std::string sanitizedMessage = hftext::sanitizeText(messageUtf8);
+        const std::string payload = sanitizedMessage.empty()
+            ? std::string()
+            : hftext::buildTransmitPayload(sanitizedCallsign, sanitizedMessage);
+
+        outText->message_empty = sanitizedMessage.empty() ? 1 : 0;
+        outText->message_symbols = hftext::encodedSymbolCount(sanitizedMessage);
+        outText->payload_symbols = payload.empty() ? 0 : hftext::encodedSymbolCount(payload);
+        outText->payload_too_long = outText->payload_symbols > hftext::kMaxPayloadSymbols ? 1 : 0;
+        outText->max_payload_symbols = hftext::kMaxPayloadSymbols;
+        outText->sanitized_message_bytes = sanitizedMessage.size();
+        outText->payload_bytes = payload.size();
+        outText->sanitized_message_truncated = copyStringToBuffer(
+            sanitizedMessage,
+            sanitizedMessageUtf8,
+            sanitizedMessageSize
+        ) ? 1 : 0;
+        outText->payload_truncated = copyStringToBuffer(payload, payloadUtf8, payloadSize) ? 1 : 0;
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        resetPreparedText(outText);
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
+int32_t hftext_c_tone_frequencies(
+    const HFTextModemConfig* config,
+    HFTextToneFrequencies* outFrequencies,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    resetToneFrequencies(outFrequencies);
+    if (config == nullptr || outFrequencies == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        const auto frequencies = hftext::modulationToneFrequenciesHz(toCppConfig(*config));
+        if (frequencies.size() > std::size(outFrequencies->frequencies_hz)) {
+            throw std::invalid_argument("too many tones");
+        }
+        outFrequencies->tone_count = static_cast<std::int32_t>(frequencies.size());
+        std::copy(frequencies.begin(), frequencies.end(), outFrequencies->frequencies_hz);
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        resetToneFrequencies(outFrequencies);
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
+int32_t hftext_c_analyze_audio_samples(
+    const float* samples,
+    size_t sampleCount,
+    int32_t sampleRate,
+    float clippingThreshold,
+    HFTextAudioStats* outStats,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    resetAudioStats(outStats);
+    if (outStats == nullptr || (samples == nullptr && sampleCount > 0)) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+    if (sampleRate <= 0) {
+        writeError(errorMessage, errorMessageSize, "sample rate must be positive");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        std::vector<float> sampleVector;
+        if (sampleCount > 0) {
+            sampleVector.assign(samples, samples + sampleCount);
+        }
+        const auto stats = hftext::analyzeAudioSamples(sampleVector, clippingThreshold);
+        outStats->sample_count = stats.sampleCount;
+        outStats->peak = stats.peak;
+        outStats->clipped_samples = stats.clippedSamples;
+        outStats->clipping_percent = hftext::clippingPercent(stats.clippedSamples, stats.sampleCount);
+        outStats->duration_seconds = hftext::audioDurationSeconds(stats.sampleCount, sampleRate);
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        resetAudioStats(outStats);
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
 int32_t hftext_c_generate_transmit_audio(
     const char* callsignUtf8,
     const char* messageUtf8,
@@ -268,6 +491,135 @@ void hftext_c_free_audio(HFTextFloatAudio* audio) {
     }
     std::free(audio->samples);
     resetAudio(audio);
+}
+
+int32_t hftext_c_streaming_receiver_create(
+    const HFTextModemConfig* config,
+    HFTextStreamingReceiver** outReceiver,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    if (outReceiver != nullptr) {
+        *outReceiver = nullptr;
+    }
+    if (config == nullptr || outReceiver == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        *outReceiver = new HFTextStreamingReceiver(toCppConfig(*config));
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        *outReceiver = nullptr;
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
+void hftext_c_streaming_receiver_free(HFTextStreamingReceiver* receiver) {
+    delete receiver;
+}
+
+int32_t hftext_c_streaming_receiver_reset(
+    HFTextStreamingReceiver* receiver,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    if (receiver == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        receiver->receiver.reset();
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
+int32_t hftext_c_streaming_receiver_set_config(
+    HFTextStreamingReceiver* receiver,
+    const HFTextModemConfig* config,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    if (receiver == nullptr || config == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        receiver->receiver.setConfig(toCppConfig(*config));
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
+int32_t hftext_c_streaming_receiver_push_samples(
+    HFTextStreamingReceiver* receiver,
+    const float* samples,
+    size_t sampleCount,
+    HFTextDecodeResult* results,
+    size_t resultCapacity,
+    size_t* outResultCount,
+    HFTextStreamingReceiverEvent* events,
+    size_t eventCapacity,
+    size_t* outEventCount,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    if (outResultCount != nullptr) {
+        *outResultCount = 0;
+    }
+    if (outEventCount != nullptr) {
+        *outEventCount = 0;
+    }
+    if (receiver == nullptr || outResultCount == nullptr || outEventCount == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+    if (samples == nullptr && sampleCount > 0) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+    if ((results == nullptr && resultCapacity > 0) || (events == nullptr && eventCapacity > 0)) {
+        writeError(errorMessage, errorMessageSize, "null output buffer");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        std::vector<float> sampleVector;
+        if (sampleCount > 0) {
+            sampleVector.assign(samples, samples + sampleCount);
+        }
+        const auto decoded = receiver->receiver.pushSamples(sampleVector);
+        const auto receiverEvents = receiver->receiver.takeEvents();
+
+        *outResultCount = decoded.size();
+        *outEventCount = receiverEvents.size();
+
+        const auto resultCopyCount = (std::min)(decoded.size(), resultCapacity);
+        for (std::size_t index = 0; index < resultCopyCount; ++index) {
+            fillDecodeResult(decoded[index], results[index]);
+        }
+
+        const auto eventCopyCount = (std::min)(receiverEvents.size(), eventCapacity);
+        for (std::size_t index = 0; index < eventCopyCount; ++index) {
+            events[index] = fromCppEvent(receiverEvents[index]);
+        }
+
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        *outResultCount = 0;
+        *outEventCount = 0;
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
 }
 
 int32_t hftext_c_estimate_transmission(

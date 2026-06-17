@@ -29,7 +29,7 @@
 - Shared core-level TX helpers for PC, CLI, and future Android reuse.
 - Shared core-level tone-frequency and audio-statistics helpers for diagnostics and future Android reuse.
 - Shared core-level RX event summary helpers for PC and future Android diagnostics.
-- Portable C ABI foundation for future JNI integration, including metadata, profiles, modem config, TX estimates, and generated TX audio buffers.
+- Portable C ABI foundation for future JNI integration, including metadata, profiles, modem config, prepared TX text, tone frequencies, audio statistics, TX estimates, generated TX audio buffers, and streaming RX block processing.
 
 ## Current Focus
 
