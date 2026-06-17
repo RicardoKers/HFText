@@ -37,7 +37,7 @@ Core protocol behavior:
 - C compatibility of the public `hftext_c_api.h` header.
 - shared-library linking for the C ABI target.
 - explicit public-symbol export for the C ABI shared-library target.
-- runtime dynamic loading and public-symbol lookup for the C ABI shared-library target.
+- runtime dynamic loading, full public-symbol lookup, metadata/helper calls, and generated-audio streaming RX roundtrip for the C ABI shared-library target.
 
 Application behavior:
 

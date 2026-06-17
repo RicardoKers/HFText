@@ -42,7 +42,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - C compilation test for the public C ABI header.
 - Shared-library target and link test for the portable C ABI.
 - Explicit public-symbol export macro for the C ABI shared-library target.
-- Runtime dynamic-loading test for the portable C ABI shared-library target.
+- Runtime dynamic-loading, full public-symbol lookup, helper-call, and generated-audio roundtrip test for the portable C ABI shared-library target.
 - CLI tools for TX WAV, RX WAV, and streaming WAV replay.
 - Regression tests.
 

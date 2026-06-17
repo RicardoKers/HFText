@@ -4,6 +4,8 @@
 
 The Android application is a future phase. Development should continue on Python, C++ core, CLI tools, and the PC app until the protocol and receiver behavior are stable enough.
 
+The repository currently contains only a placeholder `android-app/README.md`. It exists to reserve the expected project location and document the intended boundaries; it is not an Android implementation.
+
 ## Goal
 
 The Android app should let an operator send and receive HFText messages using a phone or tablet audio interface connected to a radio.
@@ -48,7 +50,7 @@ The CMake target `hftext_c_api_shared` builds this boundary as a shared native l
 
 Only the public C ABI functions are explicitly exported through the `HFTEXT_C_API` macro. JNI glue should depend on this exported C surface rather than C++ symbols.
 
-The shared C ABI target is tested both by normal link-time use and by runtime symbol loading. The dynamic-loading test is intentionally close to how JNI will resolve native entry points from the Android shared library.
+The shared C ABI target is tested by normal link-time use and by runtime symbol loading. The dynamic-loading test is intentionally close to how JNI will resolve native entry points from the Android shared library. It resolves every public C ABI function by name and exercises metadata, text preparation, estimates, tone lists, audio statistics, generated audio, receiver control, and a short streaming-RX roundtrip through that loaded C surface.
 
 Evidence export and higher-level Android UI state should be added around this C ABI incrementally as the Android app needs them.
 
