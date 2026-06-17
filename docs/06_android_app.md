@@ -6,6 +6,16 @@ The Android application is a future phase. Development should continue on Python
 
 The repository currently contains only a placeholder `android-app/README.md`. It exists to reserve the expected project location and document the intended boundaries; it is not an Android implementation.
 
+Android tool installation can be checked with:
+
+```powershell
+.\scripts\check_android_environment.ps1
+```
+
+The script reports Android Studio, SDK, platform-tools, command-line tools, NDK, SDK CMake, and Java runtime availability, including detected versions or warnings when practical. It does not install tools or change the machine.
+
+For Windows installation steps, see `docs/11_android_windows_setup.md`.
+
 ## Goal
 
 The Android app should let an operator send and receive HFText messages using a phone or tablet audio interface connected to a radio.

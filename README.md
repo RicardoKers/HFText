@@ -75,6 +75,16 @@ Create a Windows release package:
 
 The package is written under `dist/` and includes the PC app, CLI tools, Qt/runtime dependencies, and documentation.
 
+Check the future Android development environment:
+
+```powershell
+.\scripts\check_android_environment.ps1
+```
+
+This only reports installed tools; it does not install or change anything.
+
+For future Android tool installation steps, see `docs/11_android_windows_setup.md`.
+
 For operator workflow, see `docs/10_user_guide.md`.
 
 ## Core Principle

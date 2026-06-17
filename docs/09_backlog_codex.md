@@ -11,6 +11,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Documentation updated for HFText Basic v0.1, experimental 4-FSK v0.2, and experimental 8-FSK v0.3.
 - Product-facing language standardized to English.
 - Basic user guide.
+- Android placeholder directory, Windows setup guide, and environment-check script.
 
 ### Python Simulation
 

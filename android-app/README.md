@@ -20,3 +20,25 @@ When Android work starts, it should use:
 - the existing C++ core for modem settings, TX helpers, tone lists, audio statistics, and streaming RX.
 
 Do not duplicate modem protocol, text encoding, FEC, modulation, or receiver logic in Kotlin.
+
+## Environment Check
+
+Before creating the Android project, run this from the repository root:
+
+```powershell
+.\scripts\check_android_environment.ps1
+```
+
+The script only reports installed tools, detected versions, and practical warnings. It does not install or modify anything.
+
+For Windows installation steps, see:
+
+```text
+docs/11_android_windows_setup.md
+```
+
+Use strict mode when the Android build becomes part of validation:
+
+```powershell
+.\scripts\check_android_environment.ps1 -Strict
+```

@@ -17,6 +17,15 @@ ctest --test-dir build-qt15 -C Release --output-on-failure
 
 The exact build directory may vary. Use the active CMake build directory for the current machine.
 
+Check Android development tools when preparing the Android phase:
+
+```powershell
+.\scripts\check_android_environment.ps1
+```
+
+Use `-Strict` only when missing Android tools should make the check fail.
+For Windows setup details, see `docs/11_android_windows_setup.md`.
+
 The GitHub Actions workflow runs Python simulation tests and standalone C++ core tests on every push and pull request.
 
 ## What Must Be Tested
