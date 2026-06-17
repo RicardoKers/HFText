@@ -44,7 +44,7 @@ SYNC | LENGTH | PAYLOAD | CRC16
 - Robust layer with convolutional code `conv_k3`, deterministic interleaving, physical `PHYS_LENGTH`, and Viterbi decoding.
 - 2-FSK baseline plus experimental 4-FSK and 8-FSK.
 - Python simulation and sweep tools.
-- C++ core, CLI tools, and tests.
+- C++ core, C ABI foundation for JNI reuse, CLI tools, and tests.
 - Qt PC app with direct TX, continuous RX, waterfall, RX diagnostics, logs, and field evidence export.
 
 ## Not Yet Implemented

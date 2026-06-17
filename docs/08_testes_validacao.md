@@ -33,6 +33,7 @@ Core protocol behavior:
 - robust layer encode/decode;
 - modulation and demodulation for each supported physical mode;
 - streaming receiver event flow and frame acceptance.
+- portable C ABI behavior for JNI-facing metadata, profiles, modem config, TX estimates, and generated TX audio buffers.
 
 Application behavior:
 

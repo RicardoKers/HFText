@@ -19,6 +19,8 @@ AudioTrack / AudioRecord
         |
 JNI bridge
         |
+Portable C ABI
+        |
 Portable C++ core
 ```
 
@@ -30,6 +32,16 @@ Android tuning and level indicators should reuse the shared C++ tone-frequency a
 
 Android RX status and logs should reuse the shared C++ RX event summary helpers. Kotlin may choose different wording or layout, but strong-sync thresholds, rejected-candidate filtering, progress, and session counters should come from the same core logic used by the PC app.
 
+The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is intentionally small and C-compatible so it can be called from JNI without exposing C++ object lifetimes to Kotlin. The current API exposes:
+
+- application and protocol version metadata;
+- default Fast/Slow modem profiles;
+- validated modem configuration for a selected profile and sample rate;
+- transmit estimates for callsign plus message text;
+- generated normalized floating-point TX audio, with explicit native buffer release.
+
+Continuous RX, evidence export, and receiver events should be added to this C ABI incrementally as the Android app needs them.
+
 ## Requirements
 
 - Reuse the C++ core.
@@ -38,6 +50,7 @@ Android RX status and logs should reuse the shared C++ RX event summary helpers.
 - Reuse the shared C++ TX helpers.
 - Reuse shared C++ tone-frequency and audio-statistics helpers for diagnostics.
 - Reuse shared C++ RX event summary helpers for status and session diagnostics.
+- Reach the C++ core through a narrow C ABI suitable for JNI.
 - Support direct audio TX after explicit operator action.
 - Support continuous RX without unbounded memory growth.
 - Provide a compact operation screen and a separate settings/debug area.

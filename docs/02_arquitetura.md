@@ -36,6 +36,8 @@ Shared audio helpers provide sample peak, clipping percentage, duration, and mod
 
 Shared RX event helpers summarize streaming receiver events into UI-friendly counters, progress, quality, and best-candidate selections. Interfaces should format their own text, but use the common helper decisions so PC and Android diagnostics stay consistent.
 
+The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, transmit-duration estimates, and generated TX audio buffers.
+
 ## Python Simulation
 
 `python-sim/` contains:
@@ -62,6 +64,7 @@ Python is used for quick validation and exploration. Operational behavior should
 - shared transmit helpers for payload construction, estimates, and audio generation;
 - shared audio statistics and tone-frequency helpers for diagnostics and tuning displays;
 - shared RX event summary helpers for progress, quality, and session counters;
+- a portable C ABI foundation for future JNI bindings;
 - WAV I/O helpers for CLI/debug tools;
 - tests for all main behaviors.
 
@@ -103,6 +106,8 @@ Kotlin / Jetpack Compose UI
 AudioRecord / AudioTrack
         |
 JNI bridge
+        |
+Portable C ABI
         |
 Portable C++ core
 ```

@@ -29,6 +29,7 @@
 - Shared core-level TX helpers for PC, CLI, and future Android reuse.
 - Shared core-level tone-frequency and audio-statistics helpers for diagnostics and future Android reuse.
 - Shared core-level RX event summary helpers for PC and future Android diagnostics.
+- Portable C ABI foundation for future JNI integration, including metadata, profiles, modem config, TX estimates, and generated TX audio buffers.
 
 ## Current Focus
 
@@ -48,6 +49,7 @@ The current focus is field validation and operator usability:
 5. Keep the PC interface polished and simple.
 6. Refresh release packages after meaningful user-visible changes.
 7. Keep the user guide aligned with the packaged interface.
+8. Grow the C ABI only as Android integration needs each capability.
 
 ## Future Tasks
 
