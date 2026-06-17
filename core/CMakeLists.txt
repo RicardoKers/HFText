@@ -5,9 +5,9 @@ if(POLICY CMP0141)
 endif()
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
 
-project(hftext_core LANGUAGES CXX)
+project(hftext_core LANGUAGES C CXX)
 
-add_library(hftext_core STATIC
+set(HFTEXT_CORE_SOURCES
     src/app_rx.cpp
     src/app_settings.cpp
     src/app_tx.cpp
@@ -23,15 +23,40 @@ add_library(hftext_core STATIC
     src/streaming_receiver.cpp
 )
 
+add_library(hftext_core STATIC
+    ${HFTEXT_CORE_SOURCES}
+)
+
+add_library(hftext_c_api_shared SHARED
+    ${HFTEXT_CORE_SOURCES}
+)
+
 add_library(hftext_wav_io STATIC
     tools/wav_io.cpp
 )
 
 target_compile_features(hftext_core PUBLIC cxx_std_17)
+target_compile_features(hftext_c_api_shared PUBLIC cxx_std_17)
 
 target_include_directories(hftext_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_include_directories(hftext_c_api_shared
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_definitions(hftext_c_api_shared
+    PRIVATE
+        HFTEXT_C_API_EXPORTS
+)
+
+set_target_properties(hftext_c_api_shared PROPERTIES
+    OUTPUT_NAME hftext_c_api
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 target_include_directories(hftext_wav_io
@@ -59,6 +84,9 @@ if(MSVC)
     set_target_properties(hftext_core PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
+    set_target_properties(hftext_c_api_shared PROPERTIES
+        MSVC_DEBUG_INFORMATION_FORMAT Embedded
+    )
     set_target_properties(hftext_wav_io hftext_tx_wav hftext_rx_wav hftext_stream_wav PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
@@ -79,6 +107,15 @@ if(HFTEXT_CORE_BUILD_TESTS)
     )
     add_executable(hftext_c_api_test
         tests/test_c_api.cpp
+    )
+    add_executable(hftext_c_api_header_c_test
+        tests/test_c_api_header.c
+    )
+    add_executable(hftext_c_api_shared_link_test
+        tests/test_c_api_shared_link.cpp
+    )
+    add_executable(hftext_c_api_dynamic_load_test
+        tests/test_c_api_dynamic_load.cpp
     )
     add_executable(hftext_audio_stats_test
         tests/test_audio_stats.cpp
@@ -122,6 +159,10 @@ if(HFTEXT_CORE_BUILD_TESTS)
 
     target_link_libraries(hftext_core_types_test PRIVATE hftext_core)
     target_link_libraries(hftext_c_api_test PRIVATE hftext_core)
+    target_link_libraries(hftext_c_api_shared_link_test PRIVATE hftext_c_api_shared)
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(hftext_c_api_dynamic_load_test PRIVATE dl)
+    endif()
     target_link_libraries(hftext_audio_stats_test PRIVATE hftext_core)
     target_link_libraries(hftext_app_rx_test PRIVATE hftext_core)
     target_link_libraries(hftext_app_settings_test PRIVATE hftext_core)
@@ -136,10 +177,20 @@ if(HFTEXT_CORE_BUILD_TESTS)
     target_link_libraries(hftext_streaming_receiver_test PRIVATE hftext_core)
     target_link_libraries(hftext_robust_test PRIVATE hftext_core)
 
+    target_include_directories(hftext_c_api_header_c_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_include_directories(hftext_c_api_dynamic_load_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
     if(MSVC)
         set_target_properties(
             hftext_core_types_test
             hftext_c_api_test
+            hftext_c_api_header_c_test
+            hftext_c_api_shared_link_test
+            hftext_c_api_dynamic_load_test
             hftext_audio_stats_test
             hftext_app_rx_test
             hftext_app_settings_test
@@ -160,6 +211,12 @@ if(HFTEXT_CORE_BUILD_TESTS)
 
     add_test(NAME hftext_core_types_test COMMAND hftext_core_types_test)
     add_test(NAME hftext_c_api_test COMMAND hftext_c_api_test)
+    add_test(NAME hftext_c_api_header_c_test COMMAND hftext_c_api_header_c_test)
+    add_test(NAME hftext_c_api_shared_link_test COMMAND hftext_c_api_shared_link_test)
+    add_test(
+        NAME hftext_c_api_dynamic_load_test
+        COMMAND hftext_c_api_dynamic_load_test $<TARGET_FILE:hftext_c_api_shared>
+    )
     add_test(NAME hftext_audio_stats_test COMMAND hftext_audio_stats_test)
     add_test(NAME hftext_app_rx_test COMMAND hftext_app_rx_test)
     add_test(NAME hftext_app_settings_test COMMAND hftext_app_settings_test)

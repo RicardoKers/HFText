@@ -5,7 +5,7 @@ if(POLICY CMP0141)
 endif()
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
 
-project(hftext LANGUAGES CXX)
+project(hftext LANGUAGES C CXX)
 
 enable_testing()
 

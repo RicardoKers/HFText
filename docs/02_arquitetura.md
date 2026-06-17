@@ -36,7 +36,7 @@ Shared audio helpers provide sample peak, clipping percentage, duration, and mod
 
 Shared RX event helpers summarize streaming receiver events into UI-friendly counters, progress, quality, and best-candidate selections. Interfaces should format their own text, but use the common helper decisions so PC and Android diagnostics stay consistent.
 
-The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events.
+The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events. Public C ABI functions use an explicit `HFTEXT_C_API` export macro so the shared library exposes the intended boundary.
 
 ## Python Simulation
 
@@ -65,6 +65,7 @@ Python is used for quick validation and exploration. Operational behavior should
 - shared audio statistics and tone-frequency helpers for diagnostics and tuning displays;
 - shared RX event summary helpers for progress, quality, and session counters;
 - a portable C ABI foundation for future JNI bindings;
+- a shared C ABI library target for JNI-style native integration;
 - WAV I/O helpers for CLI/debug tools;
 - tests for all main behaviors.
 
@@ -145,4 +146,4 @@ audio input blocks
 
 ## Build Targets
 
-The root CMake project builds the core, tests, CLI tools, and PC app when Qt 6 Widgets is available. The PC app should be skipped cleanly on machines without Qt.
+The root CMake project builds the core, the shared C ABI library, tests, CLI tools, and PC app when Qt 6 Widgets is available. The PC app should be skipped cleanly on machines without Qt.

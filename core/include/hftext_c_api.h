@@ -3,6 +3,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef HFTEXT_C_API
+#if defined(_WIN32) && defined(HFTEXT_C_API_EXPORTS)
+#define HFTEXT_C_API __declspec(dllexport)
+#elif defined(__GNUC__) && defined(HFTEXT_C_API_EXPORTS)
+#define HFTEXT_C_API __attribute__((visibility("default")))
+#else
+#define HFTEXT_C_API
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -135,15 +145,15 @@ typedef struct HFTextStreamingReceiverEvent {
 
 typedef struct HFTextStreamingReceiver HFTextStreamingReceiver;
 
-const char* hftext_c_application_name(void);
-const char* hftext_c_version(void);
-const char* hftext_c_version_label(void);
-const char* hftext_c_release_track(void);
-const char* hftext_c_protocol_version(void);
+HFTEXT_C_API const char* hftext_c_application_name(void);
+HFTEXT_C_API const char* hftext_c_version(void);
+HFTEXT_C_API const char* hftext_c_version_label(void);
+HFTEXT_C_API const char* hftext_c_release_track(void);
+HFTEXT_C_API const char* hftext_c_protocol_version(void);
 
-int32_t hftext_c_default_app_modem_profiles(HFTextAppModemProfiles* out_profiles);
+HFTEXT_C_API int32_t hftext_c_default_app_modem_profiles(HFTextAppModemProfiles* out_profiles);
 
-int32_t hftext_c_modem_config_for_profile(
+HFTEXT_C_API int32_t hftext_c_modem_config_for_profile(
     const HFTextAppModemProfiles* profiles,
     enum HFTextSpeedProfile profile,
     int32_t sample_rate,
@@ -152,7 +162,7 @@ int32_t hftext_c_modem_config_for_profile(
     size_t error_message_size
 );
 
-int32_t hftext_c_estimate_transmission(
+HFTEXT_C_API int32_t hftext_c_estimate_transmission(
     const char* callsign_utf8,
     const char* message_utf8,
     const HFTextModemConfig* config,
@@ -161,7 +171,7 @@ int32_t hftext_c_estimate_transmission(
     size_t error_message_size
 );
 
-int32_t hftext_c_prepare_text(
+HFTEXT_C_API int32_t hftext_c_prepare_text(
     const char* callsign_utf8,
     const char* message_utf8,
     char* sanitized_message_utf8,
@@ -173,14 +183,14 @@ int32_t hftext_c_prepare_text(
     size_t error_message_size
 );
 
-int32_t hftext_c_tone_frequencies(
+HFTEXT_C_API int32_t hftext_c_tone_frequencies(
     const HFTextModemConfig* config,
     HFTextToneFrequencies* out_frequencies,
     char* error_message,
     size_t error_message_size
 );
 
-int32_t hftext_c_analyze_audio_samples(
+HFTEXT_C_API int32_t hftext_c_analyze_audio_samples(
     const float* samples,
     size_t sample_count,
     int32_t sample_rate,
@@ -190,7 +200,7 @@ int32_t hftext_c_analyze_audio_samples(
     size_t error_message_size
 );
 
-int32_t hftext_c_generate_transmit_audio(
+HFTEXT_C_API int32_t hftext_c_generate_transmit_audio(
     const char* callsign_utf8,
     const char* message_utf8,
     const HFTextModemConfig* config,
@@ -201,31 +211,31 @@ int32_t hftext_c_generate_transmit_audio(
 
 /* Releases audio allocated by hftext_c_generate_transmit_audio.
    Pass zero-initialized or previously released HFTextFloatAudio structs to the generator. */
-void hftext_c_free_audio(HFTextFloatAudio* audio);
+HFTEXT_C_API void hftext_c_free_audio(HFTextFloatAudio* audio);
 
-int32_t hftext_c_streaming_receiver_create(
+HFTEXT_C_API int32_t hftext_c_streaming_receiver_create(
     const HFTextModemConfig* config,
     HFTextStreamingReceiver** out_receiver,
     char* error_message,
     size_t error_message_size
 );
 
-void hftext_c_streaming_receiver_free(HFTextStreamingReceiver* receiver);
+HFTEXT_C_API void hftext_c_streaming_receiver_free(HFTextStreamingReceiver* receiver);
 
-int32_t hftext_c_streaming_receiver_reset(
+HFTEXT_C_API int32_t hftext_c_streaming_receiver_reset(
     HFTextStreamingReceiver* receiver,
     char* error_message,
     size_t error_message_size
 );
 
-int32_t hftext_c_streaming_receiver_set_config(
+HFTEXT_C_API int32_t hftext_c_streaming_receiver_set_config(
     HFTextStreamingReceiver* receiver,
     const HFTextModemConfig* config,
     char* error_message,
     size_t error_message_size
 );
 
-int32_t hftext_c_streaming_receiver_push_samples(
+HFTEXT_C_API int32_t hftext_c_streaming_receiver_push_samples(
     HFTextStreamingReceiver* receiver,
     const float* samples,
     size_t sample_count,

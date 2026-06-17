@@ -41,8 +41,14 @@ The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is i
 - modem tone frequencies for tuning displays;
 - audio peak, clipping, and duration statistics;
 - transmit estimates for callsign plus message text;
-- generated normalized floating-point TX audio, with explicit native buffer release.
+- generated normalized floating-point TX audio, with explicit native buffer release;
 - an opaque streaming receiver handle that accepts audio blocks and returns decoded messages plus RX events.
+
+The CMake target `hftext_c_api_shared` builds this boundary as a shared native library (`hftext_c_api.dll` on Windows, `.so` on Unix-like targets). Android should eventually build the same C ABI sources through the NDK and load them from JNI.
+
+Only the public C ABI functions are explicitly exported through the `HFTEXT_C_API` macro. JNI glue should depend on this exported C surface rather than C++ symbols.
+
+The shared C ABI target is tested both by normal link-time use and by runtime symbol loading. The dynamic-loading test is intentionally close to how JNI will resolve native entry points from the Android shared library.
 
 Evidence export and higher-level Android UI state should be added around this C ABI incrementally as the Android app needs them.
 

@@ -39,6 +39,10 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Shared audio statistics and tone-frequency helpers for diagnostics.
 - Shared RX event summary helpers for progress, quality, and session counters.
 - Portable C ABI foundation for future JNI integration, including prepared TX text, tone frequencies, audio statistics, generated TX audio buffers, and streaming RX block processing.
+- C compilation test for the public C ABI header.
+- Shared-library target and link test for the portable C ABI.
+- Explicit public-symbol export macro for the C ABI shared-library target.
+- Runtime dynamic-loading test for the portable C ABI shared-library target.
 - CLI tools for TX WAV, RX WAV, and streaming WAV replay.
 - Regression tests.
 

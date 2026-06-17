@@ -34,6 +34,10 @@ Core protocol behavior:
 - modulation and demodulation for each supported physical mode;
 - streaming receiver event flow and frame acceptance.
 - portable C ABI behavior for JNI-facing metadata, profiles, modem config, prepared TX text, tone frequencies, audio statistics, TX estimates, generated TX audio buffers, and streaming RX block processing.
+- C compatibility of the public `hftext_c_api.h` header.
+- shared-library linking for the C ABI target.
+- explicit public-symbol export for the C ABI shared-library target.
+- runtime dynamic loading and public-symbol lookup for the C ABI shared-library target.
 
 Application behavior:
 
