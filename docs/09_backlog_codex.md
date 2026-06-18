@@ -12,6 +12,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Product-facing language standardized to English.
 - Basic user guide.
 - Android placeholder directory, Windows setup guide, and environment-check script.
+- C ABI reference for future JNI integration.
+- Minimal Android Kotlin/Compose shell with Gradle wrapper and debug build script.
 
 ### Python Simulation
 
@@ -40,6 +42,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Shared audio statistics and tone-frequency helpers for diagnostics.
 - Shared RX event summary helpers for progress, quality, and session counters.
 - Portable C ABI foundation for future JNI integration, including prepared TX text, tone frequencies, audio statistics, generated TX audio buffers, and streaming RX block processing.
+- C ABI usage contract documented for future JNI integration.
 - C compilation test for the public C ABI header.
 - Shared-library target and link test for the portable C ABI.
 - Explicit public-symbol export macro for the C ABI shared-library target.
@@ -111,8 +114,8 @@ These require explicit protocol-version planning:
 
 Android should start only after the PC/core path is stable:
 
-1. Minimal Kotlin/Compose shell.
-2. JNI bridge to the portable C ABI.
+1. JNI bridge to the portable C ABI.
+2. Use `docs/12_c_api_reference.md` as the JNI boundary contract.
 3. Reuse shared C++ Fast/Slow modem profiles through the JNI layer.
 4. Reuse shared C++ TX helpers through the JNI layer.
 5. Reuse shared C++ tone-frequency and audio-statistics helpers for tuning and level UI.

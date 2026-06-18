@@ -46,10 +46,11 @@ SYNC | LENGTH | PAYLOAD | CRC16
 - Python simulation and sweep tools.
 - C++ core, C ABI foundation for JNI reuse, CLI tools, and tests.
 - Qt PC app with direct TX, continuous RX, waterfall, RX diagnostics, logs, and field evidence export.
+- Minimal Android Kotlin/Compose shell, without JNI or audio integration yet.
 
 ## Not Yet Implemented
 
-- Android application.
+- Android JNI bridge and audio integration.
 - Automatic gain control.
 - Fine continuous carrier/timing tracking.
 - ACK or retry protocol.

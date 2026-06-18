@@ -85,6 +85,15 @@ This only reports installed tools; it does not install or change anything.
 
 For future Android tool installation steps, see `docs/11_android_windows_setup.md`.
 
+Build the current Android debug shell:
+
+```powershell
+.\scripts\build_android_debug.ps1
+```
+
+For the native C API intended for future JNI integration, see
+`docs/12_c_api_reference.md`.
+
 For operator workflow, see `docs/10_user_guide.md`.
 
 ## Core Principle

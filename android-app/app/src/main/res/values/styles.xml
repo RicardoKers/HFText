@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.HFText" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">#14181D</item>
+        <item name="android:statusBarColor">#14181D</item>
+    </style>
+</resources>

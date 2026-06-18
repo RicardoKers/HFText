@@ -1,17 +1,17 @@
 # HFText Android App
 
-This directory is reserved for the future Android application.
+This directory contains the first Android shell for HFText.
 
-The Android app has not started yet. The current project order remains:
+Current status:
 
-1. Python simulation.
-2. Portable C++ core.
-3. CLI tools.
-4. PC app.
-5. Field validation.
-6. Android app.
+- Gradle wrapper project;
+- Kotlin source enabled through Android Gradle Plugin built-in Kotlin support;
+- Jetpack Compose UI shell;
+- no JNI bridge yet;
+- no audio TX/RX yet;
+- no modem logic duplicated in Kotlin.
 
-When Android work starts, it should use:
+Android development should continue to use:
 
 - Kotlin and Jetpack Compose for the UI;
 - `AudioTrack` for TX audio;
@@ -21,9 +21,37 @@ When Android work starts, it should use:
 
 Do not duplicate modem protocol, text encoding, FEC, modulation, or receiver logic in Kotlin.
 
+The C ABI usage contract for future JNI work is documented in:
+
+```text
+docs/12_c_api_reference.md
+```
+
+## Build
+
+From the repository root:
+
+```powershell
+.\scripts\build_android_debug.ps1
+```
+
+Or directly from this directory, when `JAVA_HOME` and `ANDROID_HOME` are already set:
+
+```powershell
+.\gradlew.bat assembleDebug
+```
+
+The generated debug APK is written under:
+
+```text
+android-app/app/build/outputs/apk/debug/
+```
+
+Open `android-app/` in Android Studio to run it on an emulator or device.
+
 ## Environment Check
 
-Before creating the Android project, run this from the repository root:
+From the repository root:
 
 ```powershell
 .\scripts\check_android_environment.ps1

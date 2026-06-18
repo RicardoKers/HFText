@@ -76,6 +76,15 @@ When Android builds become part of validation, use:
 
 Strict mode exits with a non-zero status if required Android tools are missing or problematic.
 
+Build the Android debug shell from the repository root:
+
+```powershell
+.\scripts\build_android_debug.ps1
+```
+
+The build script uses the Android Studio bundled JBR and the default SDK path when
+`JAVA_HOME` or `ANDROID_HOME` are not set.
+
 ## What Not To Do Yet
 
 Do not duplicate HFText modem behavior in Kotlin.

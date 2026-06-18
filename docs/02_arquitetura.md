@@ -36,7 +36,7 @@ Shared audio helpers provide sample peak, clipping percentage, duration, and mod
 
 Shared RX event helpers summarize streaming receiver events into UI-friendly counters, progress, quality, and best-candidate selections. Interfaces should format their own text, but use the common helper decisions so PC and Android diagnostics stay consistent.
 
-The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events. Public C ABI functions use an explicit `HFTEXT_C_API` export macro so the shared library exposes the intended boundary.
+The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events. Public C ABI functions use an explicit `HFTEXT_C_API` export macro so the shared library exposes the intended boundary. The C ABI usage contract is documented in `docs/12_c_api_reference.md`.
 
 ## Python Simulation
 
@@ -99,7 +99,7 @@ The PC app reads and writes its local `hftext.ini`, but the meaning of profile s
 
 ## Android Application
 
-`android-app/` is reserved for a later phase. The desired Android architecture is:
+`android-app/` contains the initial Kotlin/Compose shell. JNI, native core loading, and audio integration are still future steps. The desired Android architecture is:
 
 ```text
 Kotlin / Jetpack Compose UI
@@ -114,6 +114,8 @@ Portable C++ core
 ```
 
 Android should reuse the same protocol and core behavior validated on PC. It should also reuse the core-level application settings helpers so the Android Fast/Slow profiles match the PC defaults unless a deliberate product decision changes them.
+
+The Android Gradle project is intentionally isolated under `android-app/` so the root CMake build remains focused on the portable core, CLI tools, and PC app.
 
 ## Data Flow
 

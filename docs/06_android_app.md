@@ -2,9 +2,9 @@
 
 ## Status
 
-The Android application is a future phase. Development should continue on Python, C++ core, CLI tools, and the PC app until the protocol and receiver behavior are stable enough.
+The Android application has started with a minimal Kotlin/Compose shell. It builds as a debug APK but does not yet include JNI, audio TX/RX, or modem operation.
 
-The repository currently contains only a placeholder `android-app/README.md`. It exists to reserve the expected project location and document the intended boundaries; it is not an Android implementation.
+Development should remain incremental. The PC app and C++ core are still the reference implementation for modem behavior.
 
 Android tool installation can be checked with:
 
@@ -15,6 +15,12 @@ Android tool installation can be checked with:
 The script reports Android Studio, SDK, platform-tools, command-line tools, NDK, SDK CMake, and Java runtime availability, including detected versions or warnings when practical. It does not install tools or change the machine.
 
 For Windows installation steps, see `docs/11_android_windows_setup.md`.
+
+Build the current Android shell from the repository root with:
+
+```powershell
+.\scripts\build_android_debug.ps1
+```
 
 ## Goal
 
@@ -44,7 +50,7 @@ Android tuning and level indicators should reuse the shared C++ tone-frequency a
 
 Android RX status and logs should reuse the shared C++ RX event summary helpers. Kotlin may choose different wording or layout, but strong-sync thresholds, rejected-candidate filtering, progress, and session counters should come from the same core logic used by the PC app.
 
-The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is intentionally small and C-compatible so it can be called from JNI without exposing C++ object lifetimes to Kotlin. The current API exposes:
+The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is intentionally small and C-compatible so it can be called from JNI without exposing C++ object lifetimes to Kotlin. The C ABI usage contract is documented in `docs/12_c_api_reference.md`. The current API exposes:
 
 - application and protocol version metadata;
 - default Fast/Slow modem profiles;

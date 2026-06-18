@@ -25,6 +25,13 @@ Check Android development tools when preparing the Android phase:
 
 Use `-Strict` only when missing Android tools should make the check fail.
 For Windows setup details, see `docs/11_android_windows_setup.md`.
+For the JNI-facing native API contract, see `docs/12_c_api_reference.md`.
+
+Build the Android debug shell:
+
+```powershell
+.\scripts\build_android_debug.ps1
+```
 
 The GitHub Actions workflow runs Python simulation tests and standalone C++ core tests on every push and pull request.
 
@@ -61,6 +68,7 @@ Application behavior:
 - waterfall tone markers;
 - default-settings button;
 - no console window in the packaged GUI application.
+- Android debug shell builds successfully.
 
 ## Field Validation
 
