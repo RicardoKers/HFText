@@ -10,7 +10,7 @@ The project favors weak-signal robustness and operator clarity over throughput. 
 - Keep the DSP core independent from the graphical interface and audio APIs.
 - Validate the protocol first in Python, then in portable C++.
 - Provide a PC application for field testing.
-- Reuse the C++ core later in an Android application.
+- Reuse the C++ core in both PC and Android applications.
 - Keep FEC, interleaving, diagnostics, and evidence export testable.
 
 ## Current State
@@ -33,6 +33,8 @@ The operational baseline is HFText Basic v0.1:
 
 The Qt PC application can transmit directly through the sound card, receive continuously, show RX level/quality/waterfall, track RX state/session diagnostics, save logs, and export field evidence bundles.
 
+The Android app is an incremental Kotlin/Compose client. It uses JNI and the portable C ABI for metadata, text preparation, TX estimates, explicit AudioTrack TX, audio level statistics, and initial AudioRecord streaming RX through the native receiver.
+
 ## Development Strategy
 
 1. Python simulation.
@@ -48,7 +50,7 @@ The Qt PC application can transmit directly through the sound card, receive cont
 - C++17 for the portable DSP core.
 - CMake for the C++ core, CLI tools, and PC app.
 - Qt 6 Widgets for the PC application.
-- Kotlin, Jetpack Compose, and JNI are planned for Android.
+- Kotlin, Jetpack Compose, JNI, AudioTrack, and AudioRecord for Android.
 
 ## Quick Start
 
@@ -75,7 +77,7 @@ Create a Windows release package:
 
 The package is written under `dist/` and includes the PC app, CLI tools, Qt/runtime dependencies, and documentation.
 
-Check the future Android development environment:
+Check the Android development environment:
 
 ```powershell
 .\scripts\check_android_environment.ps1
@@ -83,7 +85,7 @@ Check the future Android development environment:
 
 This only reports installed tools; it does not install or change anything.
 
-For future Android tool installation steps, see `docs/11_android_windows_setup.md`.
+For Android tool installation steps, see `docs/11_android_windows_setup.md`.
 
 Build the current Android debug shell:
 
@@ -91,7 +93,7 @@ Build the current Android debug shell:
 .\scripts\build_android_debug.ps1
 ```
 
-For the native C API intended for future JNI integration, see
+For the native C API used by JNI integration, see
 `docs/12_c_api_reference.md`.
 
 For operator workflow, see `docs/10_user_guide.md`.

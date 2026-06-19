@@ -35,7 +35,7 @@ SYNC | LENGTH | PAYLOAD | CRC16
 - Tolerance to moderate frequency error, timing error, noise, and fading.
 - Portable C++ modem core.
 - PC application for real field validation.
-- Future Android application using the same core.
+- Android application using the same core incrementally.
 
 ## Current Implementation
 
@@ -46,11 +46,11 @@ SYNC | LENGTH | PAYLOAD | CRC16
 - Python simulation and sweep tools.
 - C++ core, C ABI foundation for JNI reuse, CLI tools, and tests.
 - Qt PC app with direct TX, continuous RX, waterfall, RX diagnostics, logs, and field evidence export.
-- Minimal Android Kotlin/Compose shell, without JNI or audio integration yet.
+- Minimal Android Kotlin/Compose shell with JNI bridge for metadata, text preparation, TX estimates, explicit AudioTrack TX using core-generated audio, and initial AudioRecord streaming RX through the native receiver.
 
 ## Not Yet Implemented
 
-- Android JNI bridge and audio integration.
+- Android evidence/log export and a polished operating UI.
 - Automatic gain control.
 - Fine continuous carrier/timing tracking.
 - ACK or retry protocol.

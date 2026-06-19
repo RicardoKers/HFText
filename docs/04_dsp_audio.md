@@ -53,6 +53,8 @@ Real radio and SDR captures may include BFO/synthesizer error, sample-rate misma
 
 The receiver should tolerate modest frequency error by testing small offsets around the configured tones. The waterfall tone markers help the operator see whether received tracks are shifted relative to the expected tones.
 
+The live streaming receiver should keep this search bounded. Experimental long-symbol 8-FSK uses a reduced live hypothesis grid with fewer timing phases while still testing frequency offsets up to approximately +/-15 Hz. Wider or heavier searches belong in offline debug tools unless field evidence proves they are needed in normal operation.
+
 ## Timing
 
 Symbol duration is configurable. Longer symbols improve tone energy at the cost of channel time. Shorter symbols improve speed but require better signal quality and timing.
@@ -79,6 +81,7 @@ The receiver must avoid unbounded growth:
 - the recent evidence audio buffer is circular;
 - detailed logs may drop or aggregate excessive events;
 - stopping RX must not trigger a full offline decode of the whole capture.
+- the live search grid must stay small enough that decoding does not build a long backlog after the audio frame has ended.
 
 ## Preamble and Synchronization
 

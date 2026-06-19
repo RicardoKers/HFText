@@ -2,7 +2,7 @@
 
 ## Status
 
-The Android application has started with a minimal Kotlin/Compose shell. It builds as a debug APK but does not yet include JNI, audio TX/RX, or modem operation.
+The Android application has started with a minimal Kotlin/Compose shell and JNI bridge. It builds as a debug APK and displays version, protocol, Fast/Slow profile summaries, sanitized text, payload preview, symbol counts, and TX estimates read through the portable C ABI. It can also generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It can capture microphone audio with `AudioRecord`, display native audio level/clipping statistics, feed captured blocks to the native streaming receiver, and show accepted messages plus basic receiver status. Android RX can select voice-recognition, raw/unprocessed, or normal microphone input, applies limited digital gain before the receiver, counts low-confidence receiver activity for field diagnosis, and saves recent raw/modem-input WAV evidence for PC-side replay with captured-duration reporting. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks so saving should not spend several seconds on many tiny writes.
 
 Development should remain incremental. The PC app and C++ core are still the reference implementation for modem behavior.
 
@@ -44,13 +44,13 @@ Portable C++ core
 
 Fast/Slow profile defaults, modulation keys, display names, tone spacing, amplitude, preamble length, and modem configuration validation should come from the shared C++ application settings helpers in `core/`. Android-specific storage may be different, but the interpretation of modem settings should not be duplicated in Kotlin.
 
-Transmit behavior should also use the shared C++ TX helpers for callsign insertion, payload validation, duration estimates, and audio generation. Kotlin should provide text, selected profile, and audio output plumbing, not a separate modem implementation.
+Transmit behavior uses the shared C++ TX helpers for callsign insertion, payload validation, duration estimates, and audio generation. Kotlin provides text, selected profile, and audio output plumbing, not a separate modem implementation.
 
 Android tuning and level indicators should reuse the shared C++ tone-frequency and audio-statistics helpers where practical.
 
 Android RX status and logs should reuse the shared C++ RX event summary helpers. Kotlin may choose different wording or layout, but strong-sync thresholds, rejected-candidate filtering, progress, and session counters should come from the same core logic used by the PC app.
 
-The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is intentionally small and C-compatible so it can be called from JNI without exposing C++ object lifetimes to Kotlin. The C ABI usage contract is documented in `docs/12_c_api_reference.md`. The current API exposes:
+The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is intentionally small and C-compatible so it can be called from JNI without exposing C++ object lifetimes to Kotlin. The Android app now has a small JNI wrapper that calls this C ABI for metadata, profile summaries, text preparation, TX estimates, generated TX audio, RX sample rate, audio statistics, and streaming receiver updates. The C ABI usage contract is documented in `docs/12_c_api_reference.md`. The current API exposes:
 
 - application and protocol version metadata;
 - default Fast/Slow modem profiles;
@@ -62,7 +62,7 @@ The first Android-facing core boundary is `core/include/hftext_c_api.h`. It is i
 - generated normalized floating-point TX audio, with explicit native buffer release;
 - an opaque streaming receiver handle that accepts audio blocks and returns decoded messages plus RX events.
 
-The CMake target `hftext_c_api_shared` builds this boundary as a shared native library (`hftext_c_api.dll` on Windows, `.so` on Unix-like targets). Android should eventually build the same C ABI sources through the NDK and load them from JNI.
+The CMake target `hftext_c_api_shared` builds this boundary as a shared native library (`hftext_c_api.dll` on Windows, `.so` on Unix-like targets). Android builds the same C ABI sources through the NDK and loads them from JNI.
 
 Only the public C ABI functions are explicitly exported through the `HFTEXT_C_API` macro. JNI glue should depend on this exported C surface rather than C++ symbols.
 
@@ -83,6 +83,27 @@ Evidence export and higher-level Android UI state should be added around this C 
 - Support continuous RX without unbounded memory growth.
 - Provide a compact operation screen and a separate settings/debug area.
 - Export logs or evidence in a format compatible with the PC-side analysis tools when practical.
+
+## Current Android Validation
+
+- `.\scripts\build_android_debug.ps1` builds the debug APK.
+- The APK packages `libhftext_c_api.so` and `libhftext_android_jni.so`.
+- The app opens in the emulator and shows `JNI OK via C ABI`.
+- Metadata and Fast/Slow summaries shown in the UI come from the native core path.
+- Sanitized text, payload preview, symbol counts, and TX estimates shown in the UI come from the native core path.
+- `Send audio` generates normalized float TX audio through JNI and plays it with `AudioTrack`.
+- `Stop TX` cancels active Android audio playback.
+- `Start RX capture` requests microphone permission when needed, captures float mono audio with `AudioRecord`, and shows peak/clipping stats computed through the C ABI.
+- Android RX lets the operator choose voice-recognition, raw/unprocessed, or normal microphone capture and falls back when a selected source does not initialize.
+- Android RX shows both raw peak level and the modem-input peak level after limited digital gain.
+- `Save RX audio` writes the recent raw microphone buffer and modem-input buffer as WAV files in the app-specific `rx-evidence` directory.
+- The Android UI shows the current RX buffer duration and warns when saved RX evidence is shorter than the selected TX estimate.
+- Android RX capture and native decoding run on separate threads; `RX buffer` should advance in real time even if the decoder status lags.
+- The native streaming receiver uses a bounded live 8-FSK search grid to reduce Android decode backlog while preserving +/-15 Hz frequency-offset coverage.
+- Captured Android RX blocks are streamed into a native receiver handle through JNI.
+- The Android UI displays accepted messages only after the native receiver reports frame, payload, and CRC success.
+- Low-confidence receiver events are throttled and counted for diagnosis without flooding the UI.
+- `Stop RX capture` stops and releases the active Android recorder.
 
 ## Not Planned Yet
 

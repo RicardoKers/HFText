@@ -38,6 +38,7 @@ cmake-build-*/
 local.properties
 android-app/.gradle/
 android-app/.kotlin/
+android-app/app/.cxx/
 android-app/build/
 android-app/app/build/
 

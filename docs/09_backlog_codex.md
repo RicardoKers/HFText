@@ -12,8 +12,21 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Product-facing language standardized to English.
 - Basic user guide.
 - Android placeholder directory, Windows setup guide, and environment-check script.
-- C ABI reference for future JNI integration.
+- C ABI reference for JNI integration.
 - Minimal Android Kotlin/Compose shell with Gradle wrapper and debug build script.
+- Minimal Android JNI bridge for C ABI metadata and Fast/Slow profile summaries.
+- Android JNI bridge for text preparation, payload preview, symbol counts, and TX estimates.
+- Android JNI bridge for generated TX audio.
+- Android AudioTrack TX after explicit operator action, with cancel/stop behavior.
+- Android AudioRecord capture with microphone permission, stop/release behavior, and C ABI audio level/clipping statistics.
+- Android AudioRecord blocks streamed through the C ABI receiver with accepted messages and filtered RX status in the UI.
+- Android RX diagnostic improvements: selectable microphone source, fallback source label, limited modem-input gain, raw/modem level display, low-level hint, and low-confidence event count.
+- Android RX debug WAV export for recent raw and modem-input audio.
+- Android RX buffer-duration display and saved-evidence duration warning.
+- Android RX capture/decoder thread separation so evidence capture can stay real-time when decoding lags.
+- Android Fast RX evidence replayed successfully on PC from Xiaomi POCO F1 captures.
+- Android Slow RX latency reduced by bounding the live 8-FSK streaming search grid while preserving +/-15 Hz frequency-offset coverage.
+- Android RX evidence WAV export switched to buffered chunked PCM writes.
 
 ### Python Simulation
 
@@ -41,8 +54,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Shared application TX helpers for callsign insertion, estimates, and audio generation.
 - Shared audio statistics and tone-frequency helpers for diagnostics.
 - Shared RX event summary helpers for progress, quality, and session counters.
-- Portable C ABI foundation for future JNI integration, including prepared TX text, tone frequencies, audio statistics, generated TX audio buffers, and streaming RX block processing.
-- C ABI usage contract documented for future JNI integration.
+- Portable C ABI foundation for JNI integration, including prepared TX text, tone frequencies, audio statistics, generated TX audio buffers, and streaming RX block processing.
+- C ABI usage contract documented for JNI integration.
 - C compilation test for the public C ABI header.
 - Shared-library target and link test for the portable C ABI.
 - Explicit public-symbol export macro for the C ABI shared-library target.
@@ -79,7 +92,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 3. Compare symbol durations, especially 0.1 s, 0.3 s, and 0.5 s.
 4. Track field acceptance rate and quality using `field_summary.py`.
 5. Replay accepted evidence with `field_replay.py` after decoder changes.
-6. Watch for repeated failure causes: missed sync, invalid `PHYS_LENGTH`, CRC failure, payload failure, or UI responsiveness.
+6. Watch for repeated failure causes: missed sync, invalid `PHYS_LENGTH`, CRC failure, payload failure, latency after frame end, evidence-save time, or UI responsiveness.
 
 ## Near-Term UI Tasks
 
@@ -112,18 +125,13 @@ These require explicit protocol-version planning:
 
 ## Android Tasks
 
-Android should start only after the PC/core path is stable:
+Android remains incremental and should continue to reuse the PC/core behavior:
 
-1. JNI bridge to the portable C ABI.
-2. Use `docs/12_c_api_reference.md` as the JNI boundary contract.
-3. Reuse shared C++ Fast/Slow modem profiles through the JNI layer.
-4. Reuse shared C++ TX helpers through the JNI layer.
-5. Reuse shared C++ tone-frequency and audio-statistics helpers for tuning and level UI.
-6. Reuse shared C++ RX event summary helpers for status and logs.
-7. AudioTrack TX.
-8. AudioRecord RX.
-9. Continuous receiver integration through the C ABI streaming receiver.
-10. Evidence/log export where practical.
+1. Improve Android operation UI without duplicating modem logic in Kotlin.
+2. Reuse shared C++ tone-frequency helpers for tuning UI.
+3. Reuse shared C++ RX event summary helpers for richer status and logs.
+4. Add evidence/log export where practical.
+5. Add device/emulator validation around JNI TX/RX flows when the workflow stabilizes.
 
 ## Release Tasks
 

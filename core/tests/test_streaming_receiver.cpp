@@ -183,6 +183,27 @@ int main() {
     assert(longFsk8Results.front().payloadValid);
     assert(longFsk8Results.front().text == "pu5lrk 8fsk longo");
 
+    hftext::ModemConfig longShiftedFsk8TxConfig = longFsk8Config;
+    longShiftedFsk8TxConfig.frequency0Hz += 15.0F;
+    longShiftedFsk8TxConfig.frequency1Hz += 15.0F;
+    auto longShiftedFsk8Audio = hftext::modulateText("pu5lrk 8fsk shift", longShiftedFsk8TxConfig);
+    longShiftedFsk8Audio.insert(longShiftedFsk8Audio.begin(), 53, 0.0F);
+    hftext::StreamingReceiver longShiftedFsk8Receiver(longFsk8Config);
+    std::vector<hftext::DecodeResult> longShiftedFsk8Results;
+    for (std::size_t offset = 0; offset < longShiftedFsk8Audio.size(); offset += longFsk8ChunkSize) {
+        const auto end = std::min(longShiftedFsk8Audio.size(), offset + longFsk8ChunkSize);
+        const std::vector<float> chunk(
+            longShiftedFsk8Audio.begin() + static_cast<std::ptrdiff_t>(offset),
+            longShiftedFsk8Audio.begin() + static_cast<std::ptrdiff_t>(end)
+        );
+        const auto results = longShiftedFsk8Receiver.pushSamples(chunk);
+        longShiftedFsk8Results.insert(longShiftedFsk8Results.end(), results.begin(), results.end());
+    }
+    assert(longShiftedFsk8Results.size() == 1);
+    assert(longShiftedFsk8Results.front().crcOk);
+    assert(longShiftedFsk8Results.front().payloadValid);
+    assert(longShiftedFsk8Results.front().text == "pu5lrk 8fsk shift");
+
     const auto noMoreResults = receiver.pushSamples({0.0F, 0.0F, 0.0F});
     assert(noMoreResults.empty());
     assert(receiver.takeEvents().empty());

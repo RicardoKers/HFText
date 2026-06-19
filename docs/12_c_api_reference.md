@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`core/include/hftext_c_api.h` is the stable native boundary for future JNI integration.
+`core/include/hftext_c_api.h` is the stable native boundary for JNI integration.
 It exposes the modem core as a small C-compatible API so Android can reuse the same
 protocol, text preparation, modem defaults, TX helpers, and streaming RX behavior as
 the PC application.
@@ -244,6 +244,15 @@ Keep JNI narrow and mechanical:
 
 Kotlin should not implement text encoding, FEC, interleaving, frame parsing,
 modulation, demodulation, or CRC validation.
+
+The current Android bridge follows this rule for the first increments: it loads
+`libhftext_c_api.so`, calls metadata/profile/text-preparation/TX-estimate/audio
+generation/audio-statistics/streaming-RX functions through a small
+`libhftext_android_jni.so` wrapper, and displays the returned values in Compose.
+Explicit TX playback is handled in Kotlin with `AudioTrack`. RX capture is handled
+in Kotlin with `AudioRecord`; captured blocks are pushed to an opaque native
+receiver handle, and accepted messages are displayed only after frame, payload, and
+CRC validation by the core.
 
 ## Validation
 

@@ -1,8 +1,8 @@
 # Android Windows Setup
 
-This guide is for the future Android phase. The Android app has not started yet, and the PC/core workflow remains the active development path.
+This guide is for the Android phase. The Android app is still incremental, and the PC/core workflow remains the reference implementation for modem behavior.
 
-Use this guide when it becomes time to install Android development tools.
+Use this guide to install or verify Android development tools.
 
 ## First Check
 
@@ -68,7 +68,7 @@ After installing components, open a new PowerShell terminal and run:
 .\scripts\check_android_environment.ps1
 ```
 
-When Android builds become part of validation, use:
+When missing Android tools should fail validation, use:
 
 ```powershell
 .\scripts\check_android_environment.ps1 -Strict
@@ -95,7 +95,7 @@ Android should call the portable C ABI in:
 core/include/hftext_c_api.h
 ```
 
-The future Android app should reuse the C++ core for:
+The Android app should reuse the C++ core for:
 
 - protocol metadata;
 - Fast/Slow modem profiles;

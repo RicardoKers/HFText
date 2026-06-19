@@ -25,12 +25,14 @@
 - Repeatable Windows release packaging script.
 - Basic GitHub Actions CI for Python simulation and C++ core tests.
 - Visible app, CLI, log, and evidence version metadata.
-- Shared core-level Fast/Slow profile defaults and modem-setting validation for PC and future Android reuse.
-- Shared core-level TX helpers for PC, CLI, and future Android reuse.
-- Shared core-level tone-frequency and audio-statistics helpers for diagnostics and future Android reuse.
-- Shared core-level RX event summary helpers for PC and future Android diagnostics.
-- Portable C ABI foundation and shared-library target for future JNI integration, including metadata, profiles, modem config, prepared TX text, tone frequencies, audio statistics, TX estimates, generated TX audio buffers, and streaming RX block processing.
+- Shared core-level Fast/Slow profile defaults and modem-setting validation for PC and Android reuse.
+- Shared core-level TX helpers for PC, CLI, and Android reuse.
+- Shared core-level tone-frequency and audio-statistics helpers for diagnostics and Android reuse.
+- Shared core-level RX event summary helpers for PC and Android diagnostics.
+- Portable C ABI foundation and shared-library target for JNI integration, including metadata, profiles, modem config, prepared TX text, tone frequencies, audio statistics, TX estimates, generated TX audio buffers, and streaming RX block processing.
 - C ABI compile, link, export, and runtime dynamic-loading regression tests.
+- Android JNI bridge for metadata, text preparation, TX estimates, generated TX audio, audio statistics, and streaming RX blocks.
+- Android explicit AudioTrack TX and initial AudioRecord streaming RX through the native receiver.
 
 ## Current Focus
 
@@ -50,7 +52,7 @@ The current focus is field validation and operator usability:
 5. Keep the PC interface polished and simple.
 6. Refresh release packages after meaningful user-visible changes.
 7. Keep the user guide aligned with the packaged interface.
-8. Grow the C ABI only as Android integration needs each capability.
+8. Keep growing Android around the C ABI only as each capability is needed.
 
 ## Future Tasks
 
@@ -58,7 +60,7 @@ The current focus is field validation and operator usability:
 - Automatic gain or level guidance.
 - More structured message history.
 - Replay selected evidence files from the app.
-- Android application.
+- Android UI polish, evidence/log export, and device validation.
 - ACK/retry or repetition as explicit future protocol versions.
 
 ## Guardrails

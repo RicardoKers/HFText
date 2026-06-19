@@ -69,6 +69,16 @@ Application behavior:
 - default-settings button;
 - no console window in the packaged GUI application.
 - Android debug shell builds successfully.
+- Android JNI metadata bridge loads successfully and shows core metadata/profile summaries in the app.
+- Android JNI text-preparation and TX-estimate bridge loads successfully and updates the app from the native core path.
+- Android explicit TX audio generation loads successfully through JNI and plays with `AudioTrack` only after pressing `Send audio`.
+- Android RX capture requests microphone permission, starts/stops `AudioRecord`, and updates RX level/clipping through the native C ABI.
+- Android RX reports the selected microphone source and shows both raw peak and modem-input peak after limited digital gain.
+- Android RX capture feeds audio blocks into the native streaming receiver and displays accepted messages only after core-side frame, payload, and CRC success.
+- Android RX counts low-confidence receiver events so weak activity can be distinguished from a completely idle decoder.
+- Android `Save RX audio` writes recent raw and modem-input WAV files that can be pulled with `adb` and replayed by the PC-side CLI tools.
+- Android RX evidence reports captured duration and should be saved only after it covers the selected TX duration plus margin.
+- Android `RX buffer` duration should advance in real time; slower growth indicates capture is blocked or audio data is being lost.
 
 ## Field Validation
 
@@ -82,6 +92,30 @@ Useful field test matrix:
 - partial packets for negative testing.
 
 For each test, save RX evidence from the app. Evidence should include the recent WAV, settings, logs, `Summary CSV`, and `Accepted Frames CSV`.
+
+## Android RX Evidence
+
+On 2026-06-18, two Android RX captures from a Xiaomi POCO F1 decoded successfully
+through the PC streaming replay tool after capture/decoder thread separation:
+
+- `logs/android-rx-20260618-fast/hftext-android-rx-1781831682208-modem.wav`
+  decoded as `pu5lrk Fast` with 98.4% confidence.
+- `logs/android-rx-20260618-fast/hftext-android-rx-1781831914786-modem.wav`
+  decoded as `pu5lrk Fast2` with 86.0% confidence.
+
+These captures use 8-FSK, 0.1 s symbols, 1050 Hz base frequency, and 130 Hz tone spacing.
+
+On 2026-06-19, an Android Slow capture from a Xiaomi POCO F1 was pulled from
+`/sdcard/Android/data/org.hftext.android/files/rx-evidence` and replayed on PC:
+
+- `logs/android-rx-20260619-0836/hftext-android-rx-1781868933160-modem.wav`
+  decoded as `pu5lrk Slow`.
+- With the earlier long-symbol 8-FSK live search grid, replay took about 25.2 s.
+- After reducing the live 8-FSK hypothesis grid while keeping +/-15 Hz offset
+  coverage, the same replay took about 8.6 s and still decoded successfully.
+
+This test covers Android RX latency behavior; it does not change the HFText Basic
+v0.1 protocol.
 
 ## Evidence Aggregation
 

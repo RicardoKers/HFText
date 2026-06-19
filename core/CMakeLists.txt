@@ -66,19 +66,23 @@ target_include_directories(hftext_wav_io
 
 target_compile_features(hftext_wav_io PUBLIC cxx_std_17)
 
-add_executable(hftext_tx_wav
-    tools/hftext_tx_wav.cpp
-)
-add_executable(hftext_rx_wav
-    tools/hftext_rx_wav.cpp
-)
-add_executable(hftext_stream_wav
-    tools/hftext_stream_wav.cpp
-)
+option(HFTEXT_CORE_BUILD_TOOLS "Build HFText CLI tools" ON)
 
-target_link_libraries(hftext_tx_wav PRIVATE hftext_core hftext_wav_io)
-target_link_libraries(hftext_rx_wav PRIVATE hftext_core hftext_wav_io)
-target_link_libraries(hftext_stream_wav PRIVATE hftext_core hftext_wav_io)
+if(HFTEXT_CORE_BUILD_TOOLS)
+    add_executable(hftext_tx_wav
+        tools/hftext_tx_wav.cpp
+    )
+    add_executable(hftext_rx_wav
+        tools/hftext_rx_wav.cpp
+    )
+    add_executable(hftext_stream_wav
+        tools/hftext_stream_wav.cpp
+    )
+
+    target_link_libraries(hftext_tx_wav PRIVATE hftext_core hftext_wav_io)
+    target_link_libraries(hftext_rx_wav PRIVATE hftext_core hftext_wav_io)
+    target_link_libraries(hftext_stream_wav PRIVATE hftext_core hftext_wav_io)
+endif()
 
 if(MSVC)
     set_target_properties(hftext_core PROPERTIES
@@ -87,9 +91,14 @@ if(MSVC)
     set_target_properties(hftext_c_api_shared PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
-    set_target_properties(hftext_wav_io hftext_tx_wav hftext_rx_wav hftext_stream_wav PROPERTIES
+    set_target_properties(hftext_wav_io PROPERTIES
         MSVC_DEBUG_INFORMATION_FORMAT Embedded
     )
+    if(HFTEXT_CORE_BUILD_TOOLS)
+        set_target_properties(hftext_tx_wav hftext_rx_wav hftext_stream_wav PROPERTIES
+            MSVC_DEBUG_INFORMATION_FORMAT Embedded
+        )
+    endif()
 endif()
 
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -102,6 +111,10 @@ endif()
 option(HFTEXT_CORE_BUILD_TESTS "Build HFText core tests" ${HFTEXT_CORE_BUILD_TESTS_DEFAULT})
 
 if(HFTEXT_CORE_BUILD_TESTS)
+    if(NOT HFTEXT_CORE_BUILD_TOOLS)
+        message(FATAL_ERROR "HFTEXT_CORE_BUILD_TESTS requires HFTEXT_CORE_BUILD_TOOLS")
+    endif()
+
     add_executable(hftext_core_types_test
         tests/test_core_types.cpp
     )

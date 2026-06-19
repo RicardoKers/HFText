@@ -67,6 +67,7 @@ private:
         std::vector<BitDecision> decisions;
         std::vector<std::uint8_t> bits;
         std::set<std::int64_t> rejectedSyncBitKeys;
+        std::size_t nextSyncSearchBit = 0;
     };
 
     int samplesPerSymbol() const;

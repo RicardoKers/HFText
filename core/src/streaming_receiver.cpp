@@ -44,10 +44,8 @@ constexpr float kFastStreamingFrequencyOffsetsHz[] = {
 };
 constexpr float kLong8FskStreamingFrequencyOffsetsHz[] = {
     0.0F,
-    5.0F,
-    -5.0F,
-    10.0F,
-    -10.0F,
+    7.5F,
+    -7.5F,
     15.0F,
     -15.0F,
 };
@@ -215,7 +213,7 @@ int phaseDivisionsForConfig(const ModemConfig& config) {
         return 10;
     }
     if (config.modulationMode == ModulationMode::Fsk8) {
-        return 8;
+        return 4;
     }
     if (config.modulationMode == ModulationMode::Fsk4) {
         return 12;
@@ -373,6 +371,7 @@ void StreamingReceiver::processPhase(PhaseState& phase) {
         phase.decisions.clear();
         phase.bits.clear();
         phase.rejectedSyncBitKeys.clear();
+        phase.nextSyncSearchBit = 0;
     }
 
     while (phase.nextStartSample + symbolSamples <= sampleEnd) {
@@ -400,14 +399,20 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
     const std::size_t latestSample = sampleCursor_ + buffer_.size();
 
     for (auto& phase : phases_) {
-        if (phase.bits.size() < startSync.size() + static_cast<std::size_t>(kPhysicalLengthBits)) {
+        const auto completeLengthBits = startSync.size() + static_cast<std::size_t>(kPhysicalLengthBits);
+        if (phase.bits.size() < completeLengthBits) {
             continue;
         }
 
-        const std::size_t lastSyncStart = phase.bits.size() - startSync.size();
+        const std::size_t lastSyncStart = phase.bits.size() - completeLengthBits;
         const auto bitsPerAudioSymbol = static_cast<std::size_t>(bitsPerModulationSymbol(phase.config.modulationMode));
         const auto symbolSamples = static_cast<std::size_t>(samplesPerSymbol(phase.config));
-        for (std::size_t syncStart = 0; syncStart <= lastSyncStart; ++syncStart) {
+        if (phase.nextSyncSearchBit > phase.bits.size()) {
+            phase.nextSyncSearchBit = phase.bits.size();
+        }
+
+        std::size_t nextSyncSearchBit = lastSyncStart + 1U;
+        for (std::size_t syncStart = phase.nextSyncSearchBit; syncStart <= lastSyncStart; ++syncStart) {
             const int syncMismatches = bitMismatchCount(phase.bits, syncStart, startSync);
             if (!acceptsStartSyncCandidate(phase.bits, phase.decisions, syncStart, startSync, maxSyncMismatches)) {
                 continue;
@@ -455,6 +460,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             const auto robustStart = lengthStart + static_cast<std::size_t>(kPhysicalLengthBits);
             const auto availableRobustBits = robustStart >= phase.bits.size() ? 0 : phase.bits.size() - robustStart;
             if (availableRobustBits < robustBits) {
+                nextSyncSearchBit = std::min(nextSyncSearchBit, syncStart);
                 StreamingReceiverEvent waitingEvent = lengthEvent;
                 waitingEvent.type = StreamingReceiverEventType::FrameWaiting;
                 waitingEvent.bitsAvailable = static_cast<std::int32_t>(availableRobustBits);
@@ -507,6 +513,8 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
                 emitEvent(frameEvent);
             }
         }
+
+        phase.nextSyncSearchBit = std::min(nextSyncSearchBit, phase.bits.size());
     }
 
     if (!hasCandidate) {
@@ -594,6 +602,11 @@ void StreamingReceiver::trimBitBuffers() {
             phase.decisions.begin() + static_cast<std::ptrdiff_t>(std::min(roundedExcess, phase.decisions.size()))
         );
         phase.firstBitSample += (roundedExcess / bitsPerAudioSymbol) * static_cast<std::size_t>(samplesPerSymbol(phase.config));
+        if (phase.nextSyncSearchBit > roundedExcess) {
+            phase.nextSyncSearchBit -= roundedExcess;
+        } else {
+            phase.nextSyncSearchBit = 0;
+        }
     }
 }
 

@@ -7,7 +7,7 @@ HFText/
 +-- python-sim/   # Simulation, sweeps, WAV tools, Python tests
 +-- core/         # Portable C++ modem core, CLI tools, C++ tests
 +-- pc-app/       # Qt 6 Widgets PC application
-+-- android-app/  # Future Android app
++-- android-app/  # Android app
 +-- docs/         # Project documentation
 +-- scripts/      # Release and maintenance scripts
 ```
@@ -28,7 +28,7 @@ Text codec, frame, robust layer, modulation, demodulation
 
 The core must not depend on Qt, Android, Windows audio APIs, or GUI classes. Platform-specific audio and UI code live outside `core/`.
 
-Operating profile defaults and modem-setting validation also live in the portable core. This keeps the PC app and the future Android app aligned on Fast/Slow profiles, modulation names, tone spacing, amplitude, and preamble defaults without duplicating modem rules in each interface.
+Operating profile defaults and modem-setting validation also live in the portable core. This keeps the PC app and Android app aligned on Fast/Slow profiles, modulation names, tone spacing, amplitude, and preamble defaults without duplicating modem rules in each interface.
 
 The core also exposes application-level TX helpers for callsign payload insertion, transmit-duration estimation, preamble generation, and audio generation. Interfaces should use these helpers instead of rebuilding TX behavior locally.
 
@@ -36,7 +36,7 @@ Shared audio helpers provide sample peak, clipping percentage, duration, and mod
 
 Shared RX event helpers summarize streaming receiver events into UI-friendly counters, progress, quality, and best-candidate selections. Interfaces should format their own text, but use the common helper decisions so PC and Android diagnostics stay consistent.
 
-The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for future JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events. Public C ABI functions use an explicit `HFTEXT_C_API` export macro so the shared library exposes the intended boundary. The C ABI usage contract is documented in `docs/12_c_api_reference.md`.
+The core exposes a small C ABI in `hftext_c_api.h` as the stable boundary for JNI integration. This keeps Android glue code from depending directly on C++ classes and gives Kotlin a simple way to read version metadata, default Fast/Slow profiles, validated modem configs, prepared TX text and payload symbol counts, modem tone frequencies, audio level statistics, transmit-duration estimates, generated TX audio buffers, and incremental streaming RX results/events. Public C ABI functions use an explicit `HFTEXT_C_API` export macro so the shared library exposes the intended boundary. The C ABI usage contract is documented in `docs/12_c_api_reference.md`.
 
 ## Python Simulation
 
@@ -64,7 +64,7 @@ Python is used for quick validation and exploration. Operational behavior should
 - shared transmit helpers for payload construction, estimates, and audio generation;
 - shared audio statistics and tone-frequency helpers for diagnostics and tuning displays;
 - shared RX event summary helpers for progress, quality, and session counters;
-- a portable C ABI foundation for future JNI bindings;
+- a portable C ABI foundation for JNI bindings;
 - a shared C ABI library target for JNI-style native integration;
 - WAV I/O helpers for CLI/debug tools;
 - tests for all main behaviors.
@@ -99,7 +99,7 @@ The PC app reads and writes its local `hftext.ini`, but the meaning of profile s
 
 ## Android Application
 
-`android-app/` contains the initial Kotlin/Compose shell. JNI, native core loading, and audio integration are still future steps. The desired Android architecture is:
+`android-app/` contains the initial Kotlin/Compose shell and a JNI bridge that reads metadata, Fast/Slow profile summaries, text preparation, TX estimates, generated TX audio, audio statistics, and streaming receiver updates from the portable C ABI. The app can play explicit transmit audio through `AudioTrack` and can feed microphone audio from `AudioRecord` into the native streaming receiver. The desired Android architecture is:
 
 ```text
 Kotlin / Jetpack Compose UI
@@ -113,9 +113,11 @@ Portable C ABI
 Portable C++ core
 ```
 
-Android should reuse the same protocol and core behavior validated on PC. It should also reuse the core-level application settings helpers so the Android Fast/Slow profiles match the PC defaults unless a deliberate product decision changes them.
+Android should reuse the same protocol and core behavior validated on PC. It should also reuse the core-level application settings helpers so the Android Fast/Slow profiles match the PC defaults unless a deliberate product decision changes them. Kotlin must remain glue: protocol encoding, modulation, demodulation, FEC, frame validation, and CRC checks stay in the portable core.
 
 The Android Gradle project is intentionally isolated under `android-app/` so the root CMake build remains focused on the portable core, CLI tools, and PC app.
+
+The Android JNI library links against the same C ABI target used by desktop dynamic-loading tests. Kotlin should continue to treat this JNI layer as glue only.
 
 ## Data Flow
 
