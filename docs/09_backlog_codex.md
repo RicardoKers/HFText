@@ -34,8 +34,10 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android RX evidence sharing through the Android system share sheet using scoped `FileProvider` access.
 - Android package version aligned with the shared HFText 0.3.0 application version.
 - Android local preference persistence for callsign, draft message, speed profile, and audio input mode.
+- Android Diagnostics action to reset local operator settings without clearing received history or evidence.
 - Android local persistence for recent received-message history.
 - Android screen kept awake while TX or RX is active.
+- Generic `nocall` default callsign in PC and Android instead of a personal callsign.
 
 ### Python Simulation
 

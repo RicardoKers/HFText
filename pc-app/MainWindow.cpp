@@ -52,6 +52,7 @@ constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
 constexpr int kRxEvidenceSeconds = 300;
 constexpr int kMaxAcceptedRxSnapshots = 512;
 constexpr int kAcceptedRxStateHoldSeconds = 60;
+constexpr const char* kDefaultCallsign = "nocall";
 
 QString modulationModeIniName(hftext::ModulationMode mode) {
     return QString::fromLatin1(hftext::modulationModeKey(mode));
@@ -412,7 +413,7 @@ MainWindow::MainWindow(QWidget* parent)
     operationLayout->addLayout(composerLayout);
 
     callsignEdit_ = new QLineEdit(this);
-    callsignEdit_->setText("pu5lrk");
+    callsignEdit_->setText(kDefaultCallsign);
     configForm->addRow("Callsign", callsignEdit_);
 
     auto* versionLabel = new QLabel(versionDisplayText(), this);
@@ -906,6 +907,7 @@ void MainWindow::applyDefaultSettings() {
     }
 
     loadModemConfigFile();
+    callsignEdit_->setText(kDefaultCallsign);
     detailedRxLogCheck_->setChecked(false);
     updateTxEstimate();
     updateWaterfallMarkers();

@@ -80,6 +80,7 @@ Application behavior:
 - Android `Save RX evidence` writes recent raw and modem-input WAV files plus a TXT report that can be pulled with `adb`; the modem WAV can be replayed by the PC-side CLI tools.
 - Android `Share RX evidence` exposes the latest saved TXT, raw WAV, and modem-input WAV through the system share sheet.
 - Android reopens with the last callsign, draft message, speed profile, and audio input mode restored from app-private preferences.
+- Android `Reset local settings` restores default callsign `nocall`, draft message, speed profile, and audio input mode without clearing received history.
 - Android reopens with the recent received-message history restored from app-private preferences; `Clear` should remove it.
 - Android keeps the screen awake while TX or RX is active and returns to normal timeout after activity stops.
 - Android RX evidence reports captured duration and should be saved only after it covers the selected TX duration plus margin.

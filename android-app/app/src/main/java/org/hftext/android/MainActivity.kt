@@ -84,6 +84,10 @@ private const val PREF_MESSAGE = "message"
 private const val PREF_SPEED_PROFILE = "speed_profile"
 private const val PREF_AUDIO_INPUT_MODE = "audio_input_mode"
 private const val PREF_RECEIVED_MESSAGES = "received_messages"
+private const val DEFAULT_CALLSIGN = "nocall"
+private const val DEFAULT_MESSAGE = "Hello HFText!"
+private val DEFAULT_SPEED_PROFILE = HFTextSpeedProfile.Fast
+private val DEFAULT_AUDIO_INPUT_MODE = HFTextAudioInputMode.VoiceRecognition
 
 @Composable
 private fun HFTextApp() {
@@ -115,10 +119,10 @@ private fun HFTextScreen(
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
     var callsign by remember {
-        mutableStateOf(preferences.getString(PREF_CALLSIGN, "pu5lrk") ?: "pu5lrk")
+        mutableStateOf(preferences.getString(PREF_CALLSIGN, DEFAULT_CALLSIGN) ?: DEFAULT_CALLSIGN)
     }
     var message by remember {
-        mutableStateOf(preferences.getString(PREF_MESSAGE, "Hello HFText!") ?: "Hello HFText!")
+        mutableStateOf(preferences.getString(PREF_MESSAGE, DEFAULT_MESSAGE) ?: DEFAULT_MESSAGE)
     }
     var selectedProfile by remember {
         mutableStateOf(readSpeedProfile(preferences.getString(PREF_SPEED_PROFILE, null)))
@@ -446,6 +450,20 @@ private fun HFTextScreen(
         }
     }
 
+    fun resetLocalSettings() {
+        if (isReceiving || isTransmitting) {
+            rxStatus = "stop TX/RX before resetting local settings"
+            return
+        }
+
+        callsign = DEFAULT_CALLSIGN
+        message = DEFAULT_MESSAGE
+        selectedProfile = DEFAULT_SPEED_PROFILE
+        rxInputMode = DEFAULT_AUDIO_INPUT_MODE
+        txStatus = "ready"
+        rxStatus = "local settings reset"
+    }
+
     MaterialTheme {
         Surface(
             color = Color(0xFF14181D),
@@ -645,6 +663,17 @@ private fun HFTextScreen(
                         )
                         StatusRow(label = "Slow TX", value = estimateText(analysis, slow = true))
                         StatusRow(label = "Fast TX", value = estimateText(analysis, slow = false))
+                    }
+
+                    OutlinedButton(
+                        onClick = ::resetLocalSettings,
+                        enabled = !isReceiving && !isTransmitting,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFE6EDF3)
+                        )
+                    ) {
+                        Text("Reset local settings")
                     }
 
                     Column {

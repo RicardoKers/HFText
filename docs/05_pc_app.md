@@ -37,6 +37,7 @@ The Settings tab contains:
 - manual Start RX / Stop RX controls;
 - log and evidence export buttons;
 - a Load Defaults button that rewrites the default `hftext.ini`.
+- `Load Defaults` also restores the generic `nocall` callsign placeholder.
 
 Advanced modem parameters are stored in `hftext.ini`, created automatically next to `hftext_pc.exe` when missing. This keeps normal operation clean while still allowing debug and field experiments.
 
@@ -86,6 +87,7 @@ The message field is sanitized as the operator types:
 - the TX estimate updates live.
 
 The callsign is configured separately and inserted automatically at the beginning of the payload followed by one space.
+Fresh installations use `nocall` as a generic placeholder; the operator should replace it with the correct callsign before real transmissions.
 
 ## Diagnostics
 
