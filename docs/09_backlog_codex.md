@@ -27,6 +27,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android Fast RX evidence replayed successfully on PC from Xiaomi POCO F1 captures.
 - Android Slow RX latency reduced by bounding the live 8-FSK streaming search grid while preserving +/-15 Hz frequency-offset coverage.
 - Android RX evidence WAV export switched to buffered chunked PCM writes.
+- Android received-message history with timestamps and manual clear action.
+- Android RX evidence TXT report with metadata, RX counters, summary CSV, and received-message CSV.
 
 ### Python Simulation
 
@@ -100,7 +102,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Keep `docs/10_user_guide.md` aligned with the current interface.
 - Keep the Operation tab visually simple.
 - Keep advanced modem parameters in `hftext.ini` unless field operation proves a setting belongs in the UI.
-- Improve message history only if field use shows a need.
+- Keep Android and PC received-message histories readable during unattended RX sessions.
 - Consider a clearer receive/tuning aid if waterfall markers are not enough.
 - Keep debug tools in Settings, not in the normal operation path.
 
@@ -130,7 +132,7 @@ Android remains incremental and should continue to reuse the PC/core behavior:
 1. Improve Android operation UI without duplicating modem logic in Kotlin.
 2. Reuse shared C++ tone-frequency helpers for tuning UI.
 3. Reuse shared C++ RX event summary helpers for richer status and logs.
-4. Add evidence/log export where practical.
+4. Expand Android evidence/log export only when field review needs more detail.
 5. Add device/emulator validation around JNI TX/RX flows when the workflow stabilizes.
 
 ## Release Tasks

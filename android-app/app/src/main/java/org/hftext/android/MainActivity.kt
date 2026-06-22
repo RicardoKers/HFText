@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.verticalScroll
@@ -43,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -55,6 +57,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+private data class ReceivedMessage(
+    val clockText: String,
+    val dateTimeText: String,
+    val text: String
+)
 
 @Composable
 private fun HFTextApp() {
@@ -97,7 +105,7 @@ private fun HFTextScreen(
     var rxRejected by remember { mutableStateOf(0L) }
     var rxSync by remember { mutableStateOf(0L) }
     var rxEvents by remember { mutableStateOf(0L) }
-    var receivedMessages by remember { mutableStateOf(emptyList<String>()) }
+    var receivedMessages by remember { mutableStateOf(emptyList<ReceivedMessage>()) }
     var hasRecordPermission by remember {
         mutableStateOf(
             context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
@@ -264,9 +272,13 @@ private fun HFTextScreen(
                         rxSync += update.sync
                     }
                     if (update.messages.isNotEmpty()) {
-                        val timestamp = currentClockText()
+                        val now = Date()
                         receivedMessages = (receivedMessages + update.messages.map {
-                            "[$timestamp] $it"
+                            ReceivedMessage(
+                                clockText = currentClockText(now),
+                                dateTimeText = currentDateTimeText(now),
+                                text = it
+                            )
                         }).takeLast(20)
                         rxDecodeStatus = "message accepted"
                     }
@@ -280,12 +292,34 @@ private fun HFTextScreen(
     }
 
     fun saveRxEvidence() {
-        rxEvidenceStatus = "saving RX audio..."
+        rxEvidenceStatus = "saving RX evidence..."
         val expectedTxSeconds = estimateSeconds(analysis, selectedProfile)
         Thread {
             try {
                 val directory = context.getExternalFilesDir("rx-evidence") ?: context.filesDir
                 val savedAudio = audioRecorder.saveDebugAudio(directory)
+                val reportFile = evidenceReportFile(savedAudio)
+                reportFile.writeText(
+                    buildRxEvidenceReport(
+                        nativeSnapshot = nativeSnapshot,
+                        callsign = callsign,
+                        selectedProfile = selectedProfile,
+                        inputMode = rxInputMode,
+                        analysis = analysis,
+                        rxStatus = rxStatus,
+                        rxDecodeStatus = rxDecodeStatus,
+                        rxStats = rxStats,
+                        rxReceiverStats = rxReceiverStats,
+                        rxReceiverGain = rxReceiverGain,
+                        rxBufferSeconds = rxBufferSeconds,
+                        rxAccepted = rxAccepted,
+                        rxRejected = rxRejected,
+                        rxSync = rxSync,
+                        rxEvents = rxEvents,
+                        receivedMessages = receivedMessages,
+                        savedAudio = savedAudio
+                    )
+                )
                 mainHandler.post {
                     val duration = savedAudio.durationSeconds
                     val durationText = if (expectedTxSeconds > 0.0 && duration + 0.5 < expectedTxSeconds) {
@@ -293,7 +327,7 @@ private fun HFTextScreen(
                     } else {
                         "saved ${formatSeconds(duration)}"
                     }
-                    rxEvidenceStatus = "$durationText | ${savedAudio.modemPath}"
+                    rxEvidenceStatus = "$durationText | report ${reportFile.name}"
                 }
             } catch (error: Throwable) {
                 mainHandler.post {
@@ -343,6 +377,11 @@ private fun HFTextScreen(
                     StatusRow(label = "Slow", value = nativeSnapshot.slowProfile)
                     StatusRow(label = "Fast", value = nativeSnapshot.fastProfile)
                 }
+
+                ReceivedMessagesPanel(
+                    messages = receivedMessages,
+                    onClear = { receivedMessages = emptyList() }
+                )
 
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -435,7 +474,7 @@ private fun HFTextScreen(
                             contentColor = Color(0xFFE6EDF3)
                         )
                     ) {
-                        Text("Save RX audio")
+                        Text("Save RX evidence")
                     }
                 }
 
@@ -443,7 +482,6 @@ private fun HFTextScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    StatusRow(label = "Received", value = receivedMessagesText(receivedMessages))
                     StatusRow(label = "Text", value = textStatus(analysis))
                     StatusRow(label = "TX", value = txStatus)
                     StatusRow(label = "RX", value = rxStatus)
@@ -577,6 +615,58 @@ private fun AudioInputButton(
 }
 
 @Composable
+private fun ReceivedMessagesPanel(
+    messages: List<ReceivedMessage>,
+    onClear: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 150.dp)
+            .background(Color(0xFF202832), RoundedCornerShape(8.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Received",
+                color = Color(0xFF9FB3C8),
+                style = MaterialTheme.typography.labelLarge
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            OutlinedButton(
+                onClick = onClear,
+                enabled = messages.isNotEmpty(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xFFE6EDF3)
+                )
+            ) {
+                Text("Clear")
+            }
+        }
+
+        if (messages.isEmpty()) {
+            Text(
+                text = "--",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        } else {
+            messages.forEach { message ->
+                Text(
+                    text = "[${message.clockText}] ${message.text}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun StatusRow(label: String, value: String) {
     Row(
         modifier = Modifier
@@ -602,14 +692,6 @@ private fun StatusRow(label: String, value: String) {
 
 private fun displayText(value: String): String {
     return value.ifBlank { "--" }
-}
-
-private fun receivedMessagesText(messages: List<String>): String {
-    return if (messages.isEmpty()) {
-        "--"
-    } else {
-        messages.joinToString("\n")
-    }
 }
 
 private fun textStatus(analysis: HFTextTextAnalysis): String {
@@ -718,8 +800,155 @@ private fun receiverStatusText(update: HFTextReceiverUpdate): String {
     return parts.joinToString(" | ")
 }
 
-private fun currentClockText(): String {
-    return SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
+private fun evidenceReportFile(savedAudio: HFTextSavedRxAudio): File {
+    val modemFile = File(savedAudio.modemPath)
+    val directory = modemFile.parentFile ?: File(".")
+    val baseName = modemFile.name.removeSuffix("-modem.wav").ifBlank {
+        modemFile.nameWithoutExtension
+    }
+    return File(directory, "$baseName.txt")
+}
+
+private fun buildRxEvidenceReport(
+    nativeSnapshot: HFTextNativeSnapshot,
+    callsign: String,
+    selectedProfile: HFTextSpeedProfile,
+    inputMode: HFTextAudioInputMode,
+    analysis: HFTextTextAnalysis,
+    rxStatus: String,
+    rxDecodeStatus: String,
+    rxStats: HFTextAudioStats,
+    rxReceiverStats: HFTextAudioStats,
+    rxReceiverGain: Float,
+    rxBufferSeconds: Double,
+    rxAccepted: Long,
+    rxRejected: Long,
+    rxSync: Long,
+    rxEvents: Long,
+    receivedMessages: List<ReceivedMessage>,
+    savedAudio: HFTextSavedRxAudio
+): String {
+    val generatedAt = currentDateTimeText()
+    return buildString {
+        appendLine("HFText Android RX evidence")
+        appendLine("Generated at: $generatedAt")
+        appendLine("Bridge: ${nativeSnapshot.bridgeStatus}")
+        appendLine("Core: ${nativeSnapshot.core}")
+        appendLine("Protocol: ${nativeSnapshot.protocol}")
+        appendLine("Profile: ${selectedProfile.label}")
+        appendLine("Input mode: ${inputMode.label}")
+        appendLine("Callsign: $callsign")
+        appendLine("RX status: $rxStatus")
+        appendLine("Decoder: $rxDecodeStatus")
+        appendLine("RX session: accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
+        appendLine("RX buffer: ${formatSeconds(rxBufferSeconds)}")
+        appendLine("Saved audio: ${formatSeconds(savedAudio.durationSeconds)}")
+        appendLine("Sample rate: ${savedAudio.sampleRate} Hz")
+        appendLine("Samples: ${savedAudio.sampleCount}")
+        appendLine("Raw level: ${rxLevelReportText(rxStats)}")
+        appendLine("Modem level: ${rxLevelReportText(rxReceiverStats)}")
+        appendLine("Receiver gain: x${formatGain(rxReceiverGain)}")
+        appendLine("Raw WAV: ${savedAudio.rawPath}")
+        appendLine("Modem WAV: ${savedAudio.modemPath}")
+        appendLine("Sanitized: ${displayText(analysis.sanitizedMessage)}")
+        appendLine("Payload: ${displayText(analysis.payload)}")
+        appendLine("Symbols: ${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} payload | ${analysis.messageSymbols} message")
+        appendLine("Slow TX estimate: ${estimateText(analysis, slow = true)}")
+        appendLine("Fast TX estimate: ${estimateText(analysis, slow = false)}")
+        appendLine()
+        appendLine("--- Received Text ---")
+        if (receivedMessages.isEmpty()) {
+            appendLine("--")
+        } else {
+            receivedMessages.forEach { message ->
+                appendLine("[${message.dateTimeText}] ${message.text}")
+            }
+        }
+        appendLine()
+        appendLine("--- Summary CSV ---")
+        appendLine(
+            listOf(
+                "generated_at",
+                "core",
+                "protocol",
+                "profile",
+                "input_mode",
+                "callsign",
+                "rx_buffer_s",
+                "saved_audio_s",
+                "sample_rate_hz",
+                "saved_samples",
+                "raw_peak",
+                "modem_peak",
+                "receiver_gain",
+                "raw_clipping_percent",
+                "accepted",
+                "rejected",
+                "sync",
+                "events",
+                "received_lines",
+                "raw_wav",
+                "modem_wav"
+            ).joinToString(",")
+        )
+        appendLine(
+            listOf(
+                generatedAt,
+                nativeSnapshot.core,
+                nativeSnapshot.protocol,
+                selectedProfile.label,
+                inputMode.label,
+                callsign,
+                formatCsvNumber(rxBufferSeconds),
+                formatCsvNumber(savedAudio.durationSeconds),
+                savedAudio.sampleRate.toString(),
+                savedAudio.sampleCount.toString(),
+                formatCsvNumber(rxStats.peak.toDouble()),
+                formatCsvNumber(rxReceiverStats.peak.toDouble()),
+                formatCsvNumber(rxReceiverGain.toDouble()),
+                formatCsvNumber(rxStats.clippingPercent),
+                rxAccepted.toString(),
+                rxRejected.toString(),
+                rxSync.toString(),
+                rxEvents.toString(),
+                receivedMessages.size.toString(),
+                savedAudio.rawPath,
+                savedAudio.modemPath
+            ).joinToString(",") { csvCell(it) }
+        )
+        appendLine()
+        appendLine("--- Messages CSV ---")
+        appendLine("received_at,text")
+        receivedMessages.forEach { message ->
+            appendLine(listOf(message.dateTimeText, message.text).joinToString(",") { csvCell(it) })
+        }
+    }
+}
+
+private fun rxLevelReportText(stats: HFTextAudioStats): String {
+    if (!stats.ok) {
+        return stats.error.ifBlank { "unavailable" }
+    }
+    if (stats.sampleCount <= 0) {
+        return "--"
+    }
+    return "peak ${formatPercent(stats.peak.toDouble())} | clipped ${stats.clippedSamples} | clip ${formatCsvNumber(stats.clippingPercent)}%"
+}
+
+private fun csvCell(value: String): String {
+    return "\"${value.replace("\"", "\"\"")}\""
+}
+
+private fun formatCsvNumber(value: Double): String {
+    return String.format(Locale.US, "%.6f", value)
+}
+
+private fun currentClockText(date: Date = Date()): String {
+    return SimpleDateFormat("HH:mm:ss", Locale.US).format(date)
+}
+
+private fun currentDateTimeText(date: Date = Date()): String {
+    return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(date)
 }
 
 private fun formatSeconds(seconds: Double): String {

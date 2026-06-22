@@ -33,7 +33,7 @@ The operational baseline is HFText Basic v0.1:
 
 The Qt PC application can transmit directly through the sound card, receive continuously, show RX level/quality/waterfall, track RX state/session diagnostics, save logs, and export field evidence bundles.
 
-The Android app is an incremental Kotlin/Compose client. It uses JNI and the portable C ABI for metadata, text preparation, TX estimates, explicit AudioTrack TX, audio level statistics, and initial AudioRecord streaming RX through the native receiver.
+The Android app is an incremental Kotlin/Compose client. It uses JNI and the portable C ABI for metadata, text preparation, TX estimates, explicit AudioTrack TX, audio level statistics, AudioRecord streaming RX through the native receiver, timestamped received-message history, and Android RX evidence export.
 
 ## Development Strategy
 
