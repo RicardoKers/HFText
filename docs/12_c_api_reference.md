@@ -221,6 +221,21 @@ Events provide progress and diagnostics for the UI:
 - `HFTEXT_RX_EVENT_FRAME_REJECTED`
 - `HFTEXT_RX_EVENT_FRAME_DECODED`
 
+Use `hftext_c_summarize_rx_events` to apply the same core-level event selection
+rules used by the PC app. It accepts the copied event array for one receiver push
+and fills `HFTextRxEventSummary` with:
+
+- best event indexes for decoded, length, waiting, sync, and rejected events;
+- filtered rejected-candidate count;
+- invalid-length presence;
+- session counter increments for sync, length, and rejected events;
+- best quality in permille, or `-1` when no displayable quality is available;
+- terminal-candidate presence.
+
+Android and other JNI clients should prefer this helper over duplicating receiver
+event filtering in platform code. User-facing text can remain platform-specific,
+but the decision about which event matters should come from the core.
+
 Use `hftext_c_streaming_receiver_set_config` when the selected profile, tones,
 sample rate, or symbol duration changes. Use `hftext_c_streaming_receiver_reset`
 to clear receiver state while keeping the handle.
@@ -247,7 +262,7 @@ modulation, demodulation, or CRC validation.
 
 The current Android bridge follows this rule for the first increments: it loads
 `libhftext_c_api.so`, calls metadata/profile/text-preparation/TX-estimate/audio
-generation/audio-statistics/streaming-RX functions through a small
+generation/audio-statistics/streaming-RX/RX-event-summary functions through a small
 `libhftext_android_jni.so` wrapper, and displays the returned values in Compose.
 Explicit TX playback is handled in Kotlin with `AudioTrack`. RX capture is handled
 in Kotlin with `AudioRecord`; captured blocks are pushed to an opaque native

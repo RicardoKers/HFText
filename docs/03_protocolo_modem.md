@@ -26,6 +26,9 @@ logical frame
 
 Incompatible changes to the frame, field semantics, FEC, interleaving, or modulation must be documented as a later protocol version, not as a silent v0.1 variation.
 
+A future incompatible text-codec candidate is recorded in
+`docs/13_text_codec_v02_candidate.md`. It is not part of HFText Basic v0.1.
+
 ## Experimental Physical Modes
 
 ### HFText v0.2 Experimental 4-FSK

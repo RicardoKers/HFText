@@ -311,6 +311,34 @@ int main() {
     REQUIRE(replayResult.payload_valid);
     REQUIRE(std::string(replayResult.text_utf8) == "pu5lrk streaming");
     REQUIRE(replayEventCount > 0);
+    const auto copiedReplayEvents = std::min(
+        replayEventCount,
+        sizeof(replayEvents) / sizeof(replayEvents[0])
+    );
+    HFTextRxEventSummary replaySummary{};
+    REQUIRE(hftext_c_summarize_rx_events(
+        replayEvents,
+        copiedReplayEvents,
+        &replaySummary,
+        error,
+        sizeof(error)
+    ) == HFTEXT_STATUS_OK);
+    REQUIRE(replaySummary.best_decoded_index >= 0);
+    REQUIRE(replaySummary.best_length_index >= 0);
+    REQUIRE(replaySummary.best_sync_index >= 0);
+    REQUIRE(replaySummary.sync_count == 1);
+    REQUIRE(replaySummary.length_count == 1);
+    REQUIRE(replaySummary.quality_permille >= 0);
+    REQUIRE(replaySummary.has_terminal_candidate);
+
+    REQUIRE(hftext_c_summarize_rx_events(nullptr, 0, &replaySummary, error, sizeof(error))
+        == HFTEXT_STATUS_OK);
+    REQUIRE(replaySummary.best_decoded_index < 0);
+    REQUIRE(!replaySummary.has_terminal_candidate);
+
+    REQUIRE(hftext_c_summarize_rx_events(nullptr, 1, &replaySummary, error, sizeof(error))
+        == HFTEXT_STATUS_INVALID_ARGUMENT);
+    REQUIRE(std::strlen(error) > 0);
 
     REQUIRE(hftext_c_streaming_receiver_set_config(receiver, &streamingConfig, error, sizeof(error))
         == HFTEXT_STATUS_OK);

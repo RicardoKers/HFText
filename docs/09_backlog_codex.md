@@ -38,6 +38,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android local persistence for recent received-message history.
 - Android screen kept awake while TX or RX is active.
 - Generic `nocall` default callsign in PC and Android instead of a personal callsign.
+- Shared C ABI RX-event summary helper reused by Android JNI for status, quality,
+  and session counter updates.
 
 ### Python Simulation
 
@@ -127,6 +129,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 
 These require explicit protocol-version planning:
 
+- evaluate and implement the documented text-codec v0.2 candidate in
+  `docs/13_text_codec_v02_candidate.md`;
 - operational repetition;
 - ACK/retry;
 - message type;
@@ -140,7 +144,7 @@ Android remains incremental and should continue to reuse the PC/core behavior:
 
 1. Continue improving Android operation UI without duplicating modem logic in Kotlin.
 2. Improve Android tuning UI only if field use shows the tone list is not enough.
-3. Reuse shared C++ RX event summary helpers for richer status and logs.
+3. Refine Android status wording and logs only from field feedback.
 4. Expand Android evidence/log export only when field review needs more detail.
 5. Add device/emulator validation around JNI TX/RX flows when the workflow stabilizes.
 

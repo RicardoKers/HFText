@@ -1,5 +1,6 @@
 #include "hftext_c_api.h"
 
+#include "hftext_app_rx.h"
 #include "hftext_app_settings.h"
 #include "hftext_app_tx.h"
 #include "hftext_audio_stats.h"
@@ -185,6 +186,24 @@ HFTextStreamingReceiverEventType fromCppEventType(hftext::StreamingReceiverEvent
     }
 }
 
+hftext::StreamingReceiverEventType toCppEventType(HFTextStreamingReceiverEventType type) {
+    switch (type) {
+    case HFTEXT_RX_EVENT_SYNC_FOUND:
+        return hftext::StreamingReceiverEventType::SyncFound;
+    case HFTEXT_RX_EVENT_PHYSICAL_LENGTH_RECOVERED:
+        return hftext::StreamingReceiverEventType::PhysicalLengthRecovered;
+    case HFTEXT_RX_EVENT_PHYSICAL_LENGTH_INVALID:
+        return hftext::StreamingReceiverEventType::PhysicalLengthInvalid;
+    case HFTEXT_RX_EVENT_FRAME_WAITING:
+        return hftext::StreamingReceiverEventType::FrameWaiting;
+    case HFTEXT_RX_EVENT_FRAME_REJECTED:
+        return hftext::StreamingReceiverEventType::FrameRejected;
+    case HFTEXT_RX_EVENT_FRAME_DECODED:
+        return hftext::StreamingReceiverEventType::FrameDecoded;
+    }
+    throw std::invalid_argument("invalid receiver event type");
+}
+
 void fillDecodeResult(const hftext::DecodeResult& source, HFTextDecodeResult& target) {
     char* textBuffer = target.text_utf8;
     const std::size_t textBufferSize = target.text_size;
@@ -219,6 +238,24 @@ HFTextStreamingReceiverEvent fromCppEvent(const hftext::StreamingReceiverEvent& 
         event.confidence,
         event.latencySeconds,
     };
+}
+
+hftext::StreamingReceiverEvent toCppEvent(const HFTextStreamingReceiverEvent& event) {
+    hftext::StreamingReceiverEvent output;
+    output.type = toCppEventType(event.type);
+    output.phaseOffsetSamples = event.phase_offset_samples;
+    output.syncSample = event.sync_sample;
+    output.syncBitIndex = event.sync_bit_index;
+    output.syncMismatches = event.sync_mismatches;
+    output.payloadLength = event.payload_length;
+    output.decodedLength = event.decoded_length;
+    output.bitsAvailable = event.bits_available;
+    output.bitsExpected = event.bits_expected;
+    output.crcOk = event.crc_ok != 0;
+    output.payloadValid = event.payload_valid != 0;
+    output.confidence = event.confidence;
+    output.latencySeconds = event.latency_seconds;
+    return output;
 }
 
 void resetPreparedText(HFTextPreparedText* text) {
@@ -263,6 +300,24 @@ void resetAudioStats(HFTextAudioStats* stats) {
     stats->clipped_samples = 0;
     stats->clipping_percent = 0.0;
     stats->duration_seconds = 0.0;
+}
+
+void resetRxEventSummary(HFTextRxEventSummary* summary) {
+    if (summary == nullptr) {
+        return;
+    }
+    summary->best_decoded_index = -1;
+    summary->best_length_index = -1;
+    summary->best_waiting_index = -1;
+    summary->best_sync_index = -1;
+    summary->best_rejected_index = -1;
+    summary->rejected_count = 0;
+    summary->has_invalid_length = 0;
+    summary->sync_count = 0;
+    summary->length_count = 0;
+    summary->rejected_event_count = 0;
+    summary->quality_permille = -1;
+    summary->has_terminal_candidate = 0;
 }
 
 int32_t exceptionStatus(const std::exception& exc, char* errorMessage, std::size_t errorMessageSize) {
@@ -618,6 +673,53 @@ int32_t hftext_c_streaming_receiver_push_samples(
     } catch (const std::exception& exc) {
         *outResultCount = 0;
         *outEventCount = 0;
+        return exceptionStatus(exc, errorMessage, errorMessageSize);
+    }
+}
+
+int32_t hftext_c_summarize_rx_events(
+    const HFTextStreamingReceiverEvent* events,
+    size_t eventCount,
+    HFTextRxEventSummary* outSummary,
+    char* errorMessage,
+    size_t errorMessageSize
+) {
+    clearError(errorMessage, errorMessageSize);
+    resetRxEventSummary(outSummary);
+    if (outSummary == nullptr) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+    if (events == nullptr && eventCount > 0) {
+        writeError(errorMessage, errorMessageSize, "null argument");
+        return HFTEXT_STATUS_INVALID_ARGUMENT;
+    }
+
+    try {
+        std::vector<hftext::StreamingReceiverEvent> cppEvents;
+        cppEvents.reserve(eventCount);
+        for (std::size_t index = 0; index < eventCount; ++index) {
+            cppEvents.push_back(toCppEvent(events[index]));
+        }
+
+        const auto selection = hftext::selectRxEvents(cppEvents);
+        const auto counts = hftext::rxSessionEventCounts(cppEvents);
+
+        outSummary->best_decoded_index = selection.bestDecoded;
+        outSummary->best_length_index = selection.bestLength;
+        outSummary->best_waiting_index = selection.bestWaiting;
+        outSummary->best_sync_index = selection.bestSync;
+        outSummary->best_rejected_index = selection.bestRejected;
+        outSummary->rejected_count = selection.rejectedCount;
+        outSummary->has_invalid_length = selection.hasInvalidLength ? 1 : 0;
+        outSummary->sync_count = counts.sync;
+        outSummary->length_count = counts.length;
+        outSummary->rejected_event_count = counts.rejected;
+        outSummary->quality_permille = hftext::rxQualityPermille(cppEvents);
+        outSummary->has_terminal_candidate = hftext::hasTerminalRxCandidate(cppEvents) ? 1 : 0;
+        return HFTEXT_STATUS_OK;
+    } catch (const std::exception& exc) {
+        resetRxEventSummary(outSummary);
         return exceptionStatus(exc, errorMessage, errorMessageSize);
     }
 }

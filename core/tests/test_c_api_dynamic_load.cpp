@@ -181,6 +181,13 @@ int main(int argc, char** argv) {
         char*,
         size_t
     );
+    using SummarizeRxEventsFn = int32_t (*)(
+        const HFTextStreamingReceiverEvent*,
+        size_t,
+        HFTextRxEventSummary*,
+        char*,
+        size_t
+    );
 
     auto applicationName = library.symbol<StringFn>("hftext_c_application_name");
     auto version = library.symbol<StringFn>("hftext_c_version");
@@ -210,6 +217,8 @@ int main(int argc, char** argv) {
         library.symbol<StreamingReceiverSetConfigFn>("hftext_c_streaming_receiver_set_config");
     auto streamingReceiverPushSamples =
         library.symbol<StreamingReceiverPushSamplesFn>("hftext_c_streaming_receiver_push_samples");
+    auto summarizeRxEvents =
+        library.symbol<SummarizeRxEventsFn>("hftext_c_summarize_rx_events");
 
     if (applicationName == nullptr ||
         version == nullptr ||
@@ -228,7 +237,8 @@ int main(int argc, char** argv) {
         freeAudio == nullptr ||
         streamingReceiverReset == nullptr ||
         streamingReceiverSetConfig == nullptr ||
-        streamingReceiverPushSamples == nullptr) {
+        streamingReceiverPushSamples == nullptr ||
+        summarizeRxEvents == nullptr) {
         return 1;
     }
 
@@ -447,6 +457,7 @@ int main(int argc, char** argv) {
     bool gotSyncEvent = false;
     bool gotLengthEvent = false;
     bool gotDecodedEvent = false;
+    bool gotTerminalSummary = false;
     std::size_t totalDecoded = 0;
     const std::size_t chunkSize = 137;
     for (std::size_t offset = 0; offset < audio.sample_count; offset += chunkSize) {
@@ -495,6 +506,19 @@ int main(int argc, char** argv) {
         }
 
         const auto copiedEvents = (std::min)(eventCount, sizeof(events) / sizeof(events[0]));
+        HFTextRxEventSummary summary{};
+        if (!require(
+                summarizeRxEvents(events, copiedEvents, &summary, error, sizeof(error))
+                    == HFTEXT_STATUS_OK,
+                "Could not summarize RX events through dynamic C ABI"
+            )) {
+            std::cerr << error << "\n";
+            streamingReceiverFree(receiver);
+            freeAudio(&audio);
+            return 1;
+        }
+        gotTerminalSummary = gotTerminalSummary || summary.has_terminal_candidate != 0;
+
         for (std::size_t index = 0; index < copiedEvents; ++index) {
             gotSyncEvent = gotSyncEvent || events[index].type == HFTEXT_RX_EVENT_SYNC_FOUND;
             gotLengthEvent =
@@ -519,6 +543,9 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (!require(gotDecodedEvent, "Dynamic C ABI roundtrip did not report a decoded frame")) {
+        return 1;
+    }
+    if (!require(gotTerminalSummary, "Dynamic C ABI RX summary did not report a terminal candidate")) {
         return 1;
     }
 

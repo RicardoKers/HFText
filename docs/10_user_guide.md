@@ -16,6 +16,9 @@ The package includes:
 
 On launch, HFText starts RX automatically when an input device is available.
 
+Fresh settings use `nocall` as a generic callsign placeholder. Replace it with
+the real operator callsign before field transmission.
+
 The Operation tab is for normal use:
 
 - received messages at the top;
@@ -31,7 +34,7 @@ Advanced modem parameters are stored in `hftext.ini`, created automatically next
 ## Basic Transmit
 
 1. Open Settings.
-2. Confirm the callsign.
+2. Confirm the callsign is not the `nocall` placeholder.
 3. Select the audio output device.
 4. Return to Operation.
 5. Select `Fast` or `Slow`.
@@ -71,7 +74,27 @@ Preamble: 72 bits
 
 For debug or field experiments, edit `hftext.ini` and restart HFText. Supported modulation values are `2fsk`, `4fsk`, and `8fsk`.
 
-`Load defaults` in Settings rewrites `hftext.ini` with the default Fast and Slow profiles.
+`Load defaults` in Settings rewrites `hftext.ini` with the default Fast and Slow profiles and restores the callsign field to `nocall`.
+
+## Android Field Notes
+
+The Android app uses the same portable core through JNI. Normal use is split into
+Operation and Diagnostics panels:
+
+- Operation keeps the field workflow compact: received messages, callsign,
+  message draft, Fast/Slow selection, explicit TX, RX control, and evidence
+  actions.
+- Diagnostics shows metadata, tone lists, RX levels, receiver counters, saved
+  evidence details, and reset actions.
+
+Android stores the local callsign, draft message, speed profile, audio input
+mode, and recent received-message history in app-private preferences. `Reset
+local settings` restores operator settings to defaults, including `nocall`, but
+does not clear received history or saved evidence files.
+
+`Save RX evidence` writes recent raw and modem-input WAV files plus a TXT report.
+`Share RX evidence` shares the latest saved evidence bundle through the Android
+system share sheet. The screen is kept awake while TX or RX is active.
 
 ## Save Evidence
 

@@ -353,13 +353,6 @@ std::string eventSummary(const HFTextStreamingReceiverEvent& event) {
     return out.str();
 }
 
-bool shouldDisplayEvent(const HFTextStreamingReceiverEvent& event) {
-    if (event.type == HFTEXT_RX_EVENT_FRAME_DECODED) {
-        return true;
-    }
-    return event.confidence >= 0.20f;
-}
-
 }  // namespace
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -868,26 +861,68 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
     std::size_t rejected = 0;
     std::size_t sync = 0;
     const auto copiedEventCount = std::min(eventCount, kEventCapacity);
-    for (std::size_t index = 0; index < copiedEventCount; ++index) {
-        const auto& event = events[index];
-        if (!shouldDisplayEvent(event)) {
-            continue;
-        }
-        state = eventSummary(event);
-        if (event.confidence >= 0.0f) {
-            quality = static_cast<double>(event.confidence);
-        }
-        if (event.type == HFTEXT_RX_EVENT_SYNC_FOUND) {
-            ++sync;
-        } else if (event.type == HFTEXT_RX_EVENT_FRAME_REJECTED) {
-            ++rejected;
-        } else if (event.type == HFTEXT_RX_EVENT_FRAME_WAITING && event.bits_expected > 0) {
-            progress = static_cast<double>(event.bits_available) /
-                static_cast<double>(event.bits_expected);
-        } else if (event.type == HFTEXT_RX_EVENT_FRAME_DECODED) {
-            progress = 1.0;
-        }
+    HFTextRxEventSummary summary{};
+    const auto summaryStatus = hftext_c_summarize_rx_events(
+        events,
+        copiedEventCount,
+        &summary,
+        error,
+        sizeof(error)
+    );
+    if (summaryStatus != HFTEXT_STATUS_OK) {
+        return stringArray(env, {
+            "error",
+            cApiError("receiver event summary", summaryStatus, error),
+            joinMessages(messages),
+            "",
+            "-1.000",
+            "-1.000",
+            sizeString(accepted),
+            "0",
+            "0",
+            sizeString(eventCount),
+        });
     }
+
+    auto eventAt = [&events, copiedEventCount](int index) -> const HFTextStreamingReceiverEvent* {
+        if (index < 0 || static_cast<std::size_t>(index) >= copiedEventCount) {
+            return nullptr;
+        }
+        return &events[static_cast<std::size_t>(index)];
+    };
+
+    const HFTextStreamingReceiverEvent* displayEvent = nullptr;
+    if (const auto* decoded = eventAt(summary.best_decoded_index)) {
+        displayEvent = decoded;
+        progress = 1.0;
+    } else if (const auto* waiting = eventAt(summary.best_waiting_index)) {
+        displayEvent = waiting;
+        if (waiting->bits_expected > 0) {
+            progress = static_cast<double>(waiting->bits_available) /
+                static_cast<double>(waiting->bits_expected);
+        }
+    } else if (const auto* length = eventAt(summary.best_length_index)) {
+        displayEvent = length;
+        progress = 0.0;
+    } else if (const auto* syncEvent = eventAt(summary.best_sync_index)) {
+        displayEvent = syncEvent;
+    } else if (const auto* rejectedEvent = eventAt(summary.best_rejected_index)) {
+        displayEvent = rejectedEvent;
+        progress = 1.0;
+    } else if (summary.has_invalid_length != 0) {
+        state = "invalid PHYS_LENGTH";
+    }
+
+    if (displayEvent != nullptr) {
+        state = eventSummary(*displayEvent);
+        if (displayEvent->confidence >= 0.0f) {
+            quality = static_cast<double>(displayEvent->confidence);
+        }
+    } else if (summary.quality_permille >= 0) {
+        quality = static_cast<double>(summary.quality_permille) / 1000.0;
+    }
+    rejected = static_cast<std::size_t>(std::max(0, summary.rejected_event_count));
+    sync = static_cast<std::size_t>(std::max(0, summary.sync_count));
 
     return stringArray(env, {
         "ok",

@@ -143,6 +143,21 @@ typedef struct HFTextStreamingReceiverEvent {
     float latency_seconds;
 } HFTextStreamingReceiverEvent;
 
+typedef struct HFTextRxEventSummary {
+    int32_t best_decoded_index;
+    int32_t best_length_index;
+    int32_t best_waiting_index;
+    int32_t best_sync_index;
+    int32_t best_rejected_index;
+    int32_t rejected_count;
+    int32_t has_invalid_length;
+    int32_t sync_count;
+    int32_t length_count;
+    int32_t rejected_event_count;
+    int32_t quality_permille;
+    int32_t has_terminal_candidate;
+} HFTextRxEventSummary;
+
 typedef struct HFTextStreamingReceiver HFTextStreamingReceiver;
 
 HFTEXT_C_API const char* hftext_c_application_name(void);
@@ -245,6 +260,14 @@ HFTEXT_C_API int32_t hftext_c_streaming_receiver_push_samples(
     HFTextStreamingReceiverEvent* events,
     size_t event_capacity,
     size_t* out_event_count,
+    char* error_message,
+    size_t error_message_size
+);
+
+HFTEXT_C_API int32_t hftext_c_summarize_rx_events(
+    const HFTextStreamingReceiverEvent* events,
+    size_t event_count,
+    HFTextRxEventSummary* out_summary,
     char* error_message,
     size_t error_message_size
 );
