@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -190,6 +191,34 @@ std::string profileSummary(HFTextSpeedProfile profile) {
     }
 
     return out.str();
+}
+
+bool rxConfigForProfile(
+    jint profileValue,
+    HFTextModemConfig& config,
+    std::string& errorText
+);
+
+std::vector<float> toneFrequenciesForProfile(jint profileValue) {
+    HFTextModemConfig config{};
+    std::string errorText;
+    if (!rxConfigForProfile(profileValue, config, errorText)) {
+        throw std::invalid_argument(errorText);
+    }
+
+    HFTextToneFrequencies tones{};
+    char error[256] = {};
+    const auto status = hftext_c_tone_frequencies(&config, &tones, error, sizeof(error));
+    if (status != HFTEXT_STATUS_OK) {
+        throw std::invalid_argument(cApiError("tone list", status, error));
+    }
+
+    std::vector<float> output;
+    output.reserve(static_cast<std::size_t>(std::max(0, tones.tone_count)));
+    for (int index = 0; index < tones.tone_count; ++index) {
+        output.push_back(tones.frequencies_hz[index]);
+    }
+    return output;
 }
 
 bool estimateForProfile(
@@ -591,6 +620,35 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiveSampleRate(
         return 0;
     }
     return static_cast<jint>(config.sample_rate);
+}
+
+extern "C" JNIEXPORT jfloatArray JNICALL
+Java_org_hftext_android_HFTextNativeBridge_nativeToneFrequencies(
+    JNIEnv* env,
+    jclass,
+    jint profile
+) {
+    try {
+        const auto frequencies = toneFrequenciesForProfile(profile);
+        if (frequencies.size() > static_cast<std::size_t>(std::numeric_limits<jsize>::max())) {
+            throwJavaException(env, "java/lang/IllegalStateException", "tone list is too large");
+            return nullptr;
+        }
+
+        jfloatArray out = env->NewFloatArray(static_cast<jsize>(frequencies.size()));
+        if (out != nullptr && !frequencies.empty()) {
+            env->SetFloatArrayRegion(
+                out,
+                0,
+                static_cast<jsize>(frequencies.size()),
+                frequencies.data()
+            );
+        }
+        return out;
+    } catch (const std::exception& error) {
+        throwJavaException(env, "java/lang/IllegalArgumentException", error.what());
+        return nullptr;
+    }
 }
 
 extern "C" JNIEXPORT jobjectArray JNICALL

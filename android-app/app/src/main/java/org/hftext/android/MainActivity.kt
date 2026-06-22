@@ -48,6 +48,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +65,11 @@ private data class ReceivedMessage(
     val text: String
 )
 
+private enum class AndroidPanel {
+    Operation,
+    Diagnostics
+}
+
 @Composable
 private fun HFTextApp() {
     val nativeSnapshot = remember { HFTextNativeBridge.snapshot() }
@@ -72,6 +78,7 @@ private fun HFTextApp() {
         analyzeText = HFTextNativeBridge::analyzeText,
         generateTransmitAudio = HFTextNativeBridge::generateTransmitAudio,
         receiveSampleRate = HFTextNativeBridge::receiveSampleRate,
+        toneFrequencies = HFTextNativeBridge::toneFrequencies,
         analyzeAudioSamples = HFTextNativeBridge::analyzeAudioSamples,
         createReceiver = HFTextNativeBridge::createReceiver
     )
@@ -83,6 +90,7 @@ private fun HFTextScreen(
     analyzeText: (String, String) -> HFTextTextAnalysis,
     generateTransmitAudio: (String, String, HFTextSpeedProfile) -> HFTextGeneratedAudio,
     receiveSampleRate: (HFTextSpeedProfile) -> Int,
+    toneFrequencies: (HFTextSpeedProfile) -> FloatArray,
     analyzeAudioSamples: (FloatArray, Int) -> HFTextAudioStats,
     createReceiver: (HFTextSpeedProfile) -> HFTextReceiverSession
 ) {
@@ -92,6 +100,7 @@ private fun HFTextScreen(
     var selectedProfile by remember { mutableStateOf(HFTextSpeedProfile.Fast) }
     var isTransmitting by remember { mutableStateOf(false) }
     var isReceiving by remember { mutableStateOf(false) }
+    var selectedPanel by remember { mutableStateOf(AndroidPanel.Operation) }
     var rxInputMode by remember { mutableStateOf(HFTextAudioInputMode.VoiceRecognition) }
     var txStatus by remember { mutableStateOf("ready") }
     var rxStatus by remember { mutableStateOf("stopped") }
@@ -119,6 +128,9 @@ private fun HFTextScreen(
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val analysis = remember(callsign, message) {
         analyzeText(callsign, message)
+    }
+    val selectedToneFrequencies = remember(selectedProfile) {
+        toneFrequencies(selectedProfile).toList()
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -317,6 +329,7 @@ private fun HFTextScreen(
                         rxSync = rxSync,
                         rxEvents = rxEvents,
                         receivedMessages = receivedMessages,
+                        toneFrequencies = selectedToneFrequencies,
                         savedAudio = savedAudio
                     )
                 )
@@ -367,155 +380,186 @@ private fun HFTextScreen(
                     )
                 }
 
-                Column(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    StatusRow(label = "Bridge", value = nativeSnapshot.bridgeStatus)
-                    StatusRow(label = "Core", value = nativeSnapshot.core)
-                    StatusRow(label = "Protocol", value = nativeSnapshot.protocol)
-                    StatusRow(label = "Slow", value = nativeSnapshot.slowProfile)
-                    StatusRow(label = "Fast", value = nativeSnapshot.fastProfile)
-                }
-
-                ReceivedMessagesPanel(
-                    messages = receivedMessages,
-                    onClear = { receivedMessages = emptyList() }
-                )
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    HFTextField(
-                        label = "Callsign",
-                        value = callsign,
-                        onValueChange = { callsign = it },
-                        singleLine = true
+                    ProfileButton(
+                        label = "Operation",
+                        selected = selectedPanel == AndroidPanel.Operation,
+                        onClick = { selectedPanel = AndroidPanel.Operation },
+                        modifier = Modifier.weight(1f)
                     )
-                    HFTextField(
-                        label = "Message",
-                        value = message,
-                        onValueChange = { message = it },
-                        singleLine = false
+                    ProfileButton(
+                        label = "Diagnostics",
+                        selected = selectedPanel == AndroidPanel.Diagnostics,
+                        onClick = { selectedPanel = AndroidPanel.Diagnostics },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ProfileButton(
-                            label = "Fast",
-                            selected = selectedProfile == HFTextSpeedProfile.Fast,
-                            onClick = { selectedProfile = HFTextSpeedProfile.Fast },
-                            modifier = Modifier.weight(1f)
-                        )
-                        ProfileButton(
-                            label = "Slow",
-                            selected = selectedProfile == HFTextSpeedProfile.Slow,
-                            onClick = { selectedProfile = HFTextSpeedProfile.Slow },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        AudioInputButton(
-                            label = "Voice",
-                            selected = rxInputMode == HFTextAudioInputMode.VoiceRecognition,
-                            enabled = !isReceiving,
-                            onClick = { rxInputMode = HFTextAudioInputMode.VoiceRecognition },
-                            modifier = Modifier.weight(1f)
-                        )
-                        AudioInputButton(
-                            label = "Raw",
-                            selected = rxInputMode == HFTextAudioInputMode.Unprocessed,
-                            enabled = !isReceiving,
-                            onClick = { rxInputMode = HFTextAudioInputMode.Unprocessed },
-                            modifier = Modifier.weight(1f)
-                        )
-                        AudioInputButton(
-                            label = "Mic",
-                            selected = rxInputMode == HFTextAudioInputMode.Microphone,
-                            enabled = !isReceiving,
-                            onClick = { rxInputMode = HFTextAudioInputMode.Microphone },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Button(
-                        onClick = ::startOrStopTx,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF3C6F9F),
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Text(if (isTransmitting) "Stop TX" else "Send audio")
-                    }
-                    OutlinedButton(
-                        onClick = ::startOrStopRx,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFE6EDF3)
-                        )
-                    ) {
-                        Text(if (isReceiving) "Stop RX capture" else "Start RX capture")
-                    }
-                    OutlinedButton(
-                        onClick = ::saveRxEvidence,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFE6EDF3)
-                        )
-                    ) {
-                        Text("Save RX evidence")
-                    }
-                }
+                if (selectedPanel == AndroidPanel.Operation) {
+                    ReceivedMessagesPanel(
+                        messages = receivedMessages,
+                        onClear = { receivedMessages = emptyList() }
+                    )
 
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    StatusRow(label = "Text", value = textStatus(analysis))
-                    StatusRow(label = "TX", value = txStatus)
-                    StatusRow(label = "RX", value = rxStatus)
-                    StatusRow(label = "RX level", value = rxLevelText(rxStats, rxReceiverStats, rxReceiverGain))
-                    StatusRow(label = "RX buffer", value = rxBufferText(rxBufferSeconds, analysis, selectedProfile))
-                    StatusRow(label = "Decoder", value = rxDecodeStatus)
-                    StatusRow(label = "RX session", value = "accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
-                    StatusRow(label = "RX evidence", value = rxEvidenceStatus)
-                    StatusRow(label = "Sanitized", value = displayText(analysis.sanitizedMessage))
-                    StatusRow(label = "Payload", value = displayText(analysis.payload))
-                    StatusRow(
-                        label = "Symbols",
-                        value = "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} payload | ${analysis.messageSymbols} message"
-                    )
-                    StatusRow(label = "Slow TX", value = estimateText(analysis, slow = true))
-                    StatusRow(label = "Fast TX", value = estimateText(analysis, slow = false))
-                }
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        HFTextField(
+                            label = "Callsign",
+                            value = callsign,
+                            onValueChange = { callsign = it },
+                            singleLine = true
+                        )
+                        HFTextField(
+                            label = "Message",
+                            value = message,
+                            onValueChange = { message = it },
+                            singleLine = false
+                        )
+                    }
 
-                Column {
-                    Text(
-                        text = if (nativeSnapshot.nativeAvailable) {
-                            "Kotlin is reading metadata, text preparation, and estimates through JNI and the C ABI."
-                        } else {
-                            "Native bridge is not available in this runtime."
-                        },
-                        color = Color(0xFFE6EDF3),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Audio TX is generated by the core. Android RX feeds captured audio to the native streaming receiver.",
-                        color = Color(0xFF9FB3C8),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ProfileButton(
+                                label = "Fast",
+                                selected = selectedProfile == HFTextSpeedProfile.Fast,
+                                onClick = { selectedProfile = HFTextSpeedProfile.Fast },
+                                modifier = Modifier.weight(1f)
+                            )
+                            ProfileButton(
+                                label = "Slow",
+                                selected = selectedProfile == HFTextSpeedProfile.Slow,
+                                onClick = { selectedProfile = HFTextSpeedProfile.Slow },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            AudioInputButton(
+                                label = "Voice",
+                                selected = rxInputMode == HFTextAudioInputMode.VoiceRecognition,
+                                enabled = !isReceiving,
+                                onClick = { rxInputMode = HFTextAudioInputMode.VoiceRecognition },
+                                modifier = Modifier.weight(1f)
+                            )
+                            AudioInputButton(
+                                label = "Raw",
+                                selected = rxInputMode == HFTextAudioInputMode.Unprocessed,
+                                enabled = !isReceiving,
+                                onClick = { rxInputMode = HFTextAudioInputMode.Unprocessed },
+                                modifier = Modifier.weight(1f)
+                            )
+                            AudioInputButton(
+                                label = "Mic",
+                                selected = rxInputMode == HFTextAudioInputMode.Microphone,
+                                enabled = !isReceiving,
+                                onClick = { rxInputMode = HFTextAudioInputMode.Microphone },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Button(
+                            onClick = ::startOrStopTx,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF3C6F9F),
+                                contentColor = Color.White
+                            )
+                        ) {
+                            Text(if (isTransmitting) "Stop TX" else "Send audio")
+                        }
+                        OutlinedButton(
+                            onClick = ::startOrStopRx,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFE6EDF3)
+                            )
+                        ) {
+                            Text(if (isReceiving) "Stop RX capture" else "Start RX capture")
+                        }
+                        OutlinedButton(
+                            onClick = ::saveRxEvidence,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFE6EDF3)
+                            )
+                        ) {
+                            Text("Save RX evidence")
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        StatusRow(label = "Text", value = textStatus(analysis))
+                        StatusRow(label = "TX", value = txStatus)
+                        StatusRow(label = "RX", value = rxStatus)
+                        StatusRow(label = "RX level", value = rxLevelText(rxStats, rxReceiverStats, rxReceiverGain))
+                        StatusRow(label = "RX evidence", value = rxEvidenceStatus)
+                        StatusRow(
+                            label = "Symbols",
+                            value = "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} payload | ${analysis.messageSymbols} message"
+                        )
+                        StatusRow(
+                            label = "${selectedProfile.label} TX",
+                            value = estimateText(analysis, slow = selectedProfile == HFTextSpeedProfile.Slow)
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        StatusRow(label = "Bridge", value = nativeSnapshot.bridgeStatus)
+                        StatusRow(label = "Core", value = nativeSnapshot.core)
+                        StatusRow(label = "Protocol", value = nativeSnapshot.protocol)
+                        StatusRow(label = "Slow", value = nativeSnapshot.slowProfile)
+                        StatusRow(label = "Fast", value = nativeSnapshot.fastProfile)
+                        StatusRow(label = "Tones", value = toneFrequenciesText(selectedToneFrequencies))
+                        StatusRow(label = "RX level", value = rxLevelText(rxStats, rxReceiverStats, rxReceiverGain))
+                        StatusRow(label = "RX buffer", value = rxBufferText(rxBufferSeconds, analysis, selectedProfile))
+                        StatusRow(label = "Decoder", value = rxDecodeStatus)
+                        StatusRow(label = "RX session", value = "accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
+                        StatusRow(label = "RX evidence", value = rxEvidenceStatus)
+                        StatusRow(label = "Sanitized", value = displayText(analysis.sanitizedMessage))
+                        StatusRow(label = "Payload", value = displayText(analysis.payload))
+                        StatusRow(
+                            label = "Symbols",
+                            value = "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} payload | ${analysis.messageSymbols} message"
+                        )
+                        StatusRow(label = "Slow TX", value = estimateText(analysis, slow = true))
+                        StatusRow(label = "Fast TX", value = estimateText(analysis, slow = false))
+                    }
+
+                    Column {
+                        Text(
+                            text = if (nativeSnapshot.nativeAvailable) {
+                                "Kotlin is reading metadata, text preparation, and estimates through JNI and the C ABI."
+                            } else {
+                                "Native bridge is not available in this runtime."
+                            },
+                            color = Color(0xFFE6EDF3),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Audio TX is generated by the core. Android RX feeds captured audio to the native streaming receiver.",
+                            color = Color(0xFF9FB3C8),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }
@@ -826,6 +870,7 @@ private fun buildRxEvidenceReport(
     rxSync: Long,
     rxEvents: Long,
     receivedMessages: List<ReceivedMessage>,
+    toneFrequencies: List<Float>,
     savedAudio: HFTextSavedRxAudio
 ): String {
     val generatedAt = currentDateTimeText()
@@ -837,6 +882,7 @@ private fun buildRxEvidenceReport(
         appendLine("Protocol: ${nativeSnapshot.protocol}")
         appendLine("Profile: ${selectedProfile.label}")
         appendLine("Input mode: ${inputMode.label}")
+        appendLine("Tones: ${toneFrequenciesText(toneFrequencies)}")
         appendLine("Callsign: $callsign")
         appendLine("RX status: $rxStatus")
         appendLine("Decoder: $rxDecodeStatus")
@@ -874,6 +920,7 @@ private fun buildRxEvidenceReport(
                 "profile",
                 "input_mode",
                 "callsign",
+                "tones_hz",
                 "rx_buffer_s",
                 "saved_audio_s",
                 "sample_rate_hz",
@@ -899,6 +946,7 @@ private fun buildRxEvidenceReport(
                 selectedProfile.label,
                 inputMode.label,
                 callsign,
+                toneFrequenciesCsvText(toneFrequencies),
                 formatCsvNumber(rxBufferSeconds),
                 formatCsvNumber(savedAudio.durationSeconds),
                 savedAudio.sampleRate.toString(),
@@ -933,6 +981,24 @@ private fun rxLevelReportText(stats: HFTextAudioStats): String {
         return "--"
     }
     return "peak ${formatPercent(stats.peak.toDouble())} | clipped ${stats.clippedSamples} | clip ${formatCsvNumber(stats.clippingPercent)}%"
+}
+
+private fun toneFrequenciesText(frequencies: List<Float>): String {
+    if (frequencies.isEmpty()) {
+        return "--"
+    }
+    return frequencies.joinToString(" ") { frequency ->
+        "${frequency.roundToInt()} Hz"
+    }
+}
+
+private fun toneFrequenciesCsvText(frequencies: List<Float>): String {
+    if (frequencies.isEmpty()) {
+        return ""
+    }
+    return frequencies.joinToString(" ") { frequency ->
+        frequency.roundToInt().toString()
+    }
 }
 
 private fun csvCell(value: String): String {
@@ -978,6 +1044,7 @@ private fun HFTextAppPreview() {
             )
         },
         receiveSampleRate = { 48000 },
+        toneFrequencies = { floatArrayOf(1050.0f, 1180.0f, 1310.0f, 1440.0f, 1570.0f, 1700.0f, 1830.0f, 1960.0f) },
         analyzeAudioSamples = { _, _ -> previewAudioStats() },
         createReceiver = { previewReceiverSession() }
     )

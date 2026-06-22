@@ -70,6 +70,7 @@ Application behavior:
 - no console window in the packaged GUI application.
 - Android debug shell builds successfully.
 - Android JNI metadata bridge loads successfully and shows core metadata/profile summaries in the app.
+- Android JNI tone-frequency bridge loads successfully and shows the selected profile's tones in the app and TXT evidence report.
 - Android JNI text-preparation and TX-estimate bridge loads successfully and updates the app from the native core path.
 - Android explicit TX audio generation loads successfully through JNI and plays with `AudioTrack` only after pressing `Send audio`.
 - Android RX capture requests microphone permission, starts/stops `AudioRecord`, and updates RX level/clipping through the native C ABI.

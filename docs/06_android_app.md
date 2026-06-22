@@ -2,7 +2,7 @@
 
 ## Status
 
-The Android application has started with a minimal Kotlin/Compose shell and JNI bridge. It builds as a debug APK and displays version, protocol, Fast/Slow profile summaries, sanitized text, payload preview, symbol counts, and TX estimates read through the portable C ABI. It can also generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It can capture microphone audio with `AudioRecord`, display native audio level/clipping statistics, feed captured blocks to the native streaming receiver, and show accepted messages in a timestamped history plus basic receiver status. Android RX can select voice-recognition, raw/unprocessed, or normal microphone input, applies limited digital gain before the receiver, counts low-confidence receiver activity for field diagnosis, and saves recent raw/modem-input WAV evidence for PC-side replay with captured-duration reporting. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks so saving should not spend several seconds on many tiny writes. Android evidence export also writes a TXT report with metadata, RX counters, and received-message history.
+The Android application has started with a minimal Kotlin/Compose shell and JNI bridge. It builds as a debug APK and displays version, protocol, Fast/Slow profile summaries, sanitized text, payload preview, symbol counts, tone frequencies, and TX estimates read through the portable C ABI. It can also generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It can capture microphone audio with `AudioRecord`, display native audio level/clipping statistics, feed captured blocks to the native streaming receiver, and show accepted messages in a timestamped history plus basic receiver status. Android RX can select voice-recognition, raw/unprocessed, or normal microphone input, applies limited digital gain before the receiver, counts low-confidence receiver activity for field diagnosis, and saves recent raw/modem-input WAV evidence for PC-side replay with captured-duration reporting. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks so saving should not spend several seconds on many tiny writes. Android evidence export also writes a TXT report with metadata, tone frequencies, RX counters, and received-message history. The Compose UI now separates normal field operation from diagnostics so the main workflow stays compact while native status and evidence details remain available.
 
 Development should remain incremental. The PC app and C++ core are still the reference implementation for modem behavior.
 
@@ -90,6 +90,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 - The APK packages `libhftext_c_api.so` and `libhftext_android_jni.so`.
 - The app opens in the emulator and shows `JNI OK via C ABI`.
 - Metadata and Fast/Slow summaries shown in the UI come from the native core path.
+- Tone-frequency lists shown in the UI and saved in TXT evidence reports come from the native core path.
 - Sanitized text, payload preview, symbol counts, and TX estimates shown in the UI come from the native core path.
 - `Send audio` generates normalized float TX audio through JNI and plays it with `AudioTrack`.
 - `Stop TX` cancels active Android audio playback.
@@ -101,6 +102,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 - Android RX capture and native decoding run on separate threads; `RX buffer` should advance in real time even if the decoder status lags.
 - The native streaming receiver uses a bounded live 8-FSK search grid to reduce Android decode backlog while preserving +/-15 Hz frequency-offset coverage.
 - Captured Android RX blocks are streamed into a native receiver handle through JNI.
+- The Android UI separates Operation and Diagnostics panels; normal TX/RX controls stay in Operation while metadata, tone lists, RX buffer, decoder, and session counters stay in Diagnostics.
 - The Android UI displays accepted messages only after the native receiver reports frame, payload, and CRC success, and keeps recent accepted messages in a timestamped history.
 - Low-confidence receiver events are throttled and counted for diagnosis without flooding the UI.
 - `Stop RX capture` stops and releases the active Android recorder.

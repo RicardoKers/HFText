@@ -200,6 +200,19 @@ object HFTextNativeBridge {
         }
     }
 
+    fun toneFrequencies(profile: HFTextSpeedProfile): FloatArray {
+        val failure = ensureLoaded()
+        if (failure != null) {
+            return FloatArray(0)
+        }
+
+        return try {
+            nativeToneFrequencies(profile.nativeValue)
+        } catch (_: Throwable) {
+            FloatArray(0)
+        }
+    }
+
     fun analyzeAudioSamples(samples: FloatArray, sampleRate: Int): HFTextAudioStats {
         val failure = ensureLoaded()
         if (failure != null) {
@@ -392,6 +405,9 @@ object HFTextNativeBridge {
 
     @JvmStatic
     private external fun nativeReceiveSampleRate(profile: Int): Int
+
+    @JvmStatic
+    private external fun nativeToneFrequencies(profile: Int): FloatArray
 
     @JvmStatic
     private external fun nativeAnalyzeAudioSamples(samples: FloatArray, sampleRate: Int): Array<String>

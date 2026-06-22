@@ -29,6 +29,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android RX evidence WAV export switched to buffered chunked PCM writes.
 - Android received-message history with timestamps and manual clear action.
 - Android RX evidence TXT report with metadata, RX counters, summary CSV, and received-message CSV.
+- Android tone-frequency list shown in the UI and included in TXT evidence reports through the JNI/C ABI path.
+- Android Operation/Diagnostics panel split to keep normal field use less cluttered while preserving native status details.
 
 ### Python Simulation
 
@@ -129,8 +131,8 @@ These require explicit protocol-version planning:
 
 Android remains incremental and should continue to reuse the PC/core behavior:
 
-1. Improve Android operation UI without duplicating modem logic in Kotlin.
-2. Reuse shared C++ tone-frequency helpers for tuning UI.
+1. Continue improving Android operation UI without duplicating modem logic in Kotlin.
+2. Improve Android tuning UI only if field use shows the tone list is not enough.
 3. Reuse shared C++ RX event summary helpers for richer status and logs.
 4. Expand Android evidence/log export only when field review needs more detail.
 5. Add device/emulator validation around JNI TX/RX flows when the workflow stabilizes.
