@@ -1,6 +1,8 @@
 package org.hftext.android
 
 import android.Manifest
+import android.content.ClipData
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
@@ -9,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -110,6 +113,8 @@ private fun HFTextScreen(
     var rxBufferSeconds by remember { mutableStateOf(0.0) }
     var rxDecodeStatus by remember { mutableStateOf("decoder idle") }
     var rxEvidenceStatus by remember { mutableStateOf("not saved") }
+    var isSavingRxEvidence by remember { mutableStateOf(false) }
+    var lastRxEvidenceFiles by remember { mutableStateOf(emptyList<File>()) }
     var rxAccepted by remember { mutableStateOf(0L) }
     var rxRejected by remember { mutableStateOf(0L) }
     var rxSync by remember { mutableStateOf(0L) }
@@ -304,6 +309,11 @@ private fun HFTextScreen(
     }
 
     fun saveRxEvidence() {
+        if (isSavingRxEvidence) {
+            return
+        }
+        isSavingRxEvidence = true
+        lastRxEvidenceFiles = emptyList()
         rxEvidenceStatus = "saving RX evidence..."
         val expectedTxSeconds = estimateSeconds(analysis, selectedProfile)
         Thread {
@@ -334,6 +344,8 @@ private fun HFTextScreen(
                     )
                 )
                 mainHandler.post {
+                    isSavingRxEvidence = false
+                    lastRxEvidenceFiles = evidenceFiles(reportFile, savedAudio)
                     val duration = savedAudio.durationSeconds
                     val durationText = if (expectedTxSeconds > 0.0 && duration + 0.5 < expectedTxSeconds) {
                         "saved ${formatSeconds(duration)}; shorter than local TX estimate ${formatSeconds(expectedTxSeconds)}"
@@ -344,6 +356,7 @@ private fun HFTextScreen(
                 }
             } catch (error: Throwable) {
                 mainHandler.post {
+                    isSavingRxEvidence = false
                     rxEvidenceStatus = "save failed: ${error.message ?: error::class.java.simpleName}"
                 }
             }
@@ -351,6 +364,37 @@ private fun HFTextScreen(
             name = "HFTextSaveRxAudio"
             isDaemon = true
             start()
+        }
+    }
+
+    fun shareRxEvidence() {
+        val files = lastRxEvidenceFiles.filter { it.isFile }
+        if (files.isEmpty()) {
+            rxEvidenceStatus = "save RX evidence first"
+            return
+        }
+
+        try {
+            val uris = files.map { file ->
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+            }
+            val clipData = ClipData.newUri(context.contentResolver, "RX evidence", uris.first())
+            uris.drop(1).forEach { uri ->
+                clipData.addItem(ClipData.Item(uri))
+            }
+            val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = "*/*"
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                this.clipData = clipData
+            }
+            context.startActivity(Intent.createChooser(shareIntent, "Share RX evidence"))
+        } catch (error: Throwable) {
+            rxEvidenceStatus = "share failed: ${error.message ?: error::class.java.simpleName}"
         }
     }
 
@@ -490,12 +534,23 @@ private fun HFTextScreen(
                         }
                         OutlinedButton(
                             onClick = ::saveRxEvidence,
+                            enabled = !isSavingRxEvidence,
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.outlinedButtonColors(
                                 contentColor = Color(0xFFE6EDF3)
                             )
                         ) {
                             Text("Save RX evidence")
+                        }
+                        OutlinedButton(
+                            onClick = ::shareRxEvidence,
+                            enabled = lastRxEvidenceFiles.isNotEmpty() && !isSavingRxEvidence,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFFE6EDF3)
+                            )
+                        ) {
+                            Text("Share RX evidence")
                         }
                     }
 
@@ -851,6 +906,14 @@ private fun evidenceReportFile(savedAudio: HFTextSavedRxAudio): File {
         modemFile.nameWithoutExtension
     }
     return File(directory, "$baseName.txt")
+}
+
+private fun evidenceFiles(reportFile: File, savedAudio: HFTextSavedRxAudio): List<File> {
+    return listOf(
+        reportFile,
+        File(savedAudio.rawPath),
+        File(savedAudio.modemPath)
+    ).filter { it.isFile }
 }
 
 private fun buildRxEvidenceReport(

@@ -31,6 +31,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android RX evidence TXT report with metadata, RX counters, summary CSV, and received-message CSV.
 - Android tone-frequency list shown in the UI and included in TXT evidence reports through the JNI/C ABI path.
 - Android Operation/Diagnostics panel split to keep normal field use less cluttered while preserving native status details.
+- Android RX evidence sharing through the Android system share sheet using scoped `FileProvider` access.
+- Android package version aligned with the shared HFText 0.3.0 application version.
 
 ### Python Simulation
 

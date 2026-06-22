@@ -2,7 +2,7 @@
 
 ## Status
 
-The Android application has started with a minimal Kotlin/Compose shell and JNI bridge. It builds as a debug APK and displays version, protocol, Fast/Slow profile summaries, sanitized text, payload preview, symbol counts, tone frequencies, and TX estimates read through the portable C ABI. It can also generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It can capture microphone audio with `AudioRecord`, display native audio level/clipping statistics, feed captured blocks to the native streaming receiver, and show accepted messages in a timestamped history plus basic receiver status. Android RX can select voice-recognition, raw/unprocessed, or normal microphone input, applies limited digital gain before the receiver, counts low-confidence receiver activity for field diagnosis, and saves recent raw/modem-input WAV evidence for PC-side replay with captured-duration reporting. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks so saving should not spend several seconds on many tiny writes. Android evidence export also writes a TXT report with metadata, tone frequencies, RX counters, and received-message history. The Compose UI now separates normal field operation from diagnostics so the main workflow stays compact while native status and evidence details remain available.
+The Android application has started with a minimal Kotlin/Compose shell and JNI bridge. It builds as a debug APK and displays version, protocol, Fast/Slow profile summaries, sanitized text, payload preview, symbol counts, tone frequencies, and TX estimates read through the portable C ABI. It can also generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It can capture microphone audio with `AudioRecord`, display native audio level/clipping statistics, feed captured blocks to the native streaming receiver, and show accepted messages in a timestamped history plus basic receiver status. Android RX can select voice-recognition, raw/unprocessed, or normal microphone input, applies limited digital gain before the receiver, counts low-confidence receiver activity for field diagnosis, and saves recent raw/modem-input WAV evidence for PC-side replay with captured-duration reporting. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks so saving should not spend several seconds on many tiny writes. Android evidence export also writes a TXT report with metadata, tone frequencies, RX counters, and received-message history. The latest saved evidence bundle can be shared through Android's system share sheet using a scoped `FileProvider`, without broad storage permissions. The Compose UI now separates normal field operation from diagnostics so the main workflow stays compact while native status and evidence details remain available.
 
 Development should remain incremental. The PC app and C++ core are still the reference implementation for modem behavior.
 
@@ -87,6 +87,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 ## Current Android Validation
 
 - `.\scripts\build_android_debug.ps1` builds the debug APK.
+- The Android package version is aligned with the shared HFText 0.3.0 application version.
 - The APK packages `libhftext_c_api.so` and `libhftext_android_jni.so`.
 - The app opens in the emulator and shows `JNI OK via C ABI`.
 - Metadata and Fast/Slow summaries shown in the UI come from the native core path.
@@ -98,6 +99,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 - Android RX lets the operator choose voice-recognition, raw/unprocessed, or normal microphone capture and falls back when a selected source does not initialize.
 - Android RX shows both raw peak level and the modem-input peak level after limited digital gain.
 - `Save RX evidence` writes the recent raw microphone buffer and modem-input buffer as WAV files plus a TXT report in the app-specific `rx-evidence` directory.
+- `Share RX evidence` shares the latest saved TXT, raw WAV, and modem-input WAV through Android's system share sheet with temporary read access.
 - The Android UI shows the current RX buffer duration and warns when saved RX evidence is shorter than the selected TX estimate.
 - Android RX capture and native decoding run on separate threads; `RX buffer` should advance in real time even if the decoder status lags.
 - The native streaming receiver uses a bounded live 8-FSK search grid to reduce Android decode backlog while preserving +/-15 Hz frequency-offset coverage.

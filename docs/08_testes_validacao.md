@@ -78,6 +78,7 @@ Application behavior:
 - Android RX capture feeds audio blocks into the native streaming receiver and displays accepted messages only after core-side frame, payload, and CRC success.
 - Android RX counts low-confidence receiver events so weak activity can be distinguished from a completely idle decoder.
 - Android `Save RX evidence` writes recent raw and modem-input WAV files plus a TXT report that can be pulled with `adb`; the modem WAV can be replayed by the PC-side CLI tools.
+- Android `Share RX evidence` exposes the latest saved TXT, raw WAV, and modem-input WAV through the system share sheet.
 - Android RX evidence reports captured duration and should be saved only after it covers the selected TX duration plus margin.
 - Android `RX buffer` duration should advance in real time; slower growth indicates capture is blocked or audio data is being lost.
 - Android accepted messages remain visible in a timestamped received-message history and are included in the TXT evidence report.
