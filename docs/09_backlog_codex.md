@@ -33,6 +33,9 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android Operation/Diagnostics panel split to keep normal field use less cluttered while preserving native status details.
 - Android RX evidence sharing through the Android system share sheet using scoped `FileProvider` access.
 - Android package version aligned with the shared HFText 0.3.0 application version.
+- Android local preference persistence for callsign, draft message, speed profile, and audio input mode.
+- Android local persistence for recent received-message history.
+- Android screen kept awake while TX or RX is active.
 
 ### Python Simulation
 

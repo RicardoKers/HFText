@@ -2,6 +2,7 @@ package org.hftext.android
 
 import android.Manifest
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -36,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +77,13 @@ private enum class AndroidPanel {
     Operation,
     Diagnostics
 }
+
+private const val PREFS_NAME = "hftext_android"
+private const val PREF_CALLSIGN = "callsign"
+private const val PREF_MESSAGE = "message"
+private const val PREF_SPEED_PROFILE = "speed_profile"
+private const val PREF_AUDIO_INPUT_MODE = "audio_input_mode"
+private const val PREF_RECEIVED_MESSAGES = "received_messages"
 
 @Composable
 private fun HFTextApp() {
@@ -98,13 +110,25 @@ private fun HFTextScreen(
     createReceiver: (HFTextSpeedProfile) -> HFTextReceiverSession
 ) {
     val context = LocalContext.current
-    var callsign by remember { mutableStateOf("pu5lrk") }
-    var message by remember { mutableStateOf("Hello HFText!") }
-    var selectedProfile by remember { mutableStateOf(HFTextSpeedProfile.Fast) }
+    val view = LocalView.current
+    val preferences = remember(context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+    var callsign by remember {
+        mutableStateOf(preferences.getString(PREF_CALLSIGN, "pu5lrk") ?: "pu5lrk")
+    }
+    var message by remember {
+        mutableStateOf(preferences.getString(PREF_MESSAGE, "Hello HFText!") ?: "Hello HFText!")
+    }
+    var selectedProfile by remember {
+        mutableStateOf(readSpeedProfile(preferences.getString(PREF_SPEED_PROFILE, null)))
+    }
     var isTransmitting by remember { mutableStateOf(false) }
     var isReceiving by remember { mutableStateOf(false) }
     var selectedPanel by remember { mutableStateOf(AndroidPanel.Operation) }
-    var rxInputMode by remember { mutableStateOf(HFTextAudioInputMode.VoiceRecognition) }
+    var rxInputMode by remember {
+        mutableStateOf(readAudioInputMode(preferences.getString(PREF_AUDIO_INPUT_MODE, null)))
+    }
     var txStatus by remember { mutableStateOf("ready") }
     var rxStatus by remember { mutableStateOf("stopped") }
     var rxStats by remember { mutableStateOf(emptyAudioStats()) }
@@ -119,7 +143,9 @@ private fun HFTextScreen(
     var rxRejected by remember { mutableStateOf(0L) }
     var rxSync by remember { mutableStateOf(0L) }
     var rxEvents by remember { mutableStateOf(0L) }
-    var receivedMessages by remember { mutableStateOf(emptyList<ReceivedMessage>()) }
+    var receivedMessages by remember {
+        mutableStateOf(readReceivedMessages(preferences.getString(PREF_RECEIVED_MESSAGES, null)))
+    }
     var hasRecordPermission by remember {
         mutableStateOf(
             context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
@@ -153,6 +179,28 @@ private fun HFTextScreen(
             audioPlayer.stop()
             audioRecorder.stop()
         }
+    }
+
+    DisposableEffect(view, isReceiving, isTransmitting) {
+        view.keepScreenOn = isReceiving || isTransmitting
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
+
+    LaunchedEffect(callsign, message, selectedProfile, rxInputMode) {
+        preferences.edit()
+            .putString(PREF_CALLSIGN, callsign)
+            .putString(PREF_MESSAGE, message)
+            .putString(PREF_SPEED_PROFILE, selectedProfile.name)
+            .putString(PREF_AUDIO_INPUT_MODE, rxInputMode.name)
+            .apply()
+    }
+
+    LaunchedEffect(receivedMessages) {
+        preferences.edit()
+            .putString(PREF_RECEIVED_MESSAGES, receivedMessagesToJson(receivedMessages))
+            .apply()
     }
 
     fun startOrStopTx() {
@@ -588,6 +636,7 @@ private fun HFTextScreen(
                         StatusRow(label = "Decoder", value = rxDecodeStatus)
                         StatusRow(label = "RX session", value = "accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
                         StatusRow(label = "RX evidence", value = rxEvidenceStatus)
+                        StatusRow(label = "Screen", value = if (isReceiving || isTransmitting) "kept awake while active" else "normal timeout")
                         StatusRow(label = "Sanitized", value = displayText(analysis.sanitizedMessage))
                         StatusRow(label = "Payload", value = displayText(analysis.payload))
                         StatusRow(
@@ -791,6 +840,56 @@ private fun StatusRow(label: String, value: String) {
 
 private fun displayText(value: String): String {
     return value.ifBlank { "--" }
+}
+
+private fun readSpeedProfile(value: String?): HFTextSpeedProfile {
+    return HFTextSpeedProfile.values().firstOrNull { it.name == value } ?: HFTextSpeedProfile.Fast
+}
+
+private fun readAudioInputMode(value: String?): HFTextAudioInputMode {
+    return HFTextAudioInputMode.values().firstOrNull { it.name == value }
+        ?: HFTextAudioInputMode.VoiceRecognition
+}
+
+private fun readReceivedMessages(value: String?): List<ReceivedMessage> {
+    if (value.isNullOrBlank()) {
+        return emptyList()
+    }
+
+    return try {
+        val array = JSONArray(value)
+        buildList {
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val text = item.optString("text", "")
+                if (text.isBlank()) {
+                    continue
+                }
+                add(
+                    ReceivedMessage(
+                        clockText = item.optString("clock", "--:--:--"),
+                        dateTimeText = item.optString("dateTime", ""),
+                        text = text
+                    )
+                )
+            }
+        }.takeLast(20)
+    } catch (_: Throwable) {
+        emptyList()
+    }
+}
+
+private fun receivedMessagesToJson(messages: List<ReceivedMessage>): String {
+    val array = JSONArray()
+    messages.takeLast(20).forEach { message ->
+        array.put(
+            JSONObject()
+                .put("clock", message.clockText)
+                .put("dateTime", message.dateTimeText)
+                .put("text", message.text)
+        )
+    }
+    return array.toString()
 }
 
 private fun textStatus(analysis: HFTextTextAnalysis): String {
