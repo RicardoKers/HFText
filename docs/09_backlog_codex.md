@@ -40,6 +40,23 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Generic `nocall` default callsign in PC and Android instead of a personal callsign.
 - Shared C ABI RX-event summary helper reused by Android JNI for status, quality,
   and session counter updates.
+- Android received-message panel expanded to a scrollable 100-message recent
+  history for unattended RX sessions.
+- Android debug install helper script for connected emulators/devices.
+- Android RX evidence records the active RX profile and core-reported latency
+  for accepted messages when available.
+- Android Diagnostics and RX evidence separate instantaneous decoder state from
+  the stable latest accepted message.
+- Android RX evidence buffer increased to 240 s and reports elapsed time from
+  the latest accepted message to evidence save.
+- Long-symbol 8-FSK streaming timing grid refined from SDR-to-Android evidence
+  so intermediate symbol offsets are still searched.
+- Android debug APK native C++ core optimization enabled after SDR evidence
+  showed a valid captured frame lagging behind live decode on the phone.
+- Slow 8-FSK SDR field retest accepted a 127-symbol frame on PC and Android
+  almost simultaneously after Android native optimization.
+- Fast 8-FSK SDR field retest accepted a 127-symbol frame on PC and Android
+  almost simultaneously, and the Android evidence WAV replayed successfully.
 
 ### Python Simulation
 

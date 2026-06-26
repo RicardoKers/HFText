@@ -18,6 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.min
 
+private const val RX_EVIDENCE_SECONDS = 240
+
 enum class HFTextAudioInputMode(val label: String) {
     VoiceRecognition("Voice"),
     Unprocessed("Raw"),
@@ -360,7 +362,7 @@ class HFTextAudioRecorder(
     }
 
     private fun resetEvidence(sampleRate: Int) {
-        val capacity = sampleRate * 120
+        val capacity = sampleRate * RX_EVIDENCE_SECONDS
         synchronized(evidenceLock) {
             rawEvidence = FloatRingBuffer(capacity)
             modemEvidence = FloatRingBuffer(capacity)

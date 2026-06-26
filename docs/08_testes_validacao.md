@@ -77,7 +77,9 @@ Application behavior:
 - Android RX reports the selected microphone source and shows both raw peak and modem-input peak after limited digital gain.
 - Android RX capture feeds audio blocks into the native streaming receiver and displays accepted messages only after core-side frame, payload, and CRC success.
 - Android RX counts low-confidence receiver events so weak activity can be distinguished from a completely idle decoder.
-- Android `Save RX evidence` writes recent raw and modem-input WAV files plus a TXT report that can be pulled with `adb`; the modem WAV can be replayed by the PC-side CLI tools.
+- Android `Save RX evidence` writes recent 240 s raw and modem-input WAV files plus a TXT report that can be pulled with `adb`; the modem WAV can be replayed by the PC-side CLI tools.
+- Android TXT evidence records the RX profile and core-reported latency per accepted message when available, which should be used when comparing Fast and Slow receive timing.
+- Android TXT evidence records elapsed time from the latest accepted message to evidence save; this helps decide whether a long Slow packet may have already rolled out of the evidence buffer.
 - Android `Share RX evidence` exposes the latest saved TXT, raw WAV, and modem-input WAV through the system share sheet.
 - Android reopens with the last callsign, draft message, speed profile, and audio input mode restored from app-private preferences.
 - Android `Reset local settings` restores default callsign `nocall`, draft message, speed profile, and audio input mode without clearing received history.
@@ -123,6 +125,55 @@ On 2026-06-19, an Android Slow capture from a Xiaomi POCO F1 was pulled from
 
 This test covers Android RX latency behavior; it does not change the HFText Basic
 v0.1 protocol.
+
+On 2026-06-26, Android Slow SDR evidence from a Xiaomi POCO F1 showed a useful
+streaming/offline difference:
+
+- `logs/android-pulled-20260626-161229/hftext-android-rx-1782501011684-modem.wav`
+  decoded with the offline PC receiver as a 127-symbol frame, but the streaming
+  replay reported zero accepted frames.
+- The offline receiver found the frame at an intermediate timing offset that was
+  not present in the reduced long-symbol 8-FSK live timing grid.
+- Long-symbol 8-FSK streaming therefore keeps a 10-phase timing grid, still
+  bounded but fine enough for these SDR-to-phone captures.
+
+This test covers continuous Android/PC streaming receiver behavior; it does not
+change the HFText Basic v0.1 protocol.
+
+Later on 2026-06-26, another Android Slow SDR evidence file decoded through the
+offline and PC streaming replay tools but the live Android app was still
+processing the frame when evidence was saved:
+
+- `logs/android-pulled-20260626-1640/hftext-android-rx-1782502750952-modem.wav`
+  decoded as the same 127-symbol message accepted by the PC evidence
+  `logs/HFText-rx-evidence-20260626-163923.wav`.
+- The Android report showed `receiving frame 892/1620 bits`, zero accepted
+  messages, and a very high event count, indicating receiver backlog rather
+  than bad captured audio.
+- Android debug builds therefore compile the native C++ modem core with
+  optimization enabled, so field testing is closer to release performance.
+
+After that change, a Slow 8-FSK SDR field retest accepted the same 127-symbol
+message on both receivers:
+
+- PC evidence `logs/HFText-rx-evidence-20260626-165205.txt` accepted the frame
+  at 2026-06-26 16:51:53 with 22.9% quality.
+- Android evidence
+  `logs/android-pulled-20260626-1651/hftext-android-rx-1782503518375.txt`
+  accepted the frame at 2026-06-26 16:51:54.
+- The Android modem WAV replayed through the PC streaming tool and decoded the
+  same payload, confirming the saved evidence remains reproducible.
+
+A subsequent Fast 8-FSK SDR retest also accepted the same 127-symbol message on
+both receivers:
+
+- PC evidence `logs/HFText-rx-evidence-20260626-165742.txt` accepted the frame
+  at 2026-06-26 16:57:34 with 33.3% quality.
+- Android evidence
+  `logs/android-pulled-20260626-1657/hftext-android-rx-1782503866313.txt`
+  accepted the frame at 2026-06-26 16:57:35.
+- The Android modem WAV replayed through the PC streaming tool with the same
+  payload and high replay confidence.
 
 ## Evidence Aggregation
 

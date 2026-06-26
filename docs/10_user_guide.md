@@ -88,13 +88,17 @@ Operation and Diagnostics panels:
   evidence details, and reset actions.
 
 Android stores the local callsign, draft message, speed profile, audio input
-mode, and recent received-message history in app-private preferences. `Reset
+mode, and up to 100 recent received messages in app-private preferences. `Reset
 local settings` restores operator settings to defaults, including `nocall`, but
 does not clear received history or saved evidence files.
 
-`Save RX evidence` writes recent raw and modem-input WAV files plus a TXT report.
+`Save RX evidence` writes recent 240 s raw and modem-input WAV files plus a TXT report.
 `Share RX evidence` shares the latest saved evidence bundle through the Android
-system share sheet. The screen is kept awake while TX or RX is active.
+system share sheet. The TXT report includes the active RX profile and core
+latency for accepted Android messages when available. Android Diagnostics and
+evidence separate instantaneous decoder activity from the stable `Last accepted`
+message and record how long after that message the evidence was saved. The
+screen is kept awake while TX or RX is active.
 
 ## Save Evidence
 

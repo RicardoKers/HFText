@@ -77,6 +77,17 @@ std::string joinMessages(const std::vector<std::string>& messages) {
     return out.str();
 }
 
+std::string joinDoubles(const std::vector<double>& values) {
+    std::ostringstream out;
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        if (index > 0) {
+            out << '\n';
+        }
+        out << doubleString(values[index]);
+    }
+    return out.str();
+}
+
 jobjectArray stringArray(JNIEnv* env, const std::vector<std::string>& values) {
     jclass stringClass = env->FindClass("java/lang/String");
     jstring empty = env->NewStringUTF("");
@@ -770,6 +781,7 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
             "0",
             "0",
             "0",
+            "",
         });
     }
 
@@ -789,6 +801,7 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
                 "0",
                 "0",
                 "0",
+                "",
             });
         }
     }
@@ -837,10 +850,12 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
             "0",
             "0",
             sizeString(eventCount),
+            "",
         });
     }
 
     std::vector<std::string> messages;
+    std::vector<double> acceptedLatencies;
     std::size_t accepted = 0;
     const auto copiedResultCount = std::min(resultCount, kResultCapacity);
     for (std::size_t index = 0; index < copiedResultCount; ++index) {
@@ -881,6 +896,7 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
             "0",
             "0",
             sizeString(eventCount),
+            "",
         });
     }
 
@@ -924,6 +940,15 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
     rejected = static_cast<std::size_t>(std::max(0, summary.rejected_event_count));
     sync = static_cast<std::size_t>(std::max(0, summary.sync_count));
 
+    for (std::size_t index = 0; index < copiedEventCount; ++index) {
+        const auto& event = events[index];
+        if (event.type == HFTEXT_RX_EVENT_FRAME_DECODED &&
+            event.crc_ok != 0 &&
+            event.payload_valid != 0) {
+            acceptedLatencies.push_back(static_cast<double>(event.latency_seconds));
+        }
+    }
+
     return stringArray(env, {
         "ok",
         "",
@@ -935,5 +960,6 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
         sizeString(rejected),
         sizeString(sync),
         sizeString(eventCount),
+        joinDoubles(acceptedLatencies),
     });
 }

@@ -70,7 +70,10 @@ class MainActivity : ComponentActivity() {
 private data class ReceivedMessage(
     val clockText: String,
     val dateTimeText: String,
-    val text: String
+    val text: String,
+    val profileLabel: String = "",
+    val coreLatencySeconds: Double? = null,
+    val acceptedAtMillis: Long? = null
 )
 
 private enum class AndroidPanel {
@@ -86,6 +89,7 @@ private const val PREF_AUDIO_INPUT_MODE = "audio_input_mode"
 private const val PREF_RECEIVED_MESSAGES = "received_messages"
 private const val DEFAULT_CALLSIGN = "nocall"
 private const val DEFAULT_MESSAGE = "Hello HFText!"
+private const val MAX_RECEIVED_MESSAGES = 100
 private val DEFAULT_SPEED_PROFILE = HFTextSpeedProfile.Fast
 private val DEFAULT_AUDIO_INPUT_MODE = HFTextAudioInputMode.VoiceRecognition
 
@@ -167,6 +171,7 @@ private fun HFTextScreen(
     val selectedToneFrequencies = remember(selectedProfile) {
         toneFrequencies(selectedProfile).toList()
     }
+    val lastAcceptedMessage = receivedMessages.lastOrNull()
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -342,13 +347,17 @@ private fun HFTextScreen(
                     }
                     if (update.messages.isNotEmpty()) {
                         val now = Date()
-                        receivedMessages = (receivedMessages + update.messages.map {
+                        receivedMessages = (receivedMessages + update.messages.mapIndexed { index, text ->
                             ReceivedMessage(
                                 clockText = currentClockText(now),
                                 dateTimeText = currentDateTimeText(now),
-                                text = it
+                                text = text,
+                                profileLabel = rxProfile.label,
+                                coreLatencySeconds = update.acceptedLatencies.getOrNull(index)
+                                    ?.takeIf { it >= 0.0 },
+                                acceptedAtMillis = now.time
                             )
-                        }).takeLast(20)
+                        }).takeLast(MAX_RECEIVED_MESSAGES)
                         rxDecodeStatus = "message accepted"
                     }
                 }
@@ -390,6 +399,7 @@ private fun HFTextScreen(
                         rxRejected = rxRejected,
                         rxSync = rxSync,
                         rxEvents = rxEvents,
+                        lastAcceptedMessage = lastAcceptedMessage,
                         receivedMessages = receivedMessages,
                         toneFrequencies = selectedToneFrequencies,
                         savedAudio = savedAudio
@@ -653,6 +663,7 @@ private fun HFTextScreen(
                         StatusRow(label = "RX buffer", value = rxBufferText(rxBufferSeconds, analysis, selectedProfile))
                         StatusRow(label = "Decoder", value = rxDecodeStatus)
                         StatusRow(label = "RX session", value = "accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
+                        StatusRow(label = "Last accepted", value = lastAcceptedMessage?.let { receivedMessageReportText(it) } ?: "--")
                         StatusRow(label = "RX evidence", value = rxEvidenceStatus)
                         StatusRow(label = "Screen", value = if (isReceiving || isTransmitting) "kept awake while active" else "normal timeout")
                         StatusRow(label = "Sanitized", value = displayText(analysis.sanitizedMessage))
@@ -796,6 +807,11 @@ private fun ReceivedMessagesPanel(
     messages: List<ReceivedMessage>,
     onClear: () -> Unit
 ) {
+    val messageScrollState = rememberScrollState()
+    LaunchedEffect(messages.size) {
+        messageScrollState.animateScrollTo(messageScrollState.maxValue)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -809,7 +825,11 @@ private fun ReceivedMessagesPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Received",
+                text = if (messages.isEmpty()) {
+                    "Received"
+                } else {
+                    "Received (${messages.size}/$MAX_RECEIVED_MESSAGES)"
+                },
                 color = Color(0xFF9FB3C8),
                 style = MaterialTheme.typography.labelLarge
             )
@@ -832,12 +852,20 @@ private fun ReceivedMessagesPanel(
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
-            messages.forEach { message ->
-                Text(
-                    text = "[${message.clockText}] ${message.text}",
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 220.dp)
+                    .verticalScroll(messageScrollState),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                messages.forEach { message ->
+                    Text(
+                        text = "[${message.clockText}] ${message.text}",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
         }
     }
@@ -898,11 +926,22 @@ private fun readReceivedMessages(value: String?): List<ReceivedMessage> {
                     ReceivedMessage(
                         clockText = item.optString("clock", "--:--:--"),
                         dateTimeText = item.optString("dateTime", ""),
-                        text = text
+                        text = text,
+                        profileLabel = item.optString("profile", ""),
+                        coreLatencySeconds = if (item.has("coreLatencySeconds")) {
+                            item.optDouble("coreLatencySeconds").takeIf { !it.isNaN() }
+                        } else {
+                            null
+                        },
+                        acceptedAtMillis = if (item.has("acceptedAtMillis")) {
+                            item.optLong("acceptedAtMillis").takeIf { it > 0L }
+                        } else {
+                            null
+                        }
                     )
                 )
             }
-        }.takeLast(20)
+        }.takeLast(MAX_RECEIVED_MESSAGES)
     } catch (_: Throwable) {
         emptyList()
     }
@@ -910,12 +949,21 @@ private fun readReceivedMessages(value: String?): List<ReceivedMessage> {
 
 private fun receivedMessagesToJson(messages: List<ReceivedMessage>): String {
     val array = JSONArray()
-    messages.takeLast(20).forEach { message ->
+    messages.takeLast(MAX_RECEIVED_MESSAGES).forEach { message ->
         array.put(
             JSONObject()
                 .put("clock", message.clockText)
                 .put("dateTime", message.dateTimeText)
                 .put("text", message.text)
+                .put("profile", message.profileLabel)
+                .also { item ->
+                    message.coreLatencySeconds?.let {
+                        item.put("coreLatencySeconds", it)
+                    }
+                    message.acceptedAtMillis?.let {
+                        item.put("acceptedAtMillis", it)
+                    }
+                }
         )
     }
     return array.toString()
@@ -1060,11 +1108,16 @@ private fun buildRxEvidenceReport(
     rxRejected: Long,
     rxSync: Long,
     rxEvents: Long,
+    lastAcceptedMessage: ReceivedMessage?,
     receivedMessages: List<ReceivedMessage>,
     toneFrequencies: List<Float>,
     savedAudio: HFTextSavedRxAudio
 ): String {
-    val generatedAt = currentDateTimeText()
+    val generatedDate = Date()
+    val generatedAt = currentDateTimeText(generatedDate)
+    val lastAcceptedAgeSeconds = lastAcceptedMessage?.let {
+        acceptedAgeSeconds(it, generatedDate.time)
+    }
     return buildString {
         appendLine("HFText Android RX evidence")
         appendLine("Generated at: $generatedAt")
@@ -1078,6 +1131,8 @@ private fun buildRxEvidenceReport(
         appendLine("RX status: $rxStatus")
         appendLine("Decoder: $rxDecodeStatus")
         appendLine("RX session: accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
+        appendLine("Last accepted: ${lastAcceptedMessage?.let { receivedMessageReportText(it) } ?: "--"}")
+        appendLine("Last accepted age at save: ${lastAcceptedAgeSeconds?.let { formatSeconds(it) } ?: "--"}")
         appendLine("RX buffer: ${formatSeconds(rxBufferSeconds)}")
         appendLine("Saved audio: ${formatSeconds(savedAudio.durationSeconds)}")
         appendLine("Sample rate: ${savedAudio.sampleRate} Hz")
@@ -1098,7 +1153,7 @@ private fun buildRxEvidenceReport(
             appendLine("--")
         } else {
             receivedMessages.forEach { message ->
-                appendLine("[${message.dateTimeText}] ${message.text}")
+                appendLine("[${message.dateTimeText}]${receivedMessageDetails(message)} ${message.text}")
             }
         }
         appendLine()
@@ -1125,6 +1180,11 @@ private fun buildRxEvidenceReport(
                 "sync",
                 "events",
                 "received_lines",
+                "last_accepted_at",
+                "last_accepted_profile",
+                "last_accepted_core_latency_s",
+                "last_accepted_age_at_save_s",
+                "last_accepted_text",
                 "raw_wav",
                 "modem_wav"
             ).joinToString(",")
@@ -1151,17 +1211,57 @@ private fun buildRxEvidenceReport(
                 rxSync.toString(),
                 rxEvents.toString(),
                 receivedMessages.size.toString(),
+                lastAcceptedMessage?.dateTimeText ?: "",
+                lastAcceptedMessage?.profileLabel ?: "",
+                lastAcceptedMessage?.coreLatencySeconds?.let { formatCsvNumber(it) } ?: "",
+                lastAcceptedAgeSeconds?.let { formatCsvNumber(it) } ?: "",
+                lastAcceptedMessage?.text ?: "",
                 savedAudio.rawPath,
                 savedAudio.modemPath
             ).joinToString(",") { csvCell(it) }
         )
         appendLine()
         appendLine("--- Messages CSV ---")
-        appendLine("received_at,text")
+        appendLine("received_at,rx_profile,core_latency_s,text")
         receivedMessages.forEach { message ->
-            appendLine(listOf(message.dateTimeText, message.text).joinToString(",") { csvCell(it) })
+            appendLine(
+                listOf(
+                    message.dateTimeText,
+                    message.profileLabel,
+                    message.coreLatencySeconds?.let { formatCsvNumber(it) } ?: "",
+                    message.text
+                ).joinToString(",") { csvCell(it) }
+            )
         }
     }
+}
+
+private fun receivedMessageDetails(message: ReceivedMessage): String {
+    val parts = mutableListOf<String>()
+    if (message.profileLabel.isNotBlank()) {
+        parts += message.profileLabel
+    }
+    message.coreLatencySeconds?.let {
+        parts += "core latency ${formatSeconds(it)}"
+    }
+    return if (parts.isEmpty()) "" else " [${parts.joinToString(", ")}]"
+}
+
+private fun receivedMessageReportText(message: ReceivedMessage): String {
+    val parts = mutableListOf(message.dateTimeText)
+    if (message.profileLabel.isNotBlank()) {
+        parts += message.profileLabel
+    }
+    message.coreLatencySeconds?.let {
+        parts += "core latency ${formatSeconds(it)}"
+    }
+    parts += message.text
+    return parts.joinToString(" | ")
+}
+
+private fun acceptedAgeSeconds(message: ReceivedMessage, referenceMillis: Long): Double? {
+    val acceptedAt = message.acceptedAtMillis ?: return null
+    return ((referenceMillis - acceptedAt).coerceAtLeast(0L)).toDouble() / 1000.0
 }
 
 private fun rxLevelReportText(stats: HFTextAudioStats): String {
@@ -1298,7 +1398,8 @@ private fun previewReceiverSession(): HFTextReceiverSession {
                 accepted = 0L,
                 rejected = 0L,
                 sync = 0L,
-                eventCount = 0L
+                eventCount = 0L,
+                acceptedLatencies = emptyList()
             )
         }
 

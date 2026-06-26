@@ -182,6 +182,7 @@ int main() {
     assert(longFsk8Results.front().crcOk);
     assert(longFsk8Results.front().payloadValid);
     assert(longFsk8Results.front().text == "pu5lrk 8fsk longo");
+    assert(longFsk8Results.front().offsetsTried >= 50);
 
     hftext::ModemConfig longShiftedFsk8TxConfig = longFsk8Config;
     longShiftedFsk8TxConfig.frequency0Hz += 15.0F;

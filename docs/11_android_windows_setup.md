@@ -85,6 +85,19 @@ Build the Android debug shell from the repository root:
 The build script uses the Android Studio bundled JBR and the default SDK path when
 `JAVA_HOME` or `ANDROID_HOME` are not set.
 
+After connecting an emulator or Android device, install and launch the debug APK:
+
+```powershell
+.\scripts\install_android_debug.ps1
+```
+
+If more than one device is connected, list devices and select one explicitly:
+
+```powershell
+.\scripts\install_android_debug.ps1 -ListDevices
+.\scripts\install_android_debug.ps1 -DeviceId <adb-device-id>
+```
+
 ## What Not To Do Yet
 
 Do not duplicate HFText modem behavior in Kotlin.

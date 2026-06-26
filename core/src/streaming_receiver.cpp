@@ -213,7 +213,7 @@ int phaseDivisionsForConfig(const ModemConfig& config) {
         return 10;
     }
     if (config.modulationMode == ModulationMode::Fsk8) {
-        return 4;
+        return 10;
     }
     if (config.modulationMode == ModulationMode::Fsk4) {
         return 12;

@@ -63,7 +63,8 @@ data class HFTextReceiverUpdate(
     val accepted: Long,
     val rejected: Long,
     val sync: Long,
-    val eventCount: Long
+    val eventCount: Long,
+    val acceptedLatencies: List<Double>
 ) {
     val hasActivity: Boolean
         get() = !ok || messages.isNotEmpty() || state.isNotBlank()
@@ -296,8 +297,16 @@ object HFTextNativeBridge {
             accepted = fields.field(6, "0").toLongOrNull() ?: 0L,
             rejected = fields.field(7, "0").toLongOrNull() ?: 0L,
             sync = fields.field(8, "0").toLongOrNull() ?: 0L,
-            eventCount = fields.field(9, "0").toLongOrNull() ?: 0L
+            eventCount = fields.field(9, "0").toLongOrNull() ?: 0L,
+            acceptedLatencies = parseDoubleLines(fields.field(10, ""))
         )
+    }
+
+    private fun parseDoubleLines(value: String): List<Double> {
+        return value
+            .lineSequence()
+            .mapNotNull { it.trim().toDoubleOrNull() }
+            .toList()
     }
 
     private fun unavailableReceiverUpdate(error: String): HFTextReceiverUpdate {
@@ -311,7 +320,8 @@ object HFTextNativeBridge {
             accepted = 0L,
             rejected = 0L,
             sync = 0L,
-            eventCount = 0L
+            eventCount = 0L,
+            acceptedLatencies = emptyList()
         )
     }
 

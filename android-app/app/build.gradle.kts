@@ -17,7 +17,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags += "-std=c++17"
+                cppFlags += listOf("-std=c++17", "-O3", "-DNDEBUG")
             }
         }
 
