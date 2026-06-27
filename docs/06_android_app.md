@@ -122,7 +122,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 - `Share RX evidence` shares the latest saved TXT, raw WAV, and modem-input WAV through Android's system share sheet with temporary read access.
 - The Android UI shows the current RX buffer duration and warns when saved RX evidence is shorter than the selected TX estimate.
 - Android RX capture and native decoding run on separate threads; `RX buffer` should advance in real time even if the decoder status lags.
-- The native streaming receiver uses a bounded live 8-FSK search grid to reduce Android decode backlog while preserving +/-15 Hz frequency-offset coverage. For long 8-FSK symbols, the timing grid uses 10 phase divisions so field captures with intermediate symbol timing offsets remain decodable.
+- The native streaming receiver uses a bounded live 8-FSK search grid to reduce Android decode backlog while preserving +/-15 Hz frequency-offset coverage. For long 8-FSK symbols, the timing grid uses 10 phase divisions and includes +/-5 Hz offsets so weak field captures with small tuning errors remain decodable without the heavier 20-phase live search.
 - Captured Android RX blocks are streamed into a native receiver handle through JNI.
 - The Android UI separates Operation and Diagnostics panels; normal TX/RX controls stay in Operation while metadata, tone lists, RX buffer, decoder, and session counters stay in Diagnostics.
 - Android JNI uses the shared C ABI RX-event summary helper for status, quality, and session counter updates instead of duplicating event filtering in Kotlin or JNI glue.

@@ -64,6 +64,11 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - PC live RX pending-audio queue changed from a short vector queue to a larger
   deque-backed queue with evidence counters for current, peak, and dropped
   worker backlog.
+- Long-symbol 8-FSK streaming frequency grid added +/-5 Hz offsets after a
+  2026-06-27 PC field WAV decoded with a +5 Hz tone shift that the previous
+  live grid skipped. A heavier 20-phase timing grid was tested and rejected for
+  live Android use after field evidence showed it could not keep up on the
+  phone.
 
 ### Python Simulation
 
@@ -87,6 +92,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - 2-FSK baseline.
 - Experimental 4-FSK and 8-FSK.
 - Confidence-aware demodulation and streaming receiver.
+- 10-phase live timing grid with +/-5 Hz frequency offsets for long-symbol 8-FSK
+  field captures.
 - Shared application modem settings for Fast/Slow profiles and default validation.
 - Shared application TX helpers for callsign insertion, estimates, and audio generation.
 - Shared audio statistics and tone-frequency helpers for diagnostics.
@@ -148,7 +155,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Improve frequency tolerance only from repeatable evidence.
 - Consider a lightweight frequency tracking loop if mistuning remains common.
 - Consider a timing tracker if symbol-boundary drift appears in long captures.
-- Monitor PC live RX backlog counters in future long Slow captures.
+- Monitor PC live RX backlog counters and long Slow 8-FSK frequency-grid
+  behavior in future field captures.
 - Keep 2-FSK as the conservative baseline until field data says otherwise.
 
 ## Future Protocol Tasks

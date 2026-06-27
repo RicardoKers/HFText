@@ -134,8 +134,8 @@ streaming/offline difference:
   replay reported zero accepted frames.
 - The offline receiver found the frame at an intermediate timing offset that was
   not present in the reduced long-symbol 8-FSK live timing grid.
-- Long-symbol 8-FSK streaming therefore keeps a 10-phase timing grid, still
-  bounded but fine enough for these SDR-to-phone captures.
+- Long-symbol 8-FSK streaming therefore kept a 10-phase timing grid after this
+  test, still bounded but fine enough for these SDR-to-phone captures.
 
 This test covers continuous Android/PC streaming receiver behavior; it does not
 change the HFText Basic v0.1 protocol.
@@ -198,6 +198,21 @@ The latter is consistent with live receiver backlog or pending-audio overflow:
 the PC evidence buffer is intentionally much longer than the worker queue used
 for live decoding. The PC app now keeps a larger pending-audio queue and records
 current, peak, and dropped RX worker backlog in evidence logs.
+
+On 2026-06-27, further simultaneous PC and Android tests showed no PC worker
+dropouts (`dropped 0`) after the larger queue. Short Fast, short Slow, and long
+Fast 8-FSK frames were accepted on both devices. A weak long Slow PC capture at
+13:42 did not decode through the live streaming path, but the saved PC WAV
+decoded when the streaming replay included a +5 Hz tone offset. Adding +/-5 Hz
+to the bounded long-symbol 8-FSK streaming frequency grid recovered this PC
+capture without increasing the timing grid.
+
+A temporary 20-phase long-symbol timing grid also decoded the same PC evidence,
+but three later Android captures saved at 14:40, 14:44, and 14:45 only decoded
+after replay and did not complete live on the phone. Those three Android modem
+WAVs decoded with the lighter 10-phase plus +/-5 Hz grid. The chosen live grid
+therefore remains 10 timing phases and adds +/-5 Hz frequency offsets for
+long-symbol 8-FSK.
 
 ## Evidence Aggregation
 

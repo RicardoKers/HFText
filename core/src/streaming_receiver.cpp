@@ -44,6 +44,8 @@ constexpr float kFastStreamingFrequencyOffsetsHz[] = {
 };
 constexpr float kLong8FskStreamingFrequencyOffsetsHz[] = {
     0.0F,
+    5.0F,
+    -5.0F,
     7.5F,
     -7.5F,
     15.0F,
