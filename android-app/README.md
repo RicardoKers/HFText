@@ -5,7 +5,7 @@ This directory contains the first Android shell for HFText.
 Current status:
 
 - Gradle wrapper project;
-- Android package version aligned with the shared HFText 0.3.0 application version;
+- Android package version aligned with the shared HFText 0.4.0 application version;
 - Kotlin source enabled through Android Gradle Plugin built-in Kotlin support;
 - Jetpack Compose UI shell;
 - minimal JNI bridge to the portable C ABI;

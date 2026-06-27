@@ -17,8 +17,8 @@ The project favors weak-signal robustness and operator clarity over throughput. 
 
 Current application version:
 
-- HFText 0.3.0, experimental track.
-- Operational protocol baseline: HFText Basic v0.1.
+- HFText 0.4.0, experimental track.
+- Operational protocol baseline: HFText Basic v0.1 + Text Codec v0.2.
 - Experimental physical modes: 4-FSK v0.2 and 8-FSK v0.3.
 
 The operational baseline is HFText Basic v0.1:
@@ -28,6 +28,9 @@ The operational baseline is HFText Basic v0.1:
 - transmitted physical flow: `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
 - continuous receive path in the Qt PC application;
 - weighted `START_SYNC`, `PHYS_LENGTH`, and Viterbi decisions when symbol confidence is available.
+
+HFText 0.4.0 adopts Text Codec v0.2 and is not text-compatible with 0.3.x
+builds. Use the same HFText version on both ends of a test link.
 
 2-FSK is the conservative v0.1 baseline. 4-FSK v0.2 and 8-FSK v0.3 are experimental physical modulation modes that reuse the same logical frame and robust layer. They must be selected explicitly in the CLI tools or PC application.
 

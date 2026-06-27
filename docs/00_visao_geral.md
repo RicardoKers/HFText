@@ -39,7 +39,7 @@ SYNC | LENGTH | PAYLOAD | CRC16
 
 ## Current Implementation
 
-- Text codec with a 6-bit alphabet, uppercase shift, acute/tilde modifiers, and `ç`.
+- Text Codec v0.2 with a 6-bit base layer, a one-symbol shift prefix, direct uppercase ASCII letters, punctuation, and Portuguese/Spanish/German-friendly characters.
 - Logical framing with CRC-16/CCITT-FALSE.
 - Robust layer with convolutional code `conv_k3`, deterministic interleaving, physical `PHYS_LENGTH`, and Viterbi decoding.
 - 2-FSK baseline plus experimental 4-FSK and 8-FSK.

@@ -102,8 +102,8 @@ The function can be used while the operator is typing:
 
 - `sanitized_message_utf8` shows what will be transmitted.
 - `payload_utf8` shows the final callsign-plus-message payload.
-- `message_symbols` and `payload_symbols` count 6-bit text symbols, including shift
-  and accent modifier symbols.
+- `message_symbols` and `payload_symbols` count 6-bit text symbols, including
+  Text Codec v0.2 shift-prefix symbols.
 - `payload_too_long` indicates that the payload exceeds 127 symbols.
 
 `hftext_c_estimate_transmission` returns payload length, frame bit count,

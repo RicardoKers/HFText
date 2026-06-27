@@ -102,7 +102,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 - `.\scripts\build_android_debug.ps1` builds the debug APK.
 - `.\scripts\install_android_debug.ps1` installs the debug APK on a connected
   emulator or Android device and launches the app by default.
-- The Android package version is aligned with the shared HFText 0.3.0 application version.
+- The Android package version is aligned with the shared HFText 0.4.0 application version.
 - The APK packages `libhftext_c_api.so` and `libhftext_android_jni.so`.
 - The debug APK builds the native modem libraries with optimization enabled so
   Android field tests exercise realistic streaming-decoder performance.

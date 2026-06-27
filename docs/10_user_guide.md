@@ -12,6 +12,9 @@ The package includes:
 - project documentation;
 - `PACKAGE.txt` with version, build time, and git metadata.
 
+HFText 0.4.0 adopts Text Codec v0.2 and is not text-compatible with 0.3.x
+builds. Use the same HFText version on both ends of a test link.
+
 ## First Launch
 
 On launch, HFText starts RX automatically when an input device is available.

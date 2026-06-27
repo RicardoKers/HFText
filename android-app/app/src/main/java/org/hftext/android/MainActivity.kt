@@ -1345,8 +1345,8 @@ private fun previewSnapshot(): HFTextNativeSnapshot {
     return HFTextNativeSnapshot(
         nativeAvailable = true,
         bridgeStatus = "JNI OK via C ABI",
-        core = "HFText 0.3.0 (experimental)",
-        protocol = "HFText Basic v0.1",
+        core = "HFText 0.4.0 (experimental)",
+        protocol = "HFText Basic v0.1 + Text Codec v0.2",
         slowProfile = "8-FSK, 0.300 s/symbol, 1050-1960 Hz",
         fastProfile = "8-FSK, 0.100 s/symbol, 1050-1960 Hz"
     )

@@ -27,7 +27,7 @@ int main() {
     const std::string olaAtencao = std::string("ol") + "\xC3\xA1 aten" + "\xC3\xA7" + "\xC3\xA3" + "o";
 
     auto result = hftext::parseFrame(hftext::buildFrame("pu5lrk Teste"));
-    assertValidText(result, "pu5lrk Teste", 13);
+    assertValidText(result, "pu5lrk Teste", 12);
 
     const auto frameBits = hftext::buildFrame("abc");
     const auto txBits = hftext::buildTransmission("abc");
@@ -40,7 +40,7 @@ int main() {
     stream.insert(stream.end(), transmission.begin(), transmission.end());
     stream.insert(stream.end(), {1, 1, 1});
     result = hftext::parseFrameFromStream(stream);
-    assertValidText(result, "pu5lrk Teste", 13);
+    assertValidText(result, "pu5lrk Teste", 12);
     assert(result.syncIndex == static_cast<int>(4 + preamble.size()));
 
     auto falseFrame = hftext::buildFrameBytes("ruido");
@@ -114,7 +114,7 @@ int main() {
     assert(result.error == "crc mismatch");
 
     result = hftext::parseFrame(hftext::buildFrame(olaAtencao));
-    assertValidText(result, olaAtencao, 13);
+    assertValidText(result, olaAtencao, 14);
 
     const std::vector<std::uint8_t> syncBytes = {0x2D, 0xD4};
     const auto convertedSyncBits = hftext::bytesToBits(syncBytes);

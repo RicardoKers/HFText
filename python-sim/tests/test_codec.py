@@ -1,14 +1,11 @@
 import pytest
 
 from hftext.codec import (
-    ACUTE_SYMBOL,
     ALPHABET,
-    CEDILLA_SYMBOL,
     MAX_LENGTH,
     MAX_PAYLOAD_SYMBOLS,
     MIN_LENGTH,
     SHIFT_SYMBOL,
-    TILDE_SYMBOL,
     decode_symbols_to_text,
     encoded_symbol_count,
     encode_text_to_symbols,
@@ -24,49 +21,51 @@ def test_encode_known_payload_symbols():
 
 
 def test_uppercase_letters_are_encoded_with_shift():
-    assert encode_text_to_symbols("AbZ") == [SHIFT_SYMBOL, 1, 2, SHIFT_SYMBOL, 26]
+    assert encode_text_to_symbols("AbZ") == [37, 2, 62]
     assert decode_symbols_to_text(encode_text_to_symbols("AbZ")) == "AbZ"
 
 
-def test_supported_symbols_are_encoded():
-    text = ".,?!/-+:;@#$%&*()_=<>\\|"
+def test_shift_layer_symbols_are_encoded():
+    text = ". ,?!:;'\"-_ /\\+=*%&#@$<>()[]{}|`~^°".replace(" ", "")
     assert decode_symbols_to_text(encode_text_to_symbols(text)) == text
 
 
 def test_invalid_characters_are_replaced_with_question_mark():
-    assert sanitize_text("a~b") == "a?b"
-    assert decode_symbols_to_text(encode_text_to_symbols("a~b")) == "a?b"
+    assert sanitize_text("a€b") == "a?b"
+    assert decode_symbols_to_text(encode_text_to_symbols("a€b")) == "a?b"
 
 
-def test_portuguese_accents_are_encoded_as_modifiers():
-    assert encode_text_to_symbols("olá") == [15, 12, ACUTE_SYMBOL, 1]
-    assert encode_text_to_symbols("atenção") == [1, 20, 5, 14, CEDILLA_SYMBOL, TILDE_SYMBOL, 1, 15]
+def test_portuguese_accents_are_encoded_in_shift_layer():
+    assert encode_text_to_symbols("olá") == [15, 12, SHIFT_SYMBOL, 1]
+    assert encode_text_to_symbols("atenção") == [1, 20, 5, 14, SHIFT_SYMBOL, 13, SHIFT_SYMBOL, 4, 15]
     assert decode_symbols_to_text(encode_text_to_symbols("olá atenção")) == "olá atenção"
 
 
-def test_uppercase_portuguese_accents_are_encoded_with_shift():
+def test_uppercase_portuguese_accents_are_encoded_in_shift_layer():
     assert encode_text_to_symbols("ÁÉÃÕÇ") == [
-        ACUTE_SYMBOL,
         SHIFT_SYMBOL,
-        1,
-        ACUTE_SYMBOL,
+        44,
         SHIFT_SYMBOL,
-        5,
-        TILDE_SYMBOL,
+        47,
         SHIFT_SYMBOL,
-        1,
-        TILDE_SYMBOL,
+        46,
         SHIFT_SYMBOL,
-        15,
+        52,
         SHIFT_SYMBOL,
-        CEDILLA_SYMBOL,
+        55,
     ]
     assert decode_symbols_to_text(encode_text_to_symbols("ÁÉÃÕÇ")) == "ÁÉÃÕÇ"
 
 
-def test_accent_modifiers_before_invalid_targets_are_visible():
-    assert decode_symbols_to_text([ACUTE_SYMBOL, 2]) == "?b"
-    assert decode_symbols_to_text([TILDE_SYMBOL, 5]) == "?e"
+def test_international_characters_round_trip():
+    text = "àâêíóôõúüçñÁÂÃÉÊÍÓÔÕÚÜÇÑ"
+    assert decode_symbols_to_text(encode_text_to_symbols(text)) == text
+
+
+def test_shift_reserved_values_are_visible_as_invalid():
+    assert decode_symbols_to_text([SHIFT_SYMBOL, 61]) == "?"
+    assert decode_symbols_to_text([SHIFT_SYMBOL, 62]) == "?"
+    assert decode_symbols_to_text([SHIFT_SYMBOL, SHIFT_SYMBOL]) == "?"
 
 
 def test_all_printable_protocol_symbols_round_trip():
@@ -80,22 +79,22 @@ def test_payload_length_is_limited_after_shift_expansion():
         encode_text_to_symbols("a" * (MAX_PAYLOAD_SYMBOLS + 1))
 
     with pytest.raises(ValueError, match="at most"):
-        encode_text_to_symbols("A" * 64)
+        encode_text_to_symbols("!" * 64)
 
 
 def test_frame_length_counts_encoded_payload_symbols():
     assert frame_length("") == MIN_LENGTH
     assert frame_length("a" * MAX_PAYLOAD_SYMBOLS) == MAX_LENGTH
-    assert frame_length("Aa") == 3
-    assert encoded_symbol_count("áãç") == 5
+    assert frame_length("Aa") == 2
+    assert encoded_symbol_count("áãç") == 6
 
 
-def test_shift_before_non_letter_is_ignored():
-    assert decode_symbols_to_text([SHIFT_SYMBOL, 27]) == "0"
+def test_shift_prefix_selects_second_layer():
+    assert decode_symbols_to_text([SHIFT_SYMBOL, 27]) == "+"
 
 
-def test_trailing_shift_is_ignored():
-    assert decode_symbols_to_text([1, SHIFT_SYMBOL]) == "a"
+def test_trailing_shift_is_visible_as_invalid():
+    assert decode_symbols_to_text([1, SHIFT_SYMBOL]) == "a?"
 
 
 def test_pack_symbols_to_bytes_uses_msb_first_order():

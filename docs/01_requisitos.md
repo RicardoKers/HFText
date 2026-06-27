@@ -28,10 +28,9 @@ The system must:
 ## Text Requirements
 
 - The supported alphabet is 64 symbols.
-- Lowercase letters are direct symbols.
-- Uppercase letters use `shift + lowercase`.
-- Acute and tilde modifiers encode supported accented vowels.
-- `ç` is a direct symbol; `Ç` uses `shift + ç`.
+- Lowercase letters, digits, and uppercase ASCII letters are direct base-layer symbols.
+- Symbol `63` is a shift prefix for punctuation, newline, accents, and extra symbols.
+- Shifted symbols include Portuguese accents, `ç/Ç`, Spanish `ñ/Ñ`, German/Spanish `ü/Ü`, degree sign, and common punctuation.
 - Unsupported input characters must become `?`.
 - The app must show the sanitized transmit text before transmission.
 

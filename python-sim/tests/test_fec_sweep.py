@@ -162,12 +162,12 @@ def test_fec_sweep_can_apply_interleaving_after_hamming(tmp_path):
         trials=1,
         include_clean=False,
         interleave_rows=7,
-        interleave_columns=46,
+        interleave_columns=44,
     )
 
-    assert results[0].label == "snr_p6p0db_hamming74_int7x46"
+    assert results[0].label == "snr_p6p0db_hamming74_int7x44"
     assert results[0].interleave_rows == 7
-    assert results[0].interleave_columns == 46
+    assert results[0].interleave_columns == 44
     assert results[0].frame_result.crc_ok
     trials_csv = (tmp_path / "trials.csv").read_text(encoding="utf-8")
     assert "interleave_rows" in trials_csv

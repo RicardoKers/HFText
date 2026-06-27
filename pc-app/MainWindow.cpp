@@ -103,20 +103,8 @@ std::string toStdString(const QString& text) {
 }
 
 QString sanitizePresentationText(const QString& text) {
-    QString output;
-    output.reserve(text.size());
-
-    for (const QChar ch : text) {
-        if (ch.unicode() <= 0x7F && hftext::isSupportedPresentationChar(static_cast<char>(ch.unicode()))) {
-            output.append(ch);
-        } else if (QStringLiteral("áÁéÉíÍóÓúÚãÃõÕçÇ").contains(ch)) {
-            output.append(ch);
-        } else {
-            output.append('?');
-        }
-    }
-
-    return output;
+    const auto sanitized = hftext::sanitizeText(toStdString(text));
+    return QString::fromUtf8(sanitized.data(), static_cast<qsizetype>(sanitized.size()));
 }
 
 QString formatConfidence(float confidence) {

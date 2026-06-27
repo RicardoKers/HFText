@@ -50,10 +50,11 @@ Valid LENGTH values: 0 to 127.
 PHYS_LENGTH represents the same number of PAYLOAD symbols and must match LENGTH after Viterbi decoding.
 PAYLOAD has at most 127 6-bit symbols.
 The callsign is not a separate field; when configured, the transmitter inserts it at the beginning of PAYLOAD followed by one space.
-The alphabet uses lowercase letters; uppercase letters are encoded as shift + lowercase letter.
-Symbol 61 = acute, 62 = tilde, 63 = ç.
-Accented vowels use modifier + vowel; uppercase accented vowels use modifier + shift + vowel.
-The ç symbol is direct; Ç uses shift + ç.
+The active text alphabet is Text Codec v0.2.
+Symbols 0-62 form the base layer: space, lowercase letters, digits, and uppercase ASCII letters.
+Symbol 63 is shift and applies only to the next symbol.
+The shifted layer carries newline, punctuation, accents, ç/Ç, ñ/Ñ, ü/Ü, degree sign, and other common symbols.
+Shift + reserved, shift + shift, or a trailing shift displays ?.
 Unsupported characters must be replaced with ?.
 CRC16 is CRC-16/CCITT-FALSE over PAYLOAD packed into bytes.
 6-bit symbols are packed into bytes MSB-first, with zero padding in the final byte.

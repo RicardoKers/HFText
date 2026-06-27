@@ -26,8 +26,9 @@ logical frame
 
 Incompatible changes to the frame, field semantics, FEC, interleaving, or modulation must be documented as a later protocol version, not as a silent v0.1 variation.
 
-A future incompatible text-codec candidate is recorded in
-`docs/13_text_codec_v02_candidate.md`. It is not part of HFText Basic v0.1.
+The active text representation is Text Codec v0.2, documented below and in
+`docs/13_text_codec_v02.md`. It is an incompatible replacement for the original
+v0.1 alphabet; no legacy text-codec compatibility mode is implemented.
 
 ## Experimental Physical Modes
 
@@ -61,7 +62,11 @@ In 8-FSK, `START_SYNC` does not need to start at a bit index that is a multiple 
 
 ## Text Alphabet
 
-The text alphabet has 64 symbols encoded as 6-bit values:
+HFText uses Text Codec v0.2. The physical alphabet still has 64 symbols encoded
+as 6-bit values, but symbol `63` is a shift prefix that selects a second layer
+for the next symbol only.
+
+Base symbols:
 
 ```text
 0  = space
@@ -73,73 +78,107 @@ The text alphabet has 64 symbols encoded as 6-bit values:
 28 = 1
 ...
 36 = 9
-37 = .
-38 = ,
-39 = ?
-40 = !
-41 = /
-42 = -
-43 = +
-44 = :
-45 = ;
-46 = @
-47 = #
-48 = $
-49 = %
-50 = &
-51 = *
-52 = (
-53 = )
-54 = _
-55 = =
-56 = <
-57 = >
-58 = \
-59 = |
-60 = shift
-61 = acute
-62 = tilde
-63 = ç
+37 = A
+38 = B
+...
+62 = Z
+63 = shift
 ```
 
-Unsupported input characters must be replaced with `?`, making the substitution visible to the operator.
-
-### Uppercase
-
-Letters are transmitted as lowercase symbols. Uppercase letters use `shift` followed by the lowercase symbol.
+Shifted symbols:
 
 ```text
-a  -> [a]
-A  -> [shift, a]
-Ab -> [shift, a, b]
-AB -> [shift, a, shift, b]
+shift 0  = newline
+shift 1  = á
+shift 2  = à
+shift 3  = â
+shift 4  = ã
+shift 5  = é
+shift 6  = ê
+shift 7  = í
+shift 8  = ó
+shift 9  = ô
+shift 10 = õ
+shift 11 = ú
+shift 12 = ü
+shift 13 = ç
+shift 14 = ñ
+shift 15 = .
+shift 16 = ,
+shift 17 = ?
+shift 18 = !
+shift 19 = :
+shift 20 = ;
+shift 21 = '
+shift 22 = "
+shift 23 = -
+shift 24 = _
+shift 25 = /
+shift 26 = \
+shift 27 = +
+shift 28 = =
+shift 29 = *
+shift 30 = %
+shift 31 = &
+shift 32 = #
+shift 33 = @
+shift 34 = $
+shift 35 = <
+shift 36 = >
+shift 37 = (
+shift 38 = )
+shift 39 = [
+shift 40 = ]
+shift 41 = {
+shift 42 = }
+shift 43 = |
+shift 44 = Á
+shift 45 = Â
+shift 46 = Ã
+shift 47 = É
+shift 48 = Ê
+shift 49 = Í
+shift 50 = Ó
+shift 51 = Ô
+shift 52 = Õ
+shift 53 = Ú
+shift 54 = Ü
+shift 55 = Ç
+shift 56 = Ñ
+shift 57 = `
+shift 58 = ~
+shift 59 = ^
+shift 60 = °
+shift 61 = reserved
+shift 62 = reserved
+shift 63 = invalid
 ```
 
-On receive, `shift` affects only the next alphabetic symbol. If `shift` appears before a non-letter, the receiver ignores the shift and displays the following symbol normally. A trailing `shift` is ignored.
+Unsupported input characters must be replaced with `?`, making the substitution
+visible to the operator. Since `?` is in the shifted layer, each replacement
+uses two payload symbols: `shift 17`.
 
-### Accents
+### Shift Rules
 
-`acute` and `tilde` are presentation modifiers. They do not represent standalone characters.
+`shift` affects only the next symbol.
 
 Rules:
 
-- `acute + a/e/i/o/u` displays `á/é/í/ó/ú`;
-- `tilde + a/o` displays `ã/õ`;
-- `ç` uses symbol 63 directly;
-- `Ç` uses `shift + ç`;
-- uppercase accented vowels use modifier + `shift` + vowel;
-- standalone typed acute or tilde characters are unsupported and become `?`;
-- if a received modifier is followed by an invalid target, the receiver displays `?` before the target.
+- `shift + reserved`, `shift + shift`, or trailing `shift` displays `?`;
+- unshifted symbols `61` and `62` are normal base symbols `Y` and `Z`;
+- `shift` is not a persistent case state;
+- newline is encoded as `shift 0`.
 
 Examples:
 
 ```text
-á -> [acute, a]
-Á -> [acute, shift, a]
-ã -> [tilde, a]
-Ã -> [tilde, shift, a]
-ç -> [ç]
-Ç -> [shift, ç]
+a  -> [a]
+A  -> [A]
+á  -> [shift, a]
+Á  -> [shift, H]
+.  -> [shift, o]
+?  -> [shift, q]
+°  -> [shift, X]
 ```
 
 ## Logical Frame
@@ -172,10 +211,9 @@ Rules:
 - only the lower 7 bits are used;
 - bit 7 must be zero;
 - valid range: 0 to 127;
-- uppercase letters count as 2 symbols;
-- accented lowercase vowels count as 2 symbols;
-- accented uppercase vowels count as 3 symbols;
-- `ç` counts as 1 symbol and `Ç` counts as 2 symbols.
+- base-layer characters, including uppercase ASCII letters, count as 1 symbol;
+- shifted-layer characters count as 2 symbols;
+- unsupported characters are sanitized to `?` and count as 2 symbols.
 
 ### PAYLOAD
 

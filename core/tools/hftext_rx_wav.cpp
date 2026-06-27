@@ -2,16 +2,18 @@
 #include "hftext_app_settings.h"
 #include "hftext_core.h"
 #include "hftext_version.h"
+#include "cli_args.h"
 #include "wav_io.h"
 
 #include <exception>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
-void printUsage(const char* program) {
+void printUsage(const std::string& program) {
     std::cerr
         << "Usage: " << program << " [options] <input.wav>\n"
         << "\n"
@@ -27,23 +29,23 @@ void printUsage(const char* program) {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int runMain(const std::vector<std::string>& args) {
     hftext::ModemConfig config;
     std::string inputPath;
     bool verbose = false;
 
     try {
-        for (int index = 1; index < argc; ++index) {
-            const std::string arg = argv[index];
+        for (std::size_t index = 1; index < args.size(); ++index) {
+            const std::string arg = args[index];
             auto requireValue = [&](const std::string& option) -> std::string {
-                if (index + 1 >= argc) {
+                if (index + 1 >= args.size()) {
                     throw std::invalid_argument("missing value for option: " + option);
                 }
-                return argv[++index];
+                return args[++index];
             };
 
             if (arg == "--help" || arg == "-h") {
-                printUsage(argv[0]);
+                printUsage(args[0]);
                 return 0;
             }
             if (arg == "--version") {
@@ -71,7 +73,7 @@ int main(int argc, char** argv) {
         }
 
         if (inputPath.empty()) {
-            printUsage(argv[0]);
+            printUsage(args[0]);
             return 2;
         }
 
@@ -122,3 +124,5 @@ int main(int argc, char** argv) {
         return 1;
     }
 }
+
+HFTEXT_CLI_MAIN(runMain)

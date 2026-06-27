@@ -41,8 +41,8 @@ Core protocol behavior:
 
 - text encoding and decoding;
 - unsupported-character replacement;
-- uppercase shift behavior;
-- acute/tilde and `ç` behavior;
+- direct uppercase base-layer behavior;
+- Text Codec v0.2 shift-layer behavior, including punctuation, accents, reserved shifted values, and trailing shift;
 - payload length limits;
 - CRC correctness;
 - logical frame build/parse;
@@ -213,6 +213,24 @@ after replay and did not complete live on the phone. Those three Android modem
 WAVs decoded with the lighter 10-phase plus +/-5 Hz grid. The chosen live grid
 therefore remains 10 timing phases and adds +/-5 Hz frequency offsets for
 long-symbol 8-FSK.
+
+Later 2026-06-27 Android evidence saved after that final grid showed the live
+phone receiver accepting Slow 8-FSK captures again:
+
+- `hftext-android-rx-1782584328380.txt`: message accepted, about 199 s saved.
+- `hftext-android-rx-1782584539463.txt`: session contained one accepted frame;
+  the instantaneous decoder state at save time had moved on to an invalid
+  `PHYS_LENGTH` candidate.
+- `hftext-android-rx-1782584626437.txt`: message accepted, about 49 s saved.
+
+At that point `field_summary.py` over the local `logs/` directory reported 81
+evidence files, 48 accepted-frame rows, 21 unique accepted frames, average
+quality 44.9%, and minimum accepted quality 11.6%.
+
+Text Codec v0.2 was adopted after these field captures. Older evidence remains
+useful for physical receive, timing, and CRC regression work, but old payload
+symbols are interpreted through the new alphabet if replayed by HFText 0.4.0 or
+later. Do not use pre-0.4.0 evidence as a text-codec compatibility proof.
 
 ## Evidence Aggregation
 

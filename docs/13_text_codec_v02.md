@@ -1,16 +1,14 @@
-# Text Codec v0.2 Candidate
+# Text Codec v0.2
 
-This document records a future text-codec candidate for HFText. It is not the
-current operational protocol.
+This document defines the active HFText text codec.
 
-HFText Basic v0.1 remains defined by `docs/03_protocolo_modem.md`. Implementing
-this table would be an incompatible codec/protocol change and must update the
-Python simulator, C++ core, PC app, Android app, tests, and protocol
-documentation in the same development step.
+HFText Basic v0.1 still defines the logical frame, robust layer, and physical
+flow in `docs/03_protocolo_modem.md`. Text Codec v0.2 defines the meaning of
+the 6-bit payload symbols inside that frame.
 
-Because HFText has not been distributed yet, the project does not need a legacy
-v0.1 compatibility mode when this candidate is adopted. The implementation can
-migrate the active software directly, as long as all docs and tests are updated.
+This codec is an incompatible replacement for the original v0.1 alphabet.
+Because HFText has not been distributed publicly, the project does not implement
+a legacy text-codec compatibility mode.
 
 ## Goals
 
@@ -22,7 +20,7 @@ migrate the active software directly, as long as all docs and tests are updated.
 - Preserve a 64-symbol physical alphabet and the existing 127-symbol payload
   length concept.
 
-## Proposed Table
+## Table
 
 `63` remains the `shift` prefix. A shifted symbol means `shift` followed by the
 listed base value.
@@ -123,14 +121,15 @@ Costs:
   v0.1 alphabet.
 - Accented lowercase characters become two symbols, similar to v0.1 modifiers,
   but no longer use standalone accent-modifier state.
-- Field evidence, fixtures, and all codec tests must be regenerated when this is
-  adopted.
+- Field evidence, fixtures, and all codec tests created with the old alphabet
+  must be regenerated.
 
 ## Implementation Checklist
 
-1. Update `docs/03_protocolo_modem.md` and version wording.
-2. Update Python codec tests and implementation.
-3. Update C++ codec tests and implementation.
-4. Update C ABI expectations if symbol counts or sanitization behavior changes.
-5. Update PC and Android UI sanitization expectations.
-6. Regenerate field-test examples and replay fixtures.
+1. Keep `docs/03_protocolo_modem.md` and this reference synchronized.
+2. Keep Python codec tests and implementation synchronized.
+3. Keep C++ codec tests and implementation synchronized.
+4. Keep C ABI expectations synchronized when symbol counts or sanitization
+   behavior changes.
+5. Keep PC and Android UI sanitization expectations synchronized.
+6. Regenerate field-test examples and replay fixtures when the codec changes.

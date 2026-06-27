@@ -106,8 +106,8 @@ def test_interleaving_sweep_main_prints_geometry_summary(tmp_path, capsys):
 
     assert code == 0
     assert "snr_p6p0db_rep3" in output
-    assert "snr_p6p0db_rep3_int4x138" in output
-    assert "snr_p6p0db_rep3_int6x92" in output
+    assert "snr_p6p0db_rep3_int4x132" in output
+    assert "snr_p6p0db_rep3_int6x88" in output
     assert "best_by_snr" in output
     assert Path(tmp_path / "summary.csv").exists()
     assert Path(tmp_path / "trials.csv").exists()
@@ -145,5 +145,5 @@ def test_interleaving_sweep_main_can_skip_baseline(tmp_path, capsys):
     output = capsys.readouterr().out
 
     assert code == 0
-    assert "snr_p6p0db_rep3_int4x138" in output
+    assert "snr_p6p0db_rep3_int4x132" in output
     assert "snr_p6p0db_rep3," not in output

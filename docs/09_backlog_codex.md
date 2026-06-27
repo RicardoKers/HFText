@@ -9,6 +9,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Initial repository structure.
 - Project overview, requirements, architecture, protocol, DSP, PC app, Android plan, validation plan, and backlog.
 - Documentation updated for HFText Basic v0.1, experimental 4-FSK v0.2, and experimental 8-FSK v0.3.
+- Text Codec v0.2 adopted as the active payload alphabet.
 - Product-facing language standardized to English.
 - Basic user guide.
 - Android placeholder directory, Windows setup guide, and environment-check script.
@@ -32,7 +33,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android tone-frequency list shown in the UI and included in TXT evidence reports through the JNI/C ABI path.
 - Android Operation/Diagnostics panel split to keep normal field use less cluttered while preserving native status details.
 - Android RX evidence sharing through the Android system share sheet using scoped `FileProvider` access.
-- Android package version aligned with the shared HFText 0.3.0 application version.
+- Android package version aligned with the shared HFText 0.4.0 application version.
 - Android local preference persistence for callsign, draft message, speed profile, and audio input mode.
 - Android Diagnostics action to reset local operator settings without clearing received history or evidence.
 - Android local persistence for recent received-message history.
@@ -73,8 +74,9 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 ### Python Simulation
 
 - 6-bit text codec.
-- Uppercase shift.
-- Acute, tilde, and `ç` support.
+- Text Codec v0.2 base/shift alphabet.
+- Direct uppercase ASCII letters.
+- Shift-layer punctuation, accents, `ç/Ç`, `ñ/Ñ`, `ü/Ü`, and degree sign.
 - Unsupported-character replacement with `?`.
 - CRC-16/CCITT-FALSE.
 - Frame build/parse.
@@ -163,8 +165,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 
 These require explicit protocol-version planning:
 
-- evaluate and implement the documented text-codec v0.2 candidate in
-  `docs/13_text_codec_v02_candidate.md`;
+- future incompatible text-codec changes after the adopted Text Codec v0.2 in
+  `docs/13_text_codec_v02.md`;
 - operational repetition;
 - ACK/retry;
 - message type;

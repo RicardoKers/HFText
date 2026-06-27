@@ -134,12 +134,12 @@ def test_repetition_sweep_can_apply_interleaving(tmp_path):
         trials=1,
         include_clean=False,
         interleave_rows=4,
-        interleave_columns=138,
+        interleave_columns=132,
     )
 
-    assert results[0].label == "snr_p6p0db_rep3_int4x138"
+    assert results[0].label == "snr_p6p0db_rep3_int4x132"
     assert results[0].interleave_rows == 4
-    assert results[0].interleave_columns == 138
+    assert results[0].interleave_columns == 132
     assert results[0].frame_result.crc_ok
     trials_csv = (tmp_path / "trials.csv").read_text(encoding="utf-8")
     assert "interleave_rows" in trials_csv

@@ -79,8 +79,8 @@ def test_fec_interleaving_sweep_main_prints_geometry_summary(tmp_path, capsys):
 
     assert code == 0
     assert "snr_p6p0db_hamming74" in output
-    assert "snr_p6p0db_hamming74_int7x46" in output
-    assert "snr_p6p0db_hamming74_int14x23" in output
+    assert "snr_p6p0db_hamming74_int7x44" in output
+    assert "snr_p6p0db_hamming74_int14x22" in output
     assert "best_by_snr" in output
     assert "avg_decoder_distance" in output
     assert Path(tmp_path / "summary.csv").exists()
@@ -120,7 +120,7 @@ def test_fec_interleaving_sweep_main_can_skip_baseline(tmp_path, capsys):
     output = capsys.readouterr().out
 
     assert code == 0
-    assert "snr_p6p0db_hamming74_int7x46" in output
+    assert "snr_p6p0db_hamming74_int7x44" in output
     assert "snr_p6p0db_hamming74," not in output
 
 
@@ -156,8 +156,8 @@ def test_fec_interleaving_sweep_main_can_test_convolutional_mode(tmp_path, capsy
 
     assert code == 0
     assert "snr_p6p0db_conv_k3" in output
-    assert "snr_p6p0db_conv_k3_int2x186" in output
-    assert "snr_p6p0db_conv_k3_int4x93" in output
+    assert "snr_p6p0db_conv_k3_int2x178" in output
+    assert "snr_p6p0db_conv_k3_int4x89" in output
     assert "best_by_snr" in output
 
 
@@ -190,5 +190,5 @@ def test_fec_interleaving_sweep_main_can_use_auto_shape(tmp_path, capsys):
     output = capsys.readouterr().out
 
     assert code == 0
-    assert "snr_p6p0db_conv_k3_int6x62" in output
-    assert "snr_p6p0db_conv_k3_int2x186" not in output
+    assert "snr_p6p0db_conv_k3_int4x89" in output
+    assert "snr_p6p0db_conv_k3_int2x178" not in output

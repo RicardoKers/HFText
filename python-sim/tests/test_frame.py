@@ -27,7 +27,7 @@ def test_build_and_parse_frame_round_trip_text():
     assert result.crc_ok
     assert result.payload_valid
     assert result.text == "pu5lrk Teste"
-    assert result.length == 13
+    assert result.length == 12
 
 
 def test_build_transmission_prefixes_preamble_before_frame():
