@@ -109,9 +109,12 @@ private:
     std::thread rxWorker_;
     std::mutex rxMutex_;
     std::condition_variable rxCondition_;
-    std::vector<float> rxPendingSamples_;
+    std::deque<float> rxPendingSamples_;
     std::size_t rxMaxPendingSamples_ = 0;
     std::size_t rxMaxWorkerChunkSamples_ = 0;
+    std::atomic<std::size_t> rxPendingSampleCount_{0};
+    std::atomic<std::size_t> rxMaxObservedPendingSamples_{0};
+    std::atomic<std::size_t> rxDroppedSamples_{0};
     std::mutex rxEvidenceMutex_;
     std::deque<float> rxEvidenceSamples_;
     int rxEvidenceSampleRate_ = 48000;

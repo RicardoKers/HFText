@@ -36,6 +36,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <exception>
@@ -46,8 +47,8 @@
 namespace {
 
 constexpr int kMaxLogBlocks = 3000;
-constexpr int kRxPendingSeconds = 3;
-constexpr int kRxWorkerChunkMilliseconds = 500;
+constexpr int kRxPendingSeconds = 120;
+constexpr int kRxWorkerChunkMilliseconds = 1000;
 constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
 constexpr int kRxEvidenceSeconds = 300;
 constexpr int kMaxAcceptedRxSnapshots = 512;
@@ -76,6 +77,25 @@ QString versionDisplayText() {
 QString audioPeakPercent(const std::vector<float>& samples) {
     const float peak = hftext::analyzeAudioSamples(samples).peak;
     return QString::number(peak * 100.0F, 'f', 1) + "%";
+}
+
+void updateAtomicMax(std::atomic<std::size_t>& target, std::size_t value) {
+    std::size_t current = target.load(std::memory_order_relaxed);
+    while (current < value
+           && !target.compare_exchange_weak(
+               current,
+               value,
+               std::memory_order_relaxed,
+               std::memory_order_relaxed
+           )) {
+    }
+}
+
+QString sampleDurationText(std::size_t samples, int sampleRate) {
+    if (sampleRate <= 0) {
+        return "--";
+    }
+    return QString::number(static_cast<double>(samples) / static_cast<double>(sampleRate), 'f', 2) + " s";
 }
 
 std::string toStdString(const QString& text) {
@@ -751,6 +771,13 @@ void MainWindow::stopReceive() {
         }
         appendLog("RX streaming stopped.");
         appendLog("RX summary: " + rxSessionLabel_->text());
+        const auto droppedSamples = rxDroppedSamples_.load(std::memory_order_relaxed);
+        const auto maxPendingSamples = rxMaxObservedPendingSamples_.load(std::memory_order_relaxed);
+        appendLog(
+            "RX worker backlog: max pending " + sampleDurationText(maxPendingSamples, stats.sampleRate)
+            + ", dropped " + sampleDurationText(droppedSamples, stats.sampleRate)
+            + " (" + QString::number(static_cast<qulonglong>(droppedSamples)) + " samples)"
+        );
         appendLog(
             "RX duration: " + QString::number(stats.durationSeconds(), 'f', 2)
             + " s, sample rate: " + QString::number(stats.sampleRate)
@@ -1051,6 +1078,13 @@ void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
     if (rxSessionLabel_ != nullptr) {
         stream << "Current RX session: " << rxSessionLabel_->text() << '\n';
     }
+    const auto currentPendingSamples = rxPendingSampleCount_.load(std::memory_order_relaxed);
+    const auto maxPendingSamples = rxMaxObservedPendingSamples_.load(std::memory_order_relaxed);
+    const auto droppedSamples = rxDroppedSamples_.load(std::memory_order_relaxed);
+    stream << "RX worker pending: current " << sampleDurationText(currentPendingSamples, rxConfig.sampleRate)
+           << ", peak " << sampleDurationText(maxPendingSamples, rxConfig.sampleRate)
+           << ", dropped " << sampleDurationText(droppedSamples, rxConfig.sampleRate)
+           << " (" << static_cast<qulonglong>(droppedSamples) << " samples)\n";
     stream << "Stored accepted frames: " << static_cast<qulonglong>(acceptedRxFrames_.size()) << '\n';
 }
 
@@ -1082,6 +1116,7 @@ void MainWindow::writeFieldSummaryCsv(
         << "rx_elapsed_s,rx_accepted,accepted_frames,rx_rejected_strong,rx_phys_length,rx_sync,"
         << "rx_quality,last_phys_length,last_reject,received_lines,received_text,"
         << "accepted_length,accepted_offset_samples,accepted_offsets_tried,"
+        << "rx_pending_current_s,rx_pending_peak_s,rx_pending_dropped_s,rx_pending_dropped_samples,"
         << "saved_audio_s,saved_samples,wav_path\n";
     const QString summaryQuality = hasLastAcceptedRx_ ? lastAcceptedRxQualityText_ : lastRxQualityText_;
     const QString summaryPhysicalLength = hasLastAcceptedRx_
@@ -1119,6 +1154,25 @@ void MainWindow::writeFieldSummaryCsv(
         << lastAcceptedRxLength_ << ','
         << lastAcceptedRxOffsetSamples_ << ','
         << lastAcceptedRxOffsetsTried_ << ','
+        << QString::number(
+            static_cast<double>(rxPendingSampleCount_.load(std::memory_order_relaxed))
+                / static_cast<double>((std::max)(1, rxConfig.sampleRate)),
+            'f',
+            2
+        ) << ','
+        << QString::number(
+            static_cast<double>(rxMaxObservedPendingSamples_.load(std::memory_order_relaxed))
+                / static_cast<double>((std::max)(1, rxConfig.sampleRate)),
+            'f',
+            2
+        ) << ','
+        << QString::number(
+            static_cast<double>(rxDroppedSamples_.load(std::memory_order_relaxed))
+                / static_cast<double>((std::max)(1, rxConfig.sampleRate)),
+            'f',
+            2
+        ) << ','
+        << static_cast<qulonglong>(rxDroppedSamples_.load(std::memory_order_relaxed)) << ','
         << QString::number(savedSeconds, 'f', 2) << ','
         << static_cast<qulonglong>(sampleCount) << ','
         << csvCell(wavPath) << '\n';
@@ -1527,6 +1581,9 @@ void MainWindow::startRxWorker(const hftext::ModemConfig& config, bool detailedR
         rxMaxWorkerChunkSamples_ = static_cast<std::size_t>(
             std::max(config.sampleRate / 10, config.sampleRate * kRxWorkerChunkMilliseconds / 1000)
         );
+        rxPendingSampleCount_.store(0, std::memory_order_relaxed);
+        rxMaxObservedPendingSamples_.store(0, std::memory_order_relaxed);
+        rxDroppedSamples_.store(0, std::memory_order_relaxed);
         rxWorkerStop_ = false;
     }
     rxWorker_ = std::thread(&MainWindow::rxWorkerLoop, this, config, detailedRxLog);
@@ -1538,6 +1595,7 @@ void MainWindow::stopRxWorker(bool drainPending) {
         rxWorkerStop_ = true;
         if (!drainPending) {
             rxPendingSamples_.clear();
+            rxPendingSampleCount_.store(0, std::memory_order_relaxed);
         }
     }
     rxCondition_.notify_all();
@@ -1556,13 +1614,16 @@ void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
             return;
         }
         rxPendingSamples_.insert(rxPendingSamples_.end(), samples.begin(), samples.end());
+        updateAtomicMax(rxMaxObservedPendingSamples_, rxPendingSamples_.size());
         if (rxMaxPendingSamples_ > 0 && rxPendingSamples_.size() > rxMaxPendingSamples_) {
             const auto excess = rxPendingSamples_.size() - rxMaxPendingSamples_;
+            rxDroppedSamples_.fetch_add(excess, std::memory_order_relaxed);
             rxPendingSamples_.erase(
                 rxPendingSamples_.begin(),
                 rxPendingSamples_.begin() + static_cast<std::ptrdiff_t>(excess)
             );
         }
+        rxPendingSampleCount_.store(rxPendingSamples_.size(), std::memory_order_relaxed);
     }
     rxCondition_.notify_one();
 }
@@ -1619,6 +1680,7 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
                 rxPendingSamples_.begin(),
                 rxPendingSamples_.begin() + static_cast<std::ptrdiff_t>(maxChunk)
             );
+            rxPendingSampleCount_.store(rxPendingSamples_.size(), std::memory_order_relaxed);
         }
 
         const auto results = receiver.pushSamples(chunk);

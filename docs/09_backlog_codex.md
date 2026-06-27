@@ -57,6 +57,13 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
   almost simultaneously after Android native optimization.
 - Fast 8-FSK SDR field retest accepted a 127-symbol frame on PC and Android
   almost simultaneously, and the Android evidence WAV replayed successfully.
+- Mixed SDR/speaker/microphone field sequence showed Android and PC generally
+  agree, but also found two saved PC Slow evidence WAVs that replay successfully
+  despite not appearing as live accepted frames, plus one noisy Fast case where
+  Android captured a decodable signal and PC did not.
+- PC live RX pending-audio queue changed from a short vector queue to a larger
+  deque-backed queue with evidence counters for current, peak, and dropped
+  worker backlog.
 
 ### Python Simulation
 
@@ -112,6 +119,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Load Defaults button.
 - HFText app icon and release packaging.
 - Visible app, CLI, log, and evidence version metadata.
+- RX worker backlog counters in log and evidence export.
 - Repeatable Windows release packaging script.
 - Basic GitHub Actions CI.
 
@@ -122,7 +130,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 3. Compare symbol durations, especially 0.1 s, 0.3 s, and 0.5 s.
 4. Track field acceptance rate and quality using `field_summary.py`.
 5. Replay accepted evidence with `field_replay.py` after decoder changes.
-6. Watch for repeated failure causes: missed sync, invalid `PHYS_LENGTH`, CRC failure, payload failure, latency after frame end, evidence-save time, or UI responsiveness.
+6. Watch for repeated failure causes: missed sync, invalid `PHYS_LENGTH`, CRC failure, payload failure, latency after frame end, evidence-save time, RX worker backlog/drop counters, or UI responsiveness.
 
 ## Near-Term UI Tasks
 
@@ -140,6 +148,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Improve frequency tolerance only from repeatable evidence.
 - Consider a lightweight frequency tracking loop if mistuning remains common.
 - Consider a timing tracker if symbol-boundary drift appears in long captures.
+- Monitor PC live RX backlog counters in future long Slow captures.
 - Keep 2-FSK as the conservative baseline until field data says otherwise.
 
 ## Future Protocol Tasks

@@ -175,6 +175,30 @@ both receivers:
 - The Android modem WAV replayed through the PC streaming tool with the same
   payload and high replay confidence.
 
+Later on 2026-06-26, a mixed SDR, speaker, and microphone field sequence ran PC
+and Android receive at the same time:
+
+- two short Fast 8-FSK messages were accepted on both devices;
+- two 127-symbol Fast 8-FSK messages were accepted on both devices;
+- two short Slow 8-FSK messages were accepted on both devices;
+- two 127-symbol Slow 8-FSK messages were accepted on Android and not shown as
+  accepted by the live PC app, but the saved PC evidence WAVs
+  `logs/HFText-rx-evidence-20260626-171313.wav` and
+  `logs/HFText-rx-evidence-20260626-171633.wav` replayed successfully through
+  the PC streaming CLI;
+- after increasing audio volume, a 127-symbol Slow 8-FSK message was accepted on
+  both devices;
+- a noisy medium Fast 8-FSK message was accepted by Android, while the PC live
+  app and the saved PC evidence WAV did not decode it.
+
+This separates two failure classes: cases where a different microphone/audio
+path captured a better signal, and cases where the saved PC audio is decodable
+but the live PC receiver did not surface the frame before evidence was saved.
+The latter is consistent with live receiver backlog or pending-audio overflow:
+the PC evidence buffer is intentionally much longer than the worker queue used
+for live decoding. The PC app now keeps a larger pending-audio queue and records
+current, peak, and dropped RX worker backlog in evidence logs.
+
 ## Evidence Aggregation
 
 Aggregate saved evidence:

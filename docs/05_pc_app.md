@@ -143,6 +143,16 @@ This helps the operator tune the radio/SDR and adjust receive audio level.
 - `.wav`: recent RX audio from the circular evidence buffer;
 - `.txt`: settings, recent RX metadata, summary CSV, accepted-frame CSV, received text, and log contents.
 
+The evidence header and summary CSV include RX worker backlog counters:
+
+- current pending audio;
+- peak pending audio;
+- dropped pending audio.
+
+These fields help separate an RF/audio failure from a live receiver backlog. A
+saved WAV can still be decodable if it came from the longer evidence buffer,
+while the live decoder may have missed the frame after pending-audio overflow.
+
 The evidence TXT uses English section names:
 
 ```text
