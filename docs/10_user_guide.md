@@ -4,6 +4,11 @@
 
 Use the packaged Windows release from `dist/`. Extract the ZIP to a local folder and run `hftext_pc.exe`.
 
+For external testers, prefer downloading builds from the project's GitHub
+Releases page. Release assets should include the Windows ZIP package and, when
+Android testing is needed, the Android APK. Generated executables, ZIP files,
+and APK files should not be committed into the source repository.
+
 The package includes:
 
 - `hftext_pc.exe`;

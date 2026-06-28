@@ -80,6 +80,10 @@ Create a Windows release package:
 
 The package is written under `dist/` and includes the PC app, CLI tools, Qt/runtime dependencies, and documentation.
 
+For sharing test builds, publish the generated Windows ZIP and Android APK as
+assets of a GitHub Release. Do not commit generated executables or APK/ZIP files
+to the repository itself.
+
 Check the Android development environment:
 
 ```powershell

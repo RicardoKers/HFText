@@ -1108,6 +1108,7 @@ void MainWindow::refreshMessageHistoryText() {
         const bool tx = entry.direction.compare("TX", Qt::CaseInsensitive) == 0;
 
         auto* row = new QWidget(messageHistoryContainer_);
+        row->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
         auto* rowLayout = new QHBoxLayout(row);
         rowLayout->setContentsMargins(0, 0, 0, 0);
         rowLayout->setSpacing(0);
@@ -1117,7 +1118,7 @@ void MainWindow::refreshMessageHistoryText() {
         bubble->setWordWrap(true);
         bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
         bubble->setFixedWidth(bubbleWidth);
-        bubble->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Minimum);
+        bubble->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         bubble->setText(
             "<span style=\"color: #d5e8f4; font-size: 8pt; font-weight: 600;\">"
             + entry.direction.toHtmlEscaped()
@@ -1141,9 +1142,15 @@ void MainWindow::refreshMessageHistoryText() {
             rowLayout->addWidget(bubble);
             rowLayout->addStretch(1);
         }
+        const int bubbleHeight = bubble->sizeHint().height();
+        bubble->setMinimumHeight(bubbleHeight);
+        bubble->setMaximumHeight(bubbleHeight);
+        row->setMinimumHeight(bubbleHeight);
+        row->setMaximumHeight(bubbleHeight);
         messageHistoryLayout_->addWidget(row);
     }
 
+    messageHistoryLayout_->addStretch(1);
     scrollMessageHistoryToBottom();
 }
 

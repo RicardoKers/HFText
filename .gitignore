@@ -14,8 +14,10 @@ Logs/
 hftext.ini
 
 # Release staging folders
+Testers/
 dist/HFText-win64-release-*/
 dist/HFText-win64-release-*.zip
+dist/*.apk
 
 # C/C++ build
 build/
