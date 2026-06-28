@@ -21,9 +21,11 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFile>
+#include <QSizePolicy>
 #include <QSettings>
 #include <QStringList>
 #include <QStyle>
@@ -52,6 +54,7 @@ constexpr int kRxWorkerChunkMilliseconds = 1000;
 constexpr int kMaxDetailedRxLogLinesPerBatch = 80;
 constexpr int kRxEvidenceSeconds = 300;
 constexpr int kMaxAcceptedRxSnapshots = 512;
+constexpr int kMaxMessageHistoryEntries = 100;
 constexpr int kAcceptedRxStateHoldSeconds = 60;
 constexpr const char* kDefaultCallsign = "nocall";
 
@@ -129,6 +132,14 @@ QString csvCell(QString value) {
 
 QString csvBool(bool value) {
     return value ? "1" : "0";
+}
+
+QString htmlMessageText(QString text) {
+    return text.toHtmlEscaped().replace('\n', "<br/>");
+}
+
+int nonEmptyLineCount(const QString& text) {
+    return text.isEmpty() ? 0 : text.split('\n', Qt::SkipEmptyParts).size();
 }
 
 QString formatClippingSummary(std::size_t clippedSamples, std::size_t sampleCount) {
@@ -377,12 +388,23 @@ MainWindow::MainWindow(QWidget* parent)
     auto* configForm = new QFormLayout();
     configScroll->setWidgetResizable(true);
 
-    receivedEdit_ = new QPlainTextEdit(this);
-    receivedEdit_->setReadOnly(true);
-    receivedEdit_->setPlaceholderText("Received messages");
-    receivedEdit_->setMinimumHeight(120);
-    receivedEdit_->setContextMenuPolicy(Qt::CustomContextMenu);
-    operationLayout->addWidget(receivedEdit_, 3);
+    messageHistoryScroll_ = new QScrollArea(this);
+    messageHistoryScroll_->setWidgetResizable(true);
+    messageHistoryScroll_->setMinimumHeight(120);
+    messageHistoryScroll_->setContextMenuPolicy(Qt::CustomContextMenu);
+    messageHistoryScroll_->setStyleSheet(
+        "QScrollArea {"
+        " background-color: #202328;"
+        " border: 1px solid #40444c;"
+        "}"
+    );
+    messageHistoryContainer_ = new QWidget(messageHistoryScroll_);
+    messageHistoryContainer_->setStyleSheet("background-color: #202328;");
+    messageHistoryLayout_ = new QVBoxLayout(messageHistoryContainer_);
+    messageHistoryLayout_->setContentsMargins(8, 8, 8, 8);
+    messageHistoryLayout_->setSpacing(7);
+    messageHistoryScroll_->setWidget(messageHistoryContainer_);
+    operationLayout->addWidget(messageHistoryScroll_, 3);
 
     operationLayout->addWidget(new QLabel("RX waterfall", this));
     waterfallWidget_ = new WaterfallWidget(this);
@@ -521,10 +543,10 @@ MainWindow::MainWindow(QWidget* parent)
     connect(clearLogButton_, &QPushButton::clicked, this, &MainWindow::clearLog);
     connect(saveEvidenceButton_, &QPushButton::clicked, this, &MainWindow::saveFieldEvidence);
     connect(defaultSettingsButton_, &QPushButton::clicked, this, &MainWindow::applyDefaultSettings);
-    connect(receivedEdit_, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+    connect(messageHistoryScroll_, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         QMenu menu(this);
-        QAction* clearAction = menu.addAction("Clear RX");
-        QAction* selected = menu.exec(receivedEdit_->mapToGlobal(pos));
+        QAction* clearAction = menu.addAction("Clear history");
+        QAction* selected = menu.exec(messageHistoryScroll_->mapToGlobal(pos));
         if (selected == clearAction) {
             clearReceivedText();
         }
@@ -663,6 +685,7 @@ void MainWindow::transmitWav() {
         txProgressBar_->setValue(0);
         setTransmitButtonTransmitting(true);
         txProgressTimer_->start();
+        appendMessageHistory("TX", QString::fromStdString(estimate.payload));
         appendLog("TX started.");
         appendLog("TX mode: " + modulationModeName(config.modulationMode));
         appendLog("Generated TX peak: " + txPeak);
@@ -784,7 +807,8 @@ void MainWindow::stopReceive() {
 }
 
 void MainWindow::clearReceivedText() {
-    receivedEdit_->clear();
+    messageHistory_.clear();
+    refreshMessageHistoryText();
 }
 
 void MainWindow::clearLog() {
@@ -1017,8 +1041,10 @@ void MainWindow::saveFieldEvidence() {
     stream << '\n';
     writeAcceptedRxFramesCsv(stream);
     stream << '\n';
-    stream << "--- Received Text ---\n";
-    stream << receivedEdit_->toPlainText() << "\n\n";
+    writeMessageHistoryCsv(stream);
+    stream << '\n';
+    stream << "--- Message History ---\n";
+    stream << messageHistoryPlainText() << "\n\n";
     stream << "--- Log ---\n";
     stream << logEdit_->toPlainText() << '\n';
 
@@ -1032,8 +1058,134 @@ void MainWindow::appendLog(const QString& text) {
 }
 
 void MainWindow::appendReceivedLine(const QString& text) {
-    const QString timestamp = QDateTime::currentDateTime().toString("[yyyy-MM-dd HH:mm:ss] ");
-    receivedEdit_->appendPlainText(timestamp + text);
+    appendMessageHistory("RX", text);
+}
+
+void MainWindow::appendMessageHistory(const QString& direction, const QString& text) {
+    if (text.trimmed().isEmpty()) {
+        return;
+    }
+
+    const auto now = QDateTime::currentDateTime();
+    MessageHistoryEntry entry;
+    entry.direction = direction;
+    entry.timestampIso = now.toString(Qt::ISODate);
+    entry.timestampDisplay = now.toString("yyyy-MM-dd HH:mm:ss");
+    entry.text = text;
+
+    messageHistory_.push_back(entry);
+    if (messageHistory_.size() > kMaxMessageHistoryEntries) {
+        messageHistory_.erase(messageHistory_.begin());
+    }
+    refreshMessageHistoryText();
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    if (messageHistoryLayout_ != nullptr && !messageHistory_.empty()) {
+        refreshMessageHistoryText();
+    }
+}
+
+void MainWindow::refreshMessageHistoryText() {
+    if (messageHistoryLayout_ == nullptr) {
+        return;
+    }
+
+    while (auto* item = messageHistoryLayout_->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
+
+    int bubbleWidth = 520;
+    if (messageHistoryScroll_ != nullptr && messageHistoryScroll_->viewport() != nullptr) {
+        const int viewportWidth = messageHistoryScroll_->viewport()->width();
+        const int availableWidth = std::max(180, viewportWidth - 24);
+        bubbleWidth = std::min(availableWidth, std::max(240, viewportWidth * 88 / 100));
+    }
+
+    for (const auto& entry : messageHistory_) {
+        const bool tx = entry.direction.compare("TX", Qt::CaseInsensitive) == 0;
+
+        auto* row = new QWidget(messageHistoryContainer_);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(0);
+
+        auto* bubble = new QLabel(row);
+        bubble->setTextFormat(Qt::RichText);
+        bubble->setWordWrap(true);
+        bubble->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        bubble->setFixedWidth(bubbleWidth);
+        bubble->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Minimum);
+        bubble->setText(
+            "<span style=\"color: #d5e8f4; font-size: 8pt; font-weight: 600;\">"
+            + entry.direction.toHtmlEscaped()
+            + " "
+            + entry.timestampDisplay.toHtmlEscaped()
+            + "</span><br/>"
+            + "<span style=\"color: #ffffff; font-size: 10pt;\">"
+            + htmlMessageText(entry.text)
+            + "</span>"
+        );
+        bubble->setStyleSheet(
+            tx
+                ? "QLabel { background-color: #2f6f93; border: 1px solid #3f86ad; padding: 7px; }"
+                : "QLabel { background-color: #111823; border: 1px solid #273241; padding: 7px; }"
+        );
+
+        if (tx) {
+            rowLayout->addStretch(1);
+            rowLayout->addWidget(bubble);
+        } else {
+            rowLayout->addWidget(bubble);
+            rowLayout->addStretch(1);
+        }
+        messageHistoryLayout_->addWidget(row);
+    }
+
+    scrollMessageHistoryToBottom();
+}
+
+void MainWindow::scrollMessageHistoryToBottom() {
+    if (messageHistoryScroll_ != nullptr) {
+        QTimer::singleShot(0, this, [this]() {
+            if (messageHistoryContainer_ != nullptr) {
+                messageHistoryContainer_->adjustSize();
+                messageHistoryContainer_->updateGeometry();
+            }
+            if (messageHistoryScroll_ != nullptr && messageHistoryScroll_->verticalScrollBar() != nullptr) {
+                auto* scrollBar = messageHistoryScroll_->verticalScrollBar();
+                scrollBar->setValue(scrollBar->maximum());
+            }
+            QTimer::singleShot(0, this, [this]() {
+                if (messageHistoryScroll_ != nullptr && messageHistoryScroll_->verticalScrollBar() != nullptr) {
+                    auto* scrollBar = messageHistoryScroll_->verticalScrollBar();
+                    scrollBar->setValue(scrollBar->maximum());
+                }
+            });
+        });
+    }
+}
+
+QString MainWindow::messageHistoryPlainText() const {
+    QStringList entries;
+    entries.reserve(static_cast<qsizetype>(messageHistory_.size()));
+    for (const auto& entry : messageHistory_) {
+        entries.push_back(entry.direction + " " + entry.timestampDisplay + "\n" + entry.text);
+    }
+    return entries.join("\n\n");
+}
+
+QString MainWindow::acceptedRxText() const {
+    QStringList lines;
+    lines.reserve(static_cast<qsizetype>(acceptedRxFrames_.size()));
+    for (const auto& frame : acceptedRxFrames_) {
+        if (!frame.text.trimmed().isEmpty()) {
+            lines.push_back(frame.text);
+        }
+    }
+    return lines.join("\n");
 }
 
 void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
@@ -1091,10 +1243,9 @@ void MainWindow::writeFieldSummaryCsv(
     const double savedSeconds = sampleRate <= 0
         ? 0.0
         : static_cast<double>(sampleCount) / static_cast<double>(sampleRate);
-    const QString receivedText = receivedEdit_ == nullptr ? QString() : receivedEdit_->toPlainText().trimmed();
-    const int receivedLines = receivedText.isEmpty()
-        ? 0
-        : receivedText.split('\n', Qt::SkipEmptyParts).size();
+    const QString receivedText = acceptedRxText().trimmed();
+    const int receivedLines = nonEmptyLineCount(receivedText);
+    const QString messageHistoryText = messageHistoryPlainText().trimmed();
 
     stream << "--- Summary CSV ---\n";
     stream
@@ -1103,6 +1254,7 @@ void MainWindow::writeFieldSummaryCsv(
         << "f0_hz,f1_hz,tone_spacing_hz,amplitude,preamble_bits,detailed_log,"
         << "rx_elapsed_s,rx_accepted,accepted_frames,rx_rejected_strong,rx_phys_length,rx_sync,"
         << "rx_quality,last_phys_length,last_reject,received_lines,received_text,"
+        << "message_history_entries,message_history,"
         << "accepted_length,accepted_offset_samples,accepted_offsets_tried,"
         << "rx_pending_current_s,rx_pending_peak_s,rx_pending_dropped_s,rx_pending_dropped_samples,"
         << "saved_audio_s,saved_samples,wav_path\n";
@@ -1139,6 +1291,8 @@ void MainWindow::writeFieldSummaryCsv(
         << csvCell(lastRxRejectText_) << ','
         << receivedLines << ','
         << csvCell(receivedText) << ','
+        << static_cast<qulonglong>(messageHistory_.size()) << ','
+        << csvCell(messageHistoryText) << ','
         << lastAcceptedRxLength_ << ','
         << lastAcceptedRxOffsetSamples_ << ','
         << lastAcceptedRxOffsetsTried_ << ','
@@ -1190,6 +1344,18 @@ void MainWindow::writeAcceptedRxFramesCsv(QTextStream& stream) const {
             << frame.offsetSamples << ','
             << frame.offsetsTried << ','
             << csvCell(frame.text) << '\n';
+    }
+}
+
+void MainWindow::writeMessageHistoryCsv(QTextStream& stream) const {
+    stream << "--- Message History CSV ---\n";
+    stream << "direction,timestamp,text\n";
+
+    for (const auto& entry : messageHistory_) {
+        stream
+            << csvCell(entry.direction) << ','
+            << csvCell(entry.timestampIso) << ','
+            << csvCell(entry.text) << '\n';
     }
 }
 

@@ -18,6 +18,7 @@ class HFTextAudioPlayer {
     fun play(
         samples: FloatArray,
         sampleRate: Int,
+        onProgress: (Double) -> Unit,
         onFinished: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -64,6 +65,7 @@ class HFTextAudioPlayer {
                 track.play()
 
                 var offset = 0
+                var lastProgressMs = 0L
                 while (offset < samples.size && !cancelled) {
                     val count = minOf(4096, samples.size - offset)
                     val written = track.write(
@@ -79,11 +81,24 @@ class HFTextAudioPlayer {
                         Thread.sleep(5)
                     } else {
                         offset += written
+                        val nowMs = System.currentTimeMillis()
+                        if (nowMs - lastProgressMs >= 200L || offset >= samples.size) {
+                            lastProgressMs = nowMs
+                            val progress = offset.toDouble() / samples.size.toDouble()
+                            mainHandler.post {
+                                if (!cancelled) {
+                                    onProgress(progress.coerceIn(0.0, 1.0))
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (!cancelled) {
-                    mainHandler.post(onFinished)
+                    mainHandler.post {
+                        onProgress(1.0)
+                        onFinished()
+                    }
                 }
             } catch (error: Throwable) {
                 if (!cancelled) {

@@ -60,11 +60,14 @@ Application behavior:
 - English UI labels and logs;
 - direct TX from the message field;
 - TX cancellation;
+- PC TX and RX entries remain visible in one timestamped message history, with
+  multiline text kept inside one record;
 - automatic RX start;
 - Fast/Slow speed profile selection from Operation;
 - automatic `hftext.ini` creation when missing;
 - RX restart when the speed profile, input device, or detailed-log setting changes;
 - evidence and log export;
+- PC evidence includes `Message History CSV` with direction, timestamp, and text;
 - waterfall tone markers;
 - default-settings button;
 - no console window in the packaged GUI application.
@@ -72,7 +75,9 @@ Application behavior:
 - Android JNI metadata bridge loads successfully and shows core metadata/profile summaries in the app.
 - Android JNI tone-frequency bridge loads successfully and shows the selected profile's tones in the app and TXT evidence report.
 - Android JNI text-preparation and TX-estimate bridge loads successfully and updates the app from the native core path.
-- Android explicit TX audio generation loads successfully through JNI and plays with `AudioTrack` only after pressing `Send audio`.
+- Android explicit TX audio generation loads successfully through JNI and plays with `AudioTrack` only after pressing `Send`.
+- Android Operation stays compact: timestamped TX/RX history, RX waterfall, Fast/Slow selector, TX symbol/duration estimate, live TX progress, message draft, Clear, and Send/Stop.
+- Android Settings contains callsign, audio input mode, RX capture controls, evidence actions, native metadata, receiver counters, and reset actions.
 - Android RX capture requests microphone permission, starts/stops `AudioRecord`, and updates RX level/clipping through the native C ABI.
 - Android RX reports the selected microphone source and shows both raw peak and modem-input peak after limited digital gain.
 - Android RX capture feeds audio blocks into the native streaming receiver and displays accepted messages only after core-side frame, payload, and CRC success.
@@ -88,6 +93,7 @@ Application behavior:
 - Android RX evidence reports captured duration and should be saved only after it covers the selected TX duration plus margin.
 - Android `RX buffer` duration should advance in real time; slower growth indicates capture is blocked or audio data is being lost.
 - Android accepted RX messages and explicit TX messages remain visible in a timestamped chat-style history and are included in the TXT evidence report with direction.
+- Android Operation waterfall covers the normal audio passband and shows selected tone markers so tuning can be compared with the PC app.
 
 ## Field Validation
 

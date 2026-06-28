@@ -26,8 +26,11 @@ class QPushButton;
 class QCheckBox;
 class QComboBox;
 class QProgressBar;
+class QScrollArea;
+class QResizeEvent;
 class QTextStream;
 class QTimer;
+class QVBoxLayout;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -56,12 +59,21 @@ private slots:
     void saveLog();
     void saveFieldEvidence();
 
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+
 private:
     void appendLog(const QString& text);
     void appendReceivedLine(const QString& text);
+    void appendMessageHistory(const QString& direction, const QString& text);
+    void refreshMessageHistoryText();
+    void scrollMessageHistoryToBottom();
+    QString messageHistoryPlainText() const;
+    QString acceptedRxText() const;
     void writeLogHeader(QTextStream& stream, const char* title) const;
     void writeFieldSummaryCsv(QTextStream& stream, const QString& wavPath, std::size_t sampleCount, int sampleRate) const;
     void writeAcceptedRxFramesCsv(QTextStream& stream) const;
+    void writeMessageHistoryCsv(QTextStream& stream) const;
     void resetRxDiagnostic(const QString& state);
     void resetRxFrameProgress();
     void updateRxFrameProgressFromEvents(const std::vector<hftext::StreamingReceiverEvent>& events);
@@ -106,6 +118,12 @@ private:
         int offsetSamples = 0;
         int offsetsTried = 0;
     };
+    struct MessageHistoryEntry {
+        QString direction;
+        QString timestampIso;
+        QString timestampDisplay;
+        QString text;
+    };
     std::thread rxWorker_;
     std::mutex rxMutex_;
     std::condition_variable rxCondition_;
@@ -139,7 +157,9 @@ private:
     QLabel* rxSessionLabel_ = nullptr;
     WaterfallWidget* waterfallWidget_ = nullptr;
     QCheckBox* detailedRxLogCheck_ = nullptr;
-    QPlainTextEdit* receivedEdit_ = nullptr;
+    QScrollArea* messageHistoryScroll_ = nullptr;
+    QWidget* messageHistoryContainer_ = nullptr;
+    QVBoxLayout* messageHistoryLayout_ = nullptr;
     QPlainTextEdit* logEdit_ = nullptr;
     QPushButton* transmitButton_ = nullptr;
     QPushButton* startReceiveButton_ = nullptr;
@@ -159,6 +179,7 @@ private:
     int lastAcceptedRxOffsetSamples_ = 0;
     int lastAcceptedRxOffsetsTried_ = 0;
     std::vector<AcceptedRxFrame> acceptedRxFrames_;
+    std::vector<MessageHistoryEntry> messageHistory_;
     int rxSessionSyncCount_ = 0;
     int rxSessionLengthCount_ = 0;
     int rxSessionRejectedCount_ = 0;

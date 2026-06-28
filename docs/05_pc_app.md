@@ -21,7 +21,7 @@ The Settings tab displays the current HFText application version, release track,
 
 The normal operation tab is chat-like:
 
-- received messages at the top;
+- visually distinct TX/RX message history at the top;
 - RX waterfall in the middle;
 - Fast/Slow speed selector;
 - compact TX progress and estimate;
@@ -93,7 +93,7 @@ Fresh installations use `nocall` as a generic placeholder; the operator should r
 
 Normal logs are compact and timestamped. Robust-frame progress is summarized in coarse progress milestones, and low-confidence rejected candidates are kept out of the normal log. Detailed RX log shows raw telemetry such as sync candidates, recovered physical length, every robust-frame progress event, candidate rejection, and accepted frames.
 
-The received-message history also prefixes each displayed line with the local date and time, so unattended receive sessions show when each message or decode result arrived.
+The message history records both explicit TX entries and accepted RX/decode entries. Each record has a `TX` or `RX` direction prefix and local date/time. TX and RX records are visually distinguished by alignment and background color. Message bubbles use most of the available width on large windows so long field traffic remains readable. Multiline messages stay inside one record, so the timestamp is not repeated in the middle of the text. The history auto-scrolls to the latest entry after new TX/RX activity; the operator can still scroll upward to inspect older traffic.
 
 ## RX State and Session
 
@@ -141,7 +141,7 @@ This helps the operator tune the radio/SDR and adjust receive audio level.
 `Save RX Evidence` writes two files with the same prefix:
 
 - `.wav`: recent RX audio from the circular evidence buffer;
-- `.txt`: settings, recent RX metadata, summary CSV, accepted-frame CSV, received text, and log contents.
+- `.txt`: settings, recent RX metadata, summary CSV, accepted-frame CSV, message-history CSV, message history, and log contents.
 
 The evidence header and summary CSV include RX worker backlog counters:
 
@@ -158,7 +158,8 @@ The evidence TXT uses English section names:
 ```text
 --- Summary CSV ---
 --- Accepted Frames CSV ---
---- Received Text ---
+--- Message History CSV ---
+--- Message History ---
 --- Log ---
 ```
 

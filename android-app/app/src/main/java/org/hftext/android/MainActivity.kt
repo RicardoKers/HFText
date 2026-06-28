@@ -5,6 +5,8 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -44,7 +48,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +62,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -84,7 +97,7 @@ private data class ReceivedMessage(
 
 private enum class AndroidPanel {
     Operation,
-    Diagnostics
+    Settings
 }
 
 private const val PREFS_NAME = "hftext_android"
@@ -96,6 +109,10 @@ private const val PREF_RECEIVED_MESSAGES = "received_messages"
 private const val DEFAULT_CALLSIGN = "nocall"
 private const val DEFAULT_MESSAGE = "Hello HFText!"
 private const val MAX_RECEIVED_MESSAGES = 100
+private const val WATERFALL_MIN_HZ = 300.0
+private const val WATERFALL_MAX_HZ = 3000.0
+private const val WATERFALL_BINS = 72
+private const val WATERFALL_ROWS = 72
 private val DEFAULT_SPEED_PROFILE = HFTextSpeedProfile.Fast
 private val DEFAULT_AUDIO_INPUT_MODE = HFTextAudioInputMode.VoiceRecognition
 
@@ -144,6 +161,7 @@ private fun HFTextScreen(
         mutableStateOf(readAudioInputMode(preferences.getString(PREF_AUDIO_INPUT_MODE, null)))
     }
     var txStatus by remember { mutableStateOf("ready") }
+    var txProgress by remember { mutableStateOf(0.0) }
     var rxStatus by remember { mutableStateOf("stopped") }
     var rxStats by remember { mutableStateOf(emptyAudioStats()) }
     var rxReceiverStats by remember { mutableStateOf(emptyAudioStats()) }
@@ -157,6 +175,7 @@ private fun HFTextScreen(
     var rxRejected by remember { mutableStateOf(0L) }
     var rxSync by remember { mutableStateOf(0L) }
     var rxEvents by remember { mutableStateOf(0L) }
+    var waterfallRows by remember { mutableStateOf<List<FloatArray>>(emptyList()) }
     var receivedMessages by remember {
         mutableStateOf(readReceivedMessages(preferences.getString(PREF_RECEIVED_MESSAGES, null)))
     }
@@ -228,6 +247,7 @@ private fun HFTextScreen(
         if (isTransmitting) {
             audioPlayer.stop()
             isTransmitting = false
+            txProgress = 0.0
             txStatus = "TX cancelled"
             return
         }
@@ -250,6 +270,7 @@ private fun HFTextScreen(
         val txProfile = selectedProfile
         val txPayload = analysis.payload
         isTransmitting = true
+        txProgress = 0.0
         txStatus = "preparing ${txProfile.label} TX audio"
 
         Thread {
@@ -260,6 +281,7 @@ private fun HFTextScreen(
                 }
                 if (!generatedAudio.ok) {
                     isTransmitting = false
+                    txProgress = 0.0
                     txStatus = "TX failed: ${generatedAudio.error}"
                     return@post
                 }
@@ -279,12 +301,17 @@ private fun HFTextScreen(
                 audioPlayer.play(
                     samples = generatedAudio.samples,
                     sampleRate = generatedAudio.sampleRate,
+                    onProgress = { progress ->
+                        txProgress = progress
+                    },
                     onFinished = {
                         isTransmitting = false
+                        txProgress = 1.0
                         txStatus = "TX complete"
                     },
                     onError = { error ->
                         isTransmitting = false
+                        txProgress = 0.0
                         txStatus = "TX failed: $error"
                     }
                 )
@@ -328,6 +355,7 @@ private fun HFTextScreen(
         rxSync = 0L
         rxEvents = 0L
         rxBufferSeconds = 0.0
+        waterfallRows = emptyList()
         audioRecorder.start(
             profile = rxProfile,
             inputMode = rxInputMode,
@@ -347,6 +375,10 @@ private fun HFTextScreen(
                 } else if (!receiverStats.ok) {
                     rxStatus = "RX receiver stats failed: ${receiverStats.error}"
                 }
+            },
+            onWaterfallSamples = { samples, sampleRate ->
+                val row = waterfallSpectrumRow(samples, sampleRate)
+                waterfallRows = (waterfallRows + row).takeLast(72)
             },
             onReceiverUpdate = { update ->
                 if (!update.ok) {
@@ -536,9 +568,9 @@ private fun HFTextScreen(
                         modifier = Modifier.weight(1f)
                     )
                     ProfileButton(
-                        label = "Diagnostics",
-                        selected = selectedPanel == AndroidPanel.Diagnostics,
-                        onClick = { selectedPanel = AndroidPanel.Diagnostics },
+                        label = "Settings",
+                        selected = selectedPanel == AndroidPanel.Settings,
+                        onClick = { selectedPanel = AndroidPanel.Settings },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -549,23 +581,10 @@ private fun HFTextScreen(
                         onClear = { receivedMessages = emptyList() }
                     )
 
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        HFTextField(
-                            label = "Callsign",
-                            value = callsign,
-                            onValueChange = { callsign = it },
-                            singleLine = true
-                        )
-                        HFTextField(
-                            label = "Message",
-                            value = message,
-                            onValueChange = { message = it },
-                            singleLine = false
-                        )
-                    }
+                    RxWaterfall(
+                        rows = waterfallRows,
+                        toneFrequencies = selectedToneFrequencies
+                    )
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -588,92 +607,110 @@ private fun HFTextScreen(
                                 modifier = Modifier.weight(1f)
                             )
                         }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AudioInputButton(
-                                label = "Voice",
-                                selected = rxInputMode == HFTextAudioInputMode.VoiceRecognition,
-                                enabled = !isReceiving,
-                                onClick = { rxInputMode = HFTextAudioInputMode.VoiceRecognition },
-                                modifier = Modifier.weight(1f)
-                            )
-                            AudioInputButton(
-                                label = "Raw",
-                                selected = rxInputMode == HFTextAudioInputMode.Unprocessed,
-                                enabled = !isReceiving,
-                                onClick = { rxInputMode = HFTextAudioInputMode.Unprocessed },
-                                modifier = Modifier.weight(1f)
-                            )
-                            AudioInputButton(
-                                label = "Mic",
-                                selected = rxInputMode == HFTextAudioInputMode.Microphone,
-                                enabled = !isReceiving,
-                                onClick = { rxInputMode = HFTextAudioInputMode.Microphone },
+                            Text(
+                                text = operationEstimateText(
+                                    analysis = analysis,
+                                    selectedProfile = selectedProfile,
+                                    isTransmitting = isTransmitting,
+                                    txProgress = txProgress
+                                ),
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyMedium,
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        Button(
-                            onClick = ::startOrStopTx,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF3C6F9F),
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Text(if (isTransmitting) "Stop TX" else "Send audio")
-                        }
-                        OutlinedButton(
-                            onClick = ::startOrStopRx,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color(0xFFE6EDF3)
-                            )
-                        ) {
-                            Text(if (isReceiving) "Stop RX capture" else "Start RX capture")
-                        }
-                        OutlinedButton(
-                            onClick = ::saveRxEvidence,
-                            enabled = !isSavingRxEvidence,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color(0xFFE6EDF3)
-                            )
-                        ) {
-                            Text("Save RX evidence")
-                        }
-                        OutlinedButton(
-                            onClick = ::shareRxEvidence,
-                            enabled = lastRxEvidenceFiles.isNotEmpty() && !isSavingRxEvidence,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color(0xFFE6EDF3)
-                            )
-                        ) {
-                            Text("Share RX evidence")
-                        }
+                        LinearProgressIndicator(
+                            progress = { txProgress.toFloat().coerceIn(0.0f, 1.0f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp),
+                            color = Color(0xFF7EA7D8),
+                            trackColor = Color(0xFF3A4048)
+                        )
                     }
 
-                    Column(
+                    MessageComposer(
+                        message = message,
+                        onMessageChange = { message = it },
+                        onClear = { message = "" },
+                        onTransmit = ::startOrStopTx,
+                        isTransmitting = isTransmitting,
+                        transmitEnabled = nativeSnapshot.nativeAvailable &&
+                            analysis.nativeAvailable &&
+                            !analysis.messageEmpty &&
+                            !analysis.payloadTooLong &&
+                            !estimateTooLong(analysis, selectedProfile)
+                    )
+                } else {
+                    HFTextField(
+                        label = "Callsign",
+                        value = callsign,
+                        onValueChange = { callsign = it },
+                        singleLine = true
+                    )
+
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        StatusRow(label = "Text", value = textStatus(analysis))
-                        StatusRow(label = "TX", value = txStatus)
-                        StatusRow(label = "RX", value = rxStatus)
-                        StatusRow(label = "RX level", value = rxLevelText(rxStats, rxReceiverStats, rxReceiverGain))
-                        StatusRow(label = "RX evidence", value = rxEvidenceStatus)
-                        StatusRow(
-                            label = "Symbols",
-                            value = "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} payload | ${analysis.messageSymbols} message"
+                        AudioInputButton(
+                            label = "Voice",
+                            selected = rxInputMode == HFTextAudioInputMode.VoiceRecognition,
+                            enabled = !isReceiving,
+                            onClick = { rxInputMode = HFTextAudioInputMode.VoiceRecognition },
+                            modifier = Modifier.weight(1f)
                         )
-                        StatusRow(
-                            label = "${selectedProfile.label} TX",
-                            value = estimateText(analysis, slow = selectedProfile == HFTextSpeedProfile.Slow)
+                        AudioInputButton(
+                            label = "Raw",
+                            selected = rxInputMode == HFTextAudioInputMode.Unprocessed,
+                            enabled = !isReceiving,
+                            onClick = { rxInputMode = HFTextAudioInputMode.Unprocessed },
+                            modifier = Modifier.weight(1f)
+                        )
+                        AudioInputButton(
+                            label = "Mic",
+                            selected = rxInputMode == HFTextAudioInputMode.Microphone,
+                            enabled = !isReceiving,
+                            onClick = { rxInputMode = HFTextAudioInputMode.Microphone },
+                            modifier = Modifier.weight(1f)
                         )
                     }
-                } else {
+
+                    OutlinedButton(
+                        onClick = ::startOrStopRx,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFE6EDF3)
+                        )
+                    ) {
+                        Text(if (isReceiving) "Stop RX capture" else "Start RX capture")
+                    }
+                    OutlinedButton(
+                        onClick = ::saveRxEvidence,
+                        enabled = !isSavingRxEvidence,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFE6EDF3)
+                        )
+                    ) {
+                        Text("Save RX evidence")
+                    }
+                    OutlinedButton(
+                        onClick = ::shareRxEvidence,
+                        enabled = lastRxEvidenceFiles.isNotEmpty() && !isSavingRxEvidence,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Color(0xFFE6EDF3)
+                        )
+                    ) {
+                        Text("Share RX evidence")
+                    }
+
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -925,6 +962,156 @@ private fun MessageBubble(message: ReceivedMessage) {
 }
 
 @Composable
+private fun RxWaterfall(
+    rows: List<FloatArray>,
+    toneFrequencies: List<Float>
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "RX waterfall",
+            color = Color.White,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(118.dp)
+                .background(Color(0xFF00051F))
+        ) {
+            val axisHeight = 20.dp.toPx()
+            val plotHeight = (size.height - axisHeight).coerceAtLeast(1.0f)
+            val binWidth = size.width / WATERFALL_BINS.toFloat()
+            val rowHeight = plotHeight / WATERFALL_ROWS.toFloat()
+            val visibleRows = rows.takeLast(WATERFALL_ROWS)
+
+            visibleRows.forEachIndexed { rowIndex, row ->
+                val y = plotHeight - (visibleRows.size - rowIndex) * rowHeight
+                row.take(WATERFALL_BINS).forEachIndexed { bin, level ->
+                    drawRect(
+                        color = waterfallColor(level),
+                        topLeft = Offset(bin * binWidth, y),
+                        size = Size(binWidth + 0.5f, rowHeight + 0.5f)
+                    )
+                }
+            }
+
+            toneFrequencies.forEach { frequency ->
+                if (frequency >= WATERFALL_MIN_HZ && frequency <= WATERFALL_MAX_HZ) {
+                    val x = ((frequency - WATERFALL_MIN_HZ) /
+                        (WATERFALL_MAX_HZ - WATERFALL_MIN_HZ)).toFloat() * size.width
+                    drawLine(
+                        color = Color(0xFFB2A000),
+                        start = Offset(x, 0.0f),
+                        end = Offset(x, plotHeight),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+            }
+
+            drawLine(
+                color = Color(0xFFE6EDF3),
+                start = Offset(0.0f, plotHeight),
+                end = Offset(size.width, plotHeight),
+                strokeWidth = 1.dp.toPx()
+            )
+
+            val labelPaint = Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 10.dp.toPx()
+                typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+                isAntiAlias = true
+            }
+            drawIntoCanvas { canvas ->
+                for (frequency in 300..3000 step 300) {
+                    val x = ((frequency.toDouble() - WATERFALL_MIN_HZ) /
+                        (WATERFALL_MAX_HZ - WATERFALL_MIN_HZ)).toFloat() * size.width
+                    drawLine(
+                        color = Color(0xFFE6EDF3),
+                        start = Offset(x, plotHeight),
+                        end = Offset(x, plotHeight + 5.dp.toPx()),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    val label = frequencyLabel(frequency)
+                    val labelWidth = labelPaint.measureText(label)
+                    val labelX = (x - labelWidth / 2.0f).coerceIn(0.0f, size.width - labelWidth)
+                    canvas.nativeCanvas.drawText(
+                        label,
+                        labelX,
+                        size.height - 4.dp.toPx(),
+                        labelPaint
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageComposer(
+    message: String,
+    onMessageChange: (String) -> Unit,
+    onClear: () -> Unit,
+    onTransmit: () -> Unit,
+    isTransmitting: Boolean,
+    transmitEnabled: Boolean
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        OutlinedTextField(
+            value = message,
+            onValueChange = onMessageChange,
+            label = { Text("Message") },
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.weight(1f),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedLabelColor = Color(0xFF9FB3C8),
+                unfocusedLabelColor = Color(0xFF9FB3C8),
+                cursorColor = Color(0xFFE6EDF3),
+                focusedBorderColor = Color(0xFF7EA7D8),
+                unfocusedBorderColor = Color(0xFF455263)
+            )
+        )
+        Column(
+            modifier = Modifier.width(88.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onClear,
+                enabled = message.isNotEmpty() && !isTransmitting,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color(0xFFE6EDF3)
+                )
+            ) {
+                Text("Clear")
+            }
+            Button(
+                onClick = onTransmit,
+                enabled = isTransmitting || transmitEnabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF3C6F9F),
+                    contentColor = Color.White
+                )
+            ) {
+                Text(if (isTransmitting) "Stop" else "Send")
+            }
+        }
+    }
+}
+
+@Composable
 private fun StatusRow(label: String, value: String) {
     Row(
         modifier = Modifier
@@ -1077,6 +1264,28 @@ private fun estimateText(analysis: HFTextTextAnalysis, slow: Boolean): String {
     return "${formatSeconds(seconds)} | $bits bits"
 }
 
+private fun operationEstimateText(
+    analysis: HFTextTextAnalysis,
+    selectedProfile: HFTextSpeedProfile,
+    isTransmitting: Boolean,
+    txProgress: Double
+): String {
+    if (analysis.messageEmpty) {
+        return "0/${analysis.maxPayloadSymbols} symbols | TX: --"
+    }
+    if (analysis.payloadTooLong || estimateTooLong(analysis, selectedProfile)) {
+        return "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} symbols | payload too long"
+    }
+
+    val seconds = estimateSeconds(analysis, selectedProfile)
+    val base = "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} symbols | TX: ${formatSeconds(seconds)}"
+    return if (isTransmitting) {
+        "$base | ${formatWholePercent(txProgress)}"
+    } else {
+        base
+    }
+}
+
 private fun estimateSeconds(analysis: HFTextTextAnalysis, profile: HFTextSpeedProfile): Double {
     if (analysis.messageEmpty || analysis.payloadTooLong || estimateTooLong(analysis, profile)) {
         return 0.0
@@ -1084,6 +1293,61 @@ private fun estimateSeconds(analysis: HFTextTextAnalysis, profile: HFTextSpeedPr
     return when (profile) {
         HFTextSpeedProfile.Slow -> analysis.slowDurationSeconds
         HFTextSpeedProfile.Fast -> analysis.fastDurationSeconds
+    }
+}
+
+private fun waterfallSpectrumRow(samples: FloatArray, sampleRate: Int): FloatArray {
+    val row = FloatArray(WATERFALL_BINS)
+    if (samples.isEmpty() || sampleRate <= 0) {
+        return row
+    }
+
+    val count = samples.size.coerceAtMost(4096)
+    val start = samples.size - count
+    for (bin in 0 until WATERFALL_BINS) {
+        val frequency = WATERFALL_MIN_HZ +
+            (WATERFALL_MAX_HZ - WATERFALL_MIN_HZ) * bin.toDouble() /
+            (WATERFALL_BINS - 1).toDouble()
+        val omega = 2.0 * PI * frequency / sampleRate.toDouble()
+        val coefficient = 2.0 * cos(omega)
+        var previous = 0.0
+        var previous2 = 0.0
+        for (index in start until samples.size) {
+            val current = samples[index].toDouble() + coefficient * previous - previous2
+            previous2 = previous
+            previous = current
+        }
+        val power = max(0.0, previous2 * previous2 + previous * previous - coefficient * previous * previous2)
+        val amplitude = 2.0 * sqrt(power) / count.toDouble()
+        row[bin] = (ln(1.0 + amplitude * 650.0) / ln(651.0)).toFloat().coerceIn(0.0f, 1.0f)
+    }
+    return row
+}
+
+private fun waterfallColor(level: Float): Color {
+    val value = level.coerceIn(0.0f, 1.0f)
+    return when {
+        value < 0.58f -> mixColor(Color(0xFF00051F), Color(0xFF1262D5), value / 0.58f)
+        value < 0.88f -> mixColor(Color(0xFF1262D5), Color(0xFFFFD43B), (value - 0.58f) / 0.30f)
+        else -> mixColor(Color(0xFFFFD43B), Color(0xFFE94141), (value - 0.88f) / 0.12f)
+    }
+}
+
+private fun mixColor(start: Color, end: Color, amount: Float): Color {
+    val t = amount.coerceIn(0.0f, 1.0f)
+    return Color(
+        red = start.red + (end.red - start.red) * t,
+        green = start.green + (end.green - start.green) * t,
+        blue = start.blue + (end.blue - start.blue) * t,
+        alpha = start.alpha + (end.alpha - start.alpha) * t
+    )
+}
+
+private fun frequencyLabel(frequency: Int): String {
+    return if (frequency >= 1000) {
+        String.format(Locale.US, "%.1fk", frequency.toDouble() / 1000.0)
+    } else {
+        frequency.toString()
     }
 }
 
@@ -1396,6 +1660,10 @@ private fun formatSeconds(seconds: Double): String {
 
 private fun formatPercent(value: Double): String {
     return String.format(Locale.US, "%.1f%%", value.coerceIn(0.0, 1.0) * 100.0)
+}
+
+private fun formatWholePercent(value: Double): String {
+    return "${(value.coerceIn(0.0, 1.0) * 100.0).roundToInt()}%"
 }
 
 private fun formatGain(value: Float): String {

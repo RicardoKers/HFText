@@ -51,6 +51,7 @@ class HFTextAudioRecorder(
         sampleRate: Int,
         onStarted: (String) -> Unit,
         onStats: (HFTextAudioStats, HFTextAudioStats, Float, Double) -> Unit,
+        onWaterfallSamples: (FloatArray, Int) -> Unit,
         onReceiverUpdate: (HFTextReceiverUpdate) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -170,6 +171,7 @@ class HFTextAudioRecorder(
                                         receiverSamples.gain,
                                         evidenceDurationSeconds()
                                     )
+                                    onWaterfallSamples(receiverSamples.samples, sampleRate)
                                 }
                             }
                         }

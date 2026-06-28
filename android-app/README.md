@@ -12,11 +12,16 @@ Current status:
 - native metadata and Fast/Slow profile summaries shown in the UI;
 - native text preparation and TX estimates shown while editing;
 - native tone-frequency lists shown in the UI and saved in evidence reports;
-- compact Operation/Diagnostics screen split so field use is less cluttered;
+- compact Operation/Settings screen split so field use is less cluttered;
+- Operation shows timestamped TX/RX history, a lightweight RX waterfall, Fast/Slow
+  selection, TX symbol/duration estimate, live TX progress, message draft, Clear,
+  and Send/Stop;
+- Settings holds callsign, audio input mode, RX capture controls, evidence
+  actions, metadata, receiver counters, and reset actions;
 - saved Android RX evidence can be shared through the Android system share sheet;
 - callsign, draft message, Fast/Slow profile, and audio input mode are persisted
   locally between app launches;
-- local operator settings can be reset from Diagnostics without clearing message
+- local operator settings can be reset from Settings without clearing message
   history or evidence files; reset uses `nocall` as a generic callsign placeholder;
 - up to 100 recent TX/RX messages are shown in a scrollable timestamped panel
   and persisted locally between app launches;
@@ -26,7 +31,7 @@ Current status:
 - AudioRecord RX blocks fed to the native streaming receiver;
 - accepted RX messages and explicit TX messages shown in a timestamped chat-style history, plus receiver status
   summarized through the shared C ABI RX-event helper;
-- Diagnostics keeps the instantaneous decoder state separate from the stable
+- Settings keeps the instantaneous decoder state separate from the stable
   last accepted message so post-frame noise does not hide the latest success;
 - Android RX can select voice-recognition, raw/unprocessed, or normal microphone
   input and falls back when the selected source is unavailable;
@@ -68,9 +73,9 @@ The current JNI bridge is intentionally small. It loads:
 Kotlin reads application metadata, protocol metadata, default Fast/Slow profile
 summaries, sanitized text, payload preview, symbol counts, TX estimates, generated
 TX audio, RX sample rate, tone frequencies, audio statistics, and streaming RX
-updates/event summaries through this native path. Audio playback starts only after the operator presses `Send audio`.
+updates/event summaries through this native path. Audio playback starts only after the operator presses `Send`.
 RX capture starts only after the operator grants microphone permission and presses
-`Start RX capture`. Captured audio is streamed to the portable receiver; accepted
+`Start RX capture` in Settings. Captured audio is streamed to the portable receiver; accepted
 messages are displayed only after core-side frame, payload, and CRC validation.
 `Save RX evidence` writes raw/modem WAV files and a TXT report with metadata, RX
 counters, instantaneous decoder state, stable last accepted message, elapsed
