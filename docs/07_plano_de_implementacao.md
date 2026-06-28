@@ -58,7 +58,7 @@ The current focus is field validation and operator usability:
 
 - Automatic frequency/tone tracking.
 - Automatic gain or level guidance.
-- Richer Android conversation UI once the basic received-message history is field-tested.
+- Further Android conversation UI refinements after the TX/RX chat-style history is field-tested.
 - Replay selected evidence files from the app.
 - Android UI polish, richer evidence/log export, and device validation.
 - ACK/retry or repetition as explicit future protocol versions.

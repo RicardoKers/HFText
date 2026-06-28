@@ -24,7 +24,7 @@ the real operator callsign before field transmission.
 
 The Operation tab is for normal use:
 
-- received messages at the top;
+- TX/RX message history at the top;
 - RX waterfall in the middle;
 - Fast/Slow speed selector;
 - short TX estimate and progress;
@@ -52,7 +52,7 @@ Transmission only starts after pressing the send button. While TX is active, the
 2. Confirm RX is running.
 3. Tune until received tone tracks align with the yellow waterfall markers.
 4. Keep input level below clipping.
-5. Accepted messages appear in the received-message area with a local date/time timestamp.
+5. Accepted messages appear in the message history with a local timestamp.
 
 Blue waterfall traces are weak/normal energy, yellow indicates strong energy near saturation, and red indicates near-full-scale input blocks.
 
@@ -84,16 +84,16 @@ For debug or field experiments, edit `hftext.ini` and restart HFText. Supported 
 The Android app uses the same portable core through JNI. Normal use is split into
 Operation and Diagnostics panels:
 
-- Operation keeps the field workflow compact: received messages, callsign,
+- Operation keeps the field workflow compact: TX/RX message history, callsign,
   message draft, Fast/Slow selection, explicit TX, RX control, and evidence
   actions.
 - Diagnostics shows metadata, tone lists, RX levels, receiver counters, saved
   evidence details, and reset actions.
 
 Android stores the local callsign, draft message, speed profile, audio input
-mode, and up to 100 recent received messages in app-private preferences. `Reset
+mode, and up to 100 recent TX/RX messages in app-private preferences. `Reset
 local settings` restores operator settings to defaults, including `nocall`, but
-does not clear received history or saved evidence files.
+does not clear message history or saved evidence files.
 
 `Save RX evidence` writes recent 240 s raw and modem-input WAV files plus a TXT report.
 `Share RX evidence` shares the latest saved evidence bundle through the Android

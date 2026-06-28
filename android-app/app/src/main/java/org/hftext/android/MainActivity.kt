@@ -67,10 +67,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private enum class MessageDirection {
+    Incoming,
+    Outgoing
+}
+
 private data class ReceivedMessage(
     val clockText: String,
     val dateTimeText: String,
     val text: String,
+    val direction: MessageDirection = MessageDirection.Incoming,
     val profileLabel: String = "",
     val coreLatencySeconds: Double? = null,
     val acceptedAtMillis: Long? = null
@@ -171,7 +177,9 @@ private fun HFTextScreen(
     val selectedToneFrequencies = remember(selectedProfile) {
         toneFrequencies(selectedProfile).toList()
     }
-    val lastAcceptedMessage = receivedMessages.lastOrNull()
+    val lastAcceptedMessage = receivedMessages.lastOrNull {
+        it.direction == MessageDirection.Incoming
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -212,6 +220,10 @@ private fun HFTextScreen(
             .apply()
     }
 
+    fun appendHistoryMessage(historyMessage: ReceivedMessage) {
+        receivedMessages = (receivedMessages + historyMessage).takeLast(MAX_RECEIVED_MESSAGES)
+    }
+
     fun startOrStopTx() {
         if (isTransmitting) {
             audioPlayer.stop()
@@ -236,6 +248,7 @@ private fun HFTextScreen(
         val txCallsign = callsign
         val txMessage = message
         val txProfile = selectedProfile
+        val txPayload = analysis.payload
         isTransmitting = true
         txStatus = "preparing ${txProfile.label} TX audio"
 
@@ -251,6 +264,17 @@ private fun HFTextScreen(
                     return@post
                 }
 
+                val now = Date()
+                appendHistoryMessage(
+                    ReceivedMessage(
+                        clockText = currentClockText(now),
+                        dateTimeText = currentDateTimeText(now),
+                        text = txPayload,
+                        direction = MessageDirection.Outgoing,
+                        profileLabel = txProfile.label,
+                        acceptedAtMillis = now.time
+                    )
+                )
                 txStatus = "playing ${txProfile.label} TX (${formatSeconds(generatedAudio.durationSeconds)})"
                 audioPlayer.play(
                     samples = generatedAudio.samples,
@@ -352,6 +376,7 @@ private fun HFTextScreen(
                                 clockText = currentClockText(now),
                                 dateTimeText = currentDateTimeText(now),
                                 text = text,
+                                direction = MessageDirection.Incoming,
                                 profileLabel = rxProfile.label,
                                 coreLatencySeconds = update.acceptedLatencies.getOrNull(index)
                                     ?.takeIf { it >= 0.0 },
@@ -826,9 +851,9 @@ private fun ReceivedMessagesPanel(
         ) {
             Text(
                 text = if (messages.isEmpty()) {
-                    "Received"
+                    "Messages"
                 } else {
-                    "Received (${messages.size}/$MAX_RECEIVED_MESSAGES)"
+                    "Messages (${messages.size}/$MAX_RECEIVED_MESSAGES)"
                 },
                 color = Color(0xFF9FB3C8),
                 style = MaterialTheme.typography.labelLarge
@@ -860,12 +885,40 @@ private fun ReceivedMessagesPanel(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 messages.forEach { message ->
-                    Text(
-                        text = "[${message.clockText}] ${message.text}",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    MessageBubble(message)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageBubble(message: ReceivedMessage) {
+    val outgoing = message.direction == MessageDirection.Outgoing
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(0.88f),
+            color = if (outgoing) Color(0xFF275B7A) else Color(0xFF151D27),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = "${messageDirectionLabel(message.direction)} ${message.clockText}",
+                    color = Color(0xFFB7C8D9),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = message.text,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }
@@ -908,6 +961,27 @@ private fun readAudioInputMode(value: String?): HFTextAudioInputMode {
         ?: HFTextAudioInputMode.VoiceRecognition
 }
 
+private fun readMessageDirection(value: String?): MessageDirection {
+    return when (value?.lowercase(Locale.US)) {
+        "tx", "outgoing" -> MessageDirection.Outgoing
+        else -> MessageDirection.Incoming
+    }
+}
+
+private fun messageDirectionKey(direction: MessageDirection): String {
+    return when (direction) {
+        MessageDirection.Incoming -> "rx"
+        MessageDirection.Outgoing -> "tx"
+    }
+}
+
+private fun messageDirectionLabel(direction: MessageDirection): String {
+    return when (direction) {
+        MessageDirection.Incoming -> "RX"
+        MessageDirection.Outgoing -> "TX"
+    }
+}
+
 private fun readReceivedMessages(value: String?): List<ReceivedMessage> {
     if (value.isNullOrBlank()) {
         return emptyList()
@@ -927,6 +1001,7 @@ private fun readReceivedMessages(value: String?): List<ReceivedMessage> {
                         clockText = item.optString("clock", "--:--:--"),
                         dateTimeText = item.optString("dateTime", ""),
                         text = text,
+                        direction = readMessageDirection(item.optString("direction", "rx")),
                         profileLabel = item.optString("profile", ""),
                         coreLatencySeconds = if (item.has("coreLatencySeconds")) {
                             item.optDouble("coreLatencySeconds").takeIf { !it.isNaN() }
@@ -955,6 +1030,7 @@ private fun receivedMessagesToJson(messages: List<ReceivedMessage>): String {
                 .put("clock", message.clockText)
                 .put("dateTime", message.dateTimeText)
                 .put("text", message.text)
+                .put("direction", messageDirectionKey(message.direction))
                 .put("profile", message.profileLabel)
                 .also { item ->
                     message.coreLatencySeconds?.let {
@@ -1118,6 +1194,9 @@ private fun buildRxEvidenceReport(
     val lastAcceptedAgeSeconds = lastAcceptedMessage?.let {
         acceptedAgeSeconds(it, generatedDate.time)
     }
+    val incomingMessages = receivedMessages.filter {
+        it.direction == MessageDirection.Incoming
+    }
     return buildString {
         appendLine("HFText Android RX evidence")
         appendLine("Generated at: $generatedAt")
@@ -1148,12 +1227,12 @@ private fun buildRxEvidenceReport(
         appendLine("Slow TX estimate: ${estimateText(analysis, slow = true)}")
         appendLine("Fast TX estimate: ${estimateText(analysis, slow = false)}")
         appendLine()
-        appendLine("--- Received Text ---")
+        appendLine("--- Message History ---")
         if (receivedMessages.isEmpty()) {
             appendLine("--")
         } else {
             receivedMessages.forEach { message ->
-                appendLine("[${message.dateTimeText}]${receivedMessageDetails(message)} ${message.text}")
+                appendLine("[${message.dateTimeText}] ${messageDirectionLabel(message.direction)}${receivedMessageDetails(message)} ${message.text}")
             }
         }
         appendLine()
@@ -1180,6 +1259,7 @@ private fun buildRxEvidenceReport(
                 "sync",
                 "events",
                 "received_lines",
+                "history_lines",
                 "last_accepted_at",
                 "last_accepted_profile",
                 "last_accepted_core_latency_s",
@@ -1210,6 +1290,7 @@ private fun buildRxEvidenceReport(
                 rxRejected.toString(),
                 rxSync.toString(),
                 rxEvents.toString(),
+                incomingMessages.size.toString(),
                 receivedMessages.size.toString(),
                 lastAcceptedMessage?.dateTimeText ?: "",
                 lastAcceptedMessage?.profileLabel ?: "",
@@ -1222,10 +1303,11 @@ private fun buildRxEvidenceReport(
         )
         appendLine()
         appendLine("--- Messages CSV ---")
-        appendLine("received_at,rx_profile,core_latency_s,text")
+        appendLine("direction,timestamp,profile,core_latency_s,text")
         receivedMessages.forEach { message ->
             appendLine(
                 listOf(
+                    messageDirectionKey(message.direction),
                     message.dateTimeText,
                     message.profileLabel,
                     message.coreLatencySeconds?.let { formatCsvNumber(it) } ?: "",

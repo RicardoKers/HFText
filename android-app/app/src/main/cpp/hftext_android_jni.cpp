@@ -66,25 +66,71 @@ std::string doubleString(double value) {
     return out.str();
 }
 
-std::string joinMessages(const std::vector<std::string>& messages) {
+std::string jsonString(const std::string& value) {
     std::ostringstream out;
-    for (std::size_t index = 0; index < messages.size(); ++index) {
-        if (index > 0) {
-            out << '\n';
+    out << '"';
+    for (const unsigned char ch : value) {
+        switch (ch) {
+        case '"':
+            out << "\\\"";
+            break;
+        case '\\':
+            out << "\\\\";
+            break;
+        case '\b':
+            out << "\\b";
+            break;
+        case '\f':
+            out << "\\f";
+            break;
+        case '\n':
+            out << "\\n";
+            break;
+        case '\r':
+            out << "\\r";
+            break;
+        case '\t':
+            out << "\\t";
+            break;
+        default:
+            if (ch < 0x20) {
+                out << "\\u"
+                    << std::hex << std::setw(4) << std::setfill('0')
+                    << static_cast<int>(ch)
+                    << std::dec << std::setfill(' ');
+            } else {
+                out << static_cast<char>(ch);
+            }
+            break;
         }
-        out << messages[index];
     }
+    out << '"';
     return out.str();
 }
 
-std::string joinDoubles(const std::vector<double>& values) {
+std::string jsonStringArray(const std::vector<std::string>& messages) {
     std::ostringstream out;
+    out << '[';
+    for (std::size_t index = 0; index < messages.size(); ++index) {
+        if (index > 0) {
+            out << ',';
+        }
+        out << jsonString(messages[index]);
+    }
+    out << ']';
+    return out.str();
+}
+
+std::string jsonDoubleArray(const std::vector<double>& values) {
+    std::ostringstream out;
+    out << '[';
     for (std::size_t index = 0; index < values.size(); ++index) {
         if (index > 0) {
-            out << '\n';
+            out << ',';
         }
         out << doubleString(values[index]);
     }
+    out << ']';
     return out.str();
 }
 
@@ -888,7 +934,7 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
         return stringArray(env, {
             "error",
             cApiError("receiver event summary", summaryStatus, error),
-            joinMessages(messages),
+            jsonStringArray(messages),
             "",
             "-1.000",
             "-1.000",
@@ -952,7 +998,7 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
     return stringArray(env, {
         "ok",
         "",
-        joinMessages(messages),
+        jsonStringArray(messages),
         state,
         doubleString(progress),
         doubleString(quality),
@@ -960,6 +1006,6 @@ Java_org_hftext_android_HFTextNativeBridge_nativeReceiverPushSamples(
         sizeString(rejected),
         sizeString(sync),
         sizeString(eventCount),
-        joinDoubles(acceptedLatencies),
+        jsonDoubleArray(acceptedLatencies),
     });
 }

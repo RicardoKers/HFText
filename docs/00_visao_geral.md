@@ -46,7 +46,7 @@ SYNC | LENGTH | PAYLOAD | CRC16
 - Python simulation and sweep tools.
 - C++ core, C ABI foundation for JNI reuse, CLI tools, and tests.
 - Qt PC app with direct TX, continuous RX, waterfall, RX diagnostics, logs, and field evidence export.
-- Minimal Android Kotlin/Compose shell with JNI bridge for metadata, text preparation, TX estimates, explicit AudioTrack TX using core-generated audio, AudioRecord streaming RX through the native receiver, timestamped received-message history, and RX evidence export.
+- Minimal Android Kotlin/Compose shell with JNI bridge for metadata, text preparation, TX estimates, explicit AudioTrack TX using core-generated audio, AudioRecord streaming RX through the native receiver, timestamped TX/RX message history, and RX evidence export.
 
 ## Not Yet Implemented
 

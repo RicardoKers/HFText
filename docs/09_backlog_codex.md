@@ -28,21 +28,21 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android Fast RX evidence replayed successfully on PC from Xiaomi POCO F1 captures.
 - Android Slow RX latency reduced by bounding the live 8-FSK streaming search grid while preserving +/-15 Hz frequency-offset coverage.
 - Android RX evidence WAV export switched to buffered chunked PCM writes.
-- Android received-message history with timestamps and manual clear action.
-- Android RX evidence TXT report with metadata, RX counters, summary CSV, and received-message CSV.
+- Android TX/RX chat-style message history with timestamps and manual clear action.
+- Android RX evidence TXT report with metadata, RX counters, summary CSV, and TX/RX message CSV.
 - Android tone-frequency list shown in the UI and included in TXT evidence reports through the JNI/C ABI path.
 - Android Operation/Diagnostics panel split to keep normal field use less cluttered while preserving native status details.
 - Android RX evidence sharing through the Android system share sheet using scoped `FileProvider` access.
 - Android package version aligned with the shared HFText 0.4.0 application version.
 - Android local preference persistence for callsign, draft message, speed profile, and audio input mode.
-- Android Diagnostics action to reset local operator settings without clearing received history or evidence.
-- Android local persistence for recent received-message history.
+- Android Diagnostics action to reset local operator settings without clearing message history or evidence.
+- Android local persistence for recent TX/RX message history.
 - Android screen kept awake while TX or RX is active.
 - Generic `nocall` default callsign in PC and Android instead of a personal callsign.
 - Shared C ABI RX-event summary helper reused by Android JNI for status, quality,
   and session counter updates.
-- Android received-message panel expanded to a scrollable 100-message recent
-  history for unattended RX sessions.
+- Android message panel expanded to a scrollable 100-message recent history for
+  unattended RX sessions and explicit TX entries.
 - Android debug install helper script for connected emulators/devices.
 - Android RX evidence records the active RX profile and core-reported latency
   for accepted messages when available.
@@ -147,7 +147,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Keep `docs/10_user_guide.md` aligned with the current interface.
 - Keep the Operation tab visually simple.
 - Keep advanced modem parameters in `hftext.ini` unless field operation proves a setting belongs in the UI.
-- Keep Android and PC received-message histories readable during unattended RX sessions.
+- Keep Android TX/RX message history and PC received-message history readable during unattended RX sessions.
 - Consider a clearer receive/tuning aid if waterfall markers are not enough.
 - Keep debug tools in Settings, not in the normal operation path.
 

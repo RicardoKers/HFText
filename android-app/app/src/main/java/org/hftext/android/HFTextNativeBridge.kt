@@ -1,5 +1,7 @@
 package org.hftext.android
 
+import org.json.JSONArray
+
 data class HFTextNativeSnapshot(
     val nativeAvailable: Boolean,
     val bridgeStatus: String,
@@ -281,12 +283,7 @@ object HFTextNativeBridge {
     }
 
     private fun parseReceiverUpdate(fields: Array<String>): HFTextReceiverUpdate {
-        val messageText = fields.field(2, "")
-        val messages = messageText
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .toList()
+        val messages = parseStringArray(fields.field(2, "[]"))
         return HFTextReceiverUpdate(
             ok = fields.field(0, "error") == "ok",
             error = fields.field(1, ""),
@@ -298,15 +295,53 @@ object HFTextNativeBridge {
             rejected = fields.field(7, "0").toLongOrNull() ?: 0L,
             sync = fields.field(8, "0").toLongOrNull() ?: 0L,
             eventCount = fields.field(9, "0").toLongOrNull() ?: 0L,
-            acceptedLatencies = parseDoubleLines(fields.field(10, ""))
+            acceptedLatencies = parseDoubleArray(fields.field(10, "[]"))
         )
     }
 
-    private fun parseDoubleLines(value: String): List<Double> {
-        return value
-            .lineSequence()
-            .mapNotNull { it.trim().toDoubleOrNull() }
-            .toList()
+    private fun parseStringArray(value: String): List<String> {
+        if (value.isBlank()) {
+            return emptyList()
+        }
+        return try {
+            val array = JSONArray(value)
+            val messages = mutableListOf<String>()
+            for (index in 0 until array.length()) {
+                val message = array.optString(index, "")
+                if (message.isNotEmpty()) {
+                    messages.add(message)
+                }
+            }
+            messages
+        } catch (_: Throwable) {
+            value
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toList()
+        }
+    }
+
+    private fun parseDoubleArray(value: String): List<Double> {
+        if (value.isBlank()) {
+            return emptyList()
+        }
+        return try {
+            val array = JSONArray(value)
+            val values = mutableListOf<Double>()
+            for (index in 0 until array.length()) {
+                val number = array.optDouble(index, Double.NaN)
+                if (!number.isNaN()) {
+                    values.add(number)
+                }
+            }
+            values
+        } catch (_: Throwable) {
+            value
+                .lineSequence()
+                .mapNotNull { it.trim().toDoubleOrNull() }
+                .toList()
+        }
     }
 
     private fun unavailableReceiverUpdate(error: String): HFTextReceiverUpdate {

@@ -82,12 +82,12 @@ Application behavior:
 - Android TXT evidence records elapsed time from the latest accepted message to evidence save; this helps decide whether a long Slow packet may have already rolled out of the evidence buffer.
 - Android `Share RX evidence` exposes the latest saved TXT, raw WAV, and modem-input WAV through the system share sheet.
 - Android reopens with the last callsign, draft message, speed profile, and audio input mode restored from app-private preferences.
-- Android `Reset local settings` restores default callsign `nocall`, draft message, speed profile, and audio input mode without clearing received history.
-- Android reopens with the recent received-message history restored from app-private preferences; `Clear` should remove it.
+- Android `Reset local settings` restores default callsign `nocall`, draft message, speed profile, and audio input mode without clearing message history.
+- Android reopens with the recent TX/RX message history restored from app-private preferences; `Clear` should remove it.
 - Android keeps the screen awake while TX or RX is active and returns to normal timeout after activity stops.
 - Android RX evidence reports captured duration and should be saved only after it covers the selected TX duration plus margin.
 - Android `RX buffer` duration should advance in real time; slower growth indicates capture is blocked or audio data is being lost.
-- Android accepted messages remain visible in a timestamped received-message history and are included in the TXT evidence report.
+- Android accepted RX messages and explicit TX messages remain visible in a timestamped chat-style history and are included in the TXT evidence report with direction.
 
 ## Field Validation
 
