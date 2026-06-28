@@ -108,6 +108,9 @@ Useful field test matrix:
 
 For each test, save RX evidence from the app. Evidence should include the recent WAV, settings, logs, `Summary CSV`, and `Accepted Frames CSV`.
 
+For external testers, use `docs/14_field_test_guide.md`. It keeps the requested
+test procedure and feedback fields consistent across different operators.
+
 ## Android RX Evidence
 
 On 2026-06-18, two Android RX captures from a Xiaomi POCO F1 decoded successfully

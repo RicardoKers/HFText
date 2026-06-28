@@ -9,6 +9,9 @@ Releases page. Release assets should include the Windows ZIP package and, when
 Android testing is needed, the Android APK. Generated executables, ZIP files,
 and APK files should not be committed into the source repository.
 
+External testers should also read `docs/14_field_test_guide.md`. It contains a
+short test procedure, evidence instructions, and a feedback template.
+
 The package includes:
 
 - `hftext_pc.exe`;

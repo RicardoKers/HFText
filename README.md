@@ -105,6 +105,9 @@ For the native C API used by JNI integration, see
 
 For operator workflow, see `docs/10_user_guide.md`.
 
+For external field-test instructions and the feedback template, see
+`docs/14_field_test_guide.md`.
+
 ## Core Principle
 
 The modem core must not depend on Qt, Android, platform audio APIs, or UI code. User interfaces provide text, settings, audio input/output, logs, and visual feedback; modem behavior belongs in the core and its tests.
