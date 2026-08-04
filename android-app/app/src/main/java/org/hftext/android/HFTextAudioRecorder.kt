@@ -15,6 +15,7 @@ import java.io.OutputStream
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -41,6 +42,10 @@ class HFTextAudioRecorder(
 
     private val decoderEnabled = AtomicBoolean(true)
     private val decoderResetRequested = AtomicBoolean(false)
+    private val requestedProfile = AtomicReference(HFTextSpeedProfile.Fast)
+
+    @Volatile
+    private var activeReceiverController: HFTextReceiverProfileController? = null
 
     private var rawEvidence = FloatRingBuffer(1)
     private var modemEvidence = FloatRingBuffer(1)
@@ -55,7 +60,7 @@ class HFTextAudioRecorder(
         onStarted: (String) -> Unit,
         onStats: (HFTextAudioStats, HFTextAudioStats, Float, Double) -> Unit,
         onWaterfallSamples: (FloatArray, Int) -> Unit,
-        onReceiverUpdate: (HFTextReceiverUpdate) -> Unit,
+        onReceiverUpdate: (HFTextSpeedProfile, HFTextReceiverUpdate) -> Unit,
         onError: (String) -> Unit
     ) {
         stop()
@@ -68,6 +73,7 @@ class HFTextAudioRecorder(
         cancelled = false
         decoderEnabled.set(true)
         decoderResetRequested.set(false)
+        requestedProfile.set(profile)
         resetEvidence(sampleRate)
         val receiverQueue = ArrayBlockingQueue<FloatArray>(1024)
         val errorReported = AtomicBoolean(false)
@@ -83,14 +89,17 @@ class HFTextAudioRecorder(
         }
 
         Thread {
-            var receiver: HFTextReceiverSession? = null
+            var receiverController: HFTextReceiverProfileController? = null
             var lastReceiverStatusMs = 0L
             try {
-                receiver = createReceiver(profile)
+                receiverController = HFTextReceiverProfileController(profile, createReceiver)
+                activeReceiverController = receiverController
                 while (!cancelled) {
                     if (decoderResetRequested.compareAndSet(true, false)) {
-                        receiver?.close()
-                        receiver = createReceiver(profile)
+                        receiverController.requestReset()
+                    }
+                    receiverController.requestProfile(requestedProfile.get())
+                    if (receiverController.applyPendingChanges()) {
                         receiverQueue.clear()
                     }
                     if (!decoderEnabled.get()) {
@@ -100,14 +109,15 @@ class HFTextAudioRecorder(
                     }
                     val receiverSamples = receiverQueue.poll(100L, TimeUnit.MILLISECONDS) ?: continue
                     val nowMs = System.currentTimeMillis()
-                    val receiverUpdate = requireNotNull(receiver).pushSamples(receiverSamples)
+                    val profiledUpdate = receiverController.pushSamples(receiverSamples)
+                    val receiverUpdate = profiledUpdate.update
                     val shouldPostReceiverUpdate = receiverUpdate.hasActivity ||
                         (receiverUpdate.eventCount > 0L && nowMs - lastReceiverStatusMs >= 1000L)
                     if (!cancelled && decoderEnabled.get() && shouldPostReceiverUpdate) {
                         lastReceiverStatusMs = nowMs
                         mainHandler.post {
                             if (!cancelled && decoderEnabled.get()) {
-                                onReceiverUpdate(receiverUpdate)
+                                onReceiverUpdate(profiledUpdate.profile, receiverUpdate)
                             }
                         }
                     }
@@ -115,8 +125,11 @@ class HFTextAudioRecorder(
             } catch (error: Throwable) {
                 reportError(error)
             } finally {
+                if (activeReceiverController === receiverController) {
+                    activeReceiverController = null
+                }
                 try {
-                    receiver?.close()
+                    receiverController?.close()
                 } catch (_: Throwable) {
                 }
             }
@@ -271,6 +284,11 @@ class HFTextAudioRecorder(
     fun resumeDecoding() {
         decoderResetRequested.set(true)
         decoderEnabled.set(true)
+    }
+
+    fun selectProfile(profile: HFTextSpeedProfile) {
+        requestedProfile.set(profile)
+        activeReceiverController?.requestProfile(profile)
     }
 
     private fun releaseRecorder(recorder: AudioRecord?) {

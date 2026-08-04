@@ -98,6 +98,7 @@ Application behavior:
 - Android accepted RX messages and explicit TX messages remain visible in a timestamped chat-style history and are included in the TXT evidence report with direction.
 - Android Operation waterfall covers the normal audio passband and shows selected tone markers so tuning can be compared with the PC app.
 - Android persists `Pause RX during TX`, includes it in evidence, and resets the native receiver around TX while keeping `AudioRecord` capture active.
+- Switching Fast/Slow while Android RX capture is active must recreate the native receiver before more queued audio is decoded; accepted-message history and evidence must record the profile used by that receiver.
 
 ## Field Validation
 

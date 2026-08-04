@@ -21,6 +21,8 @@ Current status:
   RX evidence, and Reset local settings;
 - callsign, draft message, Fast/Slow profile, and RX-during-TX pause state are
   persisted locally between app launches;
+- changing Fast/Slow during active capture switches the native RX profile without
+  stopping microphone, waterfall, or evidence capture;
 - local operator settings can be reset from Settings without clearing message
   history or evidence files; reset uses `nocall` as a generic callsign placeholder;
 - up to 100 recent TX/RX messages are shown in a scrollable timestamped panel

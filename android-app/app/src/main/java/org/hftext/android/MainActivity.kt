@@ -166,6 +166,9 @@ private fun HFTextScreen(
     var txStatus by remember { mutableStateOf("ready") }
     var txProgress by remember { mutableStateOf(0.0) }
     var rxStatus by remember { mutableStateOf("stopped") }
+    var activeRxProfile by remember { mutableStateOf<HFTextSpeedProfile?>(null) }
+    var rxCaptureSampleRate by remember { mutableStateOf(0) }
+    var rxAudioSourceLabel by remember { mutableStateOf("") }
     var rxStats by remember { mutableStateOf(emptyAudioStats()) }
     var rxReceiverStats by remember { mutableStateOf(emptyAudioStats()) }
     var rxReceiverGain by remember { mutableStateOf(1.0f) }
@@ -360,6 +363,9 @@ private fun HFTextScreen(
         if (isReceiving) {
             audioRecorder.stop()
             isReceiving = false
+            activeRxProfile = null
+            rxCaptureSampleRate = 0
+            rxAudioSourceLabel = ""
             rxPausedForTransmit = false
             rxStatusBeforeTransmit = null
             rxStatus = "stopped"
@@ -396,12 +402,15 @@ private fun HFTextScreen(
         rxEvents = 0L
         rxBufferSeconds = 0.0
         waterfallRows = emptyList()
+        activeRxProfile = rxProfile
+        rxCaptureSampleRate = sampleRate
         audioRecorder.start(
             profile = rxProfile,
             inputMode = rxInputMode,
             sampleRate = sampleRate,
             onStarted = { sourceLabel ->
                 isReceiving = true
+                rxAudioSourceLabel = sourceLabel
                 rxStatus = "capturing ${rxProfile.label} audio at $sampleRate Hz ($sourceLabel)"
                 rxDecodeStatus = "listening"
             },
@@ -420,7 +429,7 @@ private fun HFTextScreen(
                 val row = waterfallSpectrumRow(samples, sampleRate)
                 waterfallRows = (waterfallRows + row).takeLast(72)
             },
-            onReceiverUpdate = { update ->
+            onReceiverUpdate = { decodedProfile, update ->
                 if (!update.ok) {
                     rxDecodeStatus = update.error.ifBlank { "decoder update failed" }
                 } else {
@@ -449,7 +458,7 @@ private fun HFTextScreen(
                                 dateTimeText = currentDateTimeText(now),
                                 text = text,
                                 direction = MessageDirection.Incoming,
-                                profileLabel = rxProfile.label,
+                                profileLabel = decodedProfile.label,
                                 coreLatencySeconds = update.acceptedLatencies.getOrNull(index)
                                     ?.takeIf { it >= 0.0 },
                                 acceptedAtMillis = now.time
@@ -461,6 +470,9 @@ private fun HFTextScreen(
             },
             onError = { error ->
                 isReceiving = false
+                activeRxProfile = null
+                rxCaptureSampleRate = 0
+                rxAudioSourceLabel = ""
                 rxPausedForTransmit = false
                 rxStatusBeforeTransmit = null
                 rxStatus = "RX failed: $error"
@@ -546,6 +558,34 @@ private fun HFTextScreen(
         pauseRxDuringTx = false
         txStatus = "ready"
         rxStatus = "local settings reset"
+    }
+
+    LaunchedEffect(selectedProfile, isReceiving) {
+        val previousProfile = activeRxProfile
+        if (!isReceiving || previousProfile == null || previousProfile == selectedProfile) {
+            return@LaunchedEffect
+        }
+
+        val selectedSampleRate = receiveSampleRate(selectedProfile)
+        if (selectedSampleRate <= 0 || selectedSampleRate != rxCaptureSampleRate) {
+            audioRecorder.stop()
+            isReceiving = false
+            activeRxProfile = null
+            rxStatus = "RX stopped: selected profile requires a different sample rate"
+            return@LaunchedEffect
+        }
+
+        audioRecorder.selectProfile(selectedProfile)
+        activeRxProfile = selectedProfile
+        rxAccepted = 0L
+        rxRejected = 0L
+        rxSync = 0L
+        rxEvents = 0L
+        rxDecodeStatus = "listening"
+        val sourceSuffix = rxAudioSourceLabel.takeIf { it.isNotBlank() }
+            ?.let { " ($it)" }
+            ?: ""
+        rxStatus = "capturing ${selectedProfile.label} audio at $selectedSampleRate Hz$sourceSuffix"
     }
 
     MaterialTheme {
