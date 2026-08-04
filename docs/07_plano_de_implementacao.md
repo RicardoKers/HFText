@@ -33,6 +33,7 @@
 - C ABI compile, link, export, and runtime dynamic-loading regression tests.
 - Android JNI bridge for metadata, text preparation, TX estimates, generated TX audio, audio statistics, and streaming RX blocks.
 - Android explicit AudioTrack TX and initial AudioRecord streaming RX through the native receiver.
+- Optional persistent RX decoder pause during TX on PC and Android for acoustic echo prevention.
 
 ## Current Focus
 

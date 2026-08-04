@@ -1,25 +1,24 @@
 package org.hftext.android
 
 import android.Manifest
-import android.content.ClipData
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.FileProvider
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,6 +37,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -104,7 +104,7 @@ private const val PREFS_NAME = "hftext_android"
 private const val PREF_CALLSIGN = "callsign"
 private const val PREF_MESSAGE = "message"
 private const val PREF_SPEED_PROFILE = "speed_profile"
-private const val PREF_AUDIO_INPUT_MODE = "audio_input_mode"
+private const val PREF_PAUSE_RX_DURING_TX = "pause_rx_during_tx"
 private const val PREF_RECEIVED_MESSAGES = "received_messages"
 private const val DEFAULT_CALLSIGN = "nocall"
 private const val DEFAULT_MESSAGE = "Hello HFText!"
@@ -157,9 +157,12 @@ private fun HFTextScreen(
     var isTransmitting by remember { mutableStateOf(false) }
     var isReceiving by remember { mutableStateOf(false) }
     var selectedPanel by remember { mutableStateOf(AndroidPanel.Operation) }
-    var rxInputMode by remember {
-        mutableStateOf(readAudioInputMode(preferences.getString(PREF_AUDIO_INPUT_MODE, null)))
+    val rxInputMode = DEFAULT_AUDIO_INPUT_MODE
+    var pauseRxDuringTx by remember {
+        mutableStateOf(preferences.getBoolean(PREF_PAUSE_RX_DURING_TX, false))
     }
+    var rxPausedForTransmit by remember { mutableStateOf(false) }
+    var rxStatusBeforeTransmit by remember { mutableStateOf<String?>(null) }
     var txStatus by remember { mutableStateOf("ready") }
     var txProgress by remember { mutableStateOf(0.0) }
     var rxStatus by remember { mutableStateOf("stopped") }
@@ -168,9 +171,7 @@ private fun HFTextScreen(
     var rxReceiverGain by remember { mutableStateOf(1.0f) }
     var rxBufferSeconds by remember { mutableStateOf(0.0) }
     var rxDecodeStatus by remember { mutableStateOf("decoder idle") }
-    var rxEvidenceStatus by remember { mutableStateOf("not saved") }
     var isSavingRxEvidence by remember { mutableStateOf(false) }
-    var lastRxEvidenceFiles by remember { mutableStateOf(emptyList<File>()) }
     var rxAccepted by remember { mutableStateOf(0L) }
     var rxRejected by remember { mutableStateOf(0L) }
     var rxSync by remember { mutableStateOf(0L) }
@@ -224,12 +225,12 @@ private fun HFTextScreen(
         }
     }
 
-    LaunchedEffect(callsign, message, selectedProfile, rxInputMode) {
+    LaunchedEffect(callsign, message, selectedProfile, pauseRxDuringTx) {
         preferences.edit()
             .putString(PREF_CALLSIGN, callsign)
             .putString(PREF_MESSAGE, message)
             .putString(PREF_SPEED_PROFILE, selectedProfile.name)
-            .putString(PREF_AUDIO_INPUT_MODE, rxInputMode.name)
+            .putBoolean(PREF_PAUSE_RX_DURING_TX, pauseRxDuringTx)
             .apply()
     }
 
@@ -243,12 +244,39 @@ private fun HFTextScreen(
         receivedMessages = (receivedMessages + historyMessage).takeLast(MAX_RECEIVED_MESSAGES)
     }
 
+    fun pauseRxForTransmitIfNeeded() {
+        if (!pauseRxDuringTx || !isReceiving || rxPausedForTransmit) {
+            return
+        }
+        rxStatusBeforeTransmit = rxStatus
+        audioRecorder.pauseDecoding()
+        rxPausedForTransmit = true
+        rxStatus = "RX decoder paused during TX"
+        rxDecodeStatus = "paused during TX"
+    }
+
+    fun resumeRxAfterTransmitIfNeeded() {
+        if (!rxPausedForTransmit) {
+            return
+        }
+        rxPausedForTransmit = false
+        if (!isReceiving) {
+            rxStatusBeforeTransmit = null
+            return
+        }
+        audioRecorder.resumeDecoding()
+        rxStatus = rxStatusBeforeTransmit ?: "RX capture active"
+        rxStatusBeforeTransmit = null
+        rxDecodeStatus = "listening"
+    }
+
     fun startOrStopTx() {
         if (isTransmitting) {
             audioPlayer.stop()
             isTransmitting = false
             txProgress = 0.0
             txStatus = "TX cancelled"
+            resumeRxAfterTransmitIfNeeded()
             return
         }
 
@@ -283,8 +311,11 @@ private fun HFTextScreen(
                     isTransmitting = false
                     txProgress = 0.0
                     txStatus = "TX failed: ${generatedAudio.error}"
+                    resumeRxAfterTransmitIfNeeded()
                     return@post
                 }
+
+                pauseRxForTransmitIfNeeded()
 
                 val now = Date()
                 appendHistoryMessage(
@@ -308,11 +339,13 @@ private fun HFTextScreen(
                         isTransmitting = false
                         txProgress = 1.0
                         txStatus = "TX complete"
+                        resumeRxAfterTransmitIfNeeded()
                     },
                     onError = { error ->
                         isTransmitting = false
                         txProgress = 0.0
                         txStatus = "TX failed: $error"
+                        resumeRxAfterTransmitIfNeeded()
                     }
                 )
             }
@@ -327,12 +360,19 @@ private fun HFTextScreen(
         if (isReceiving) {
             audioRecorder.stop()
             isReceiving = false
+            rxPausedForTransmit = false
+            rxStatusBeforeTransmit = null
             rxStatus = "stopped"
             rxStats = emptyAudioStats()
             rxReceiverStats = emptyAudioStats()
             rxReceiverGain = 1.0f
             rxBufferSeconds = 0.0
             rxDecodeStatus = "decoder idle"
+            return
+        }
+
+        if (isTransmitting && pauseRxDuringTx) {
+            rxStatus = "RX start deferred until TX finishes"
             return
         }
 
@@ -421,6 +461,8 @@ private fun HFTextScreen(
             },
             onError = { error ->
                 isReceiving = false
+                rxPausedForTransmit = false
+                rxStatusBeforeTransmit = null
                 rxStatus = "RX failed: $error"
             }
         )
@@ -431,8 +473,6 @@ private fun HFTextScreen(
             return
         }
         isSavingRxEvidence = true
-        lastRxEvidenceFiles = emptyList()
-        rxEvidenceStatus = "saving RX evidence..."
         val expectedTxSeconds = estimateSeconds(analysis, selectedProfile)
         Thread {
             try {
@@ -445,6 +485,7 @@ private fun HFTextScreen(
                         callsign = callsign,
                         selectedProfile = selectedProfile,
                         inputMode = rxInputMode,
+                        pauseRxDuringTx = pauseRxDuringTx,
                         analysis = analysis,
                         rxStatus = rxStatus,
                         rxDecodeStatus = rxDecodeStatus,
@@ -464,56 +505,32 @@ private fun HFTextScreen(
                 )
                 mainHandler.post {
                     isSavingRxEvidence = false
-                    lastRxEvidenceFiles = evidenceFiles(reportFile, savedAudio)
                     val duration = savedAudio.durationSeconds
                     val durationText = if (expectedTxSeconds > 0.0 && duration + 0.5 < expectedTxSeconds) {
                         "saved ${formatSeconds(duration)}; shorter than local TX estimate ${formatSeconds(expectedTxSeconds)}"
                     } else {
                         "saved ${formatSeconds(duration)}"
                     }
-                    rxEvidenceStatus = "$durationText | report ${reportFile.name}"
+                    Toast.makeText(
+                        context,
+                        "RX evidence $durationText",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             } catch (error: Throwable) {
                 mainHandler.post {
                     isSavingRxEvidence = false
-                    rxEvidenceStatus = "save failed: ${error.message ?: error::class.java.simpleName}"
+                    Toast.makeText(
+                        context,
+                        "RX evidence save failed: ${error.message ?: error::class.java.simpleName}",
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         }.apply {
             name = "HFTextSaveRxAudio"
             isDaemon = true
             start()
-        }
-    }
-
-    fun shareRxEvidence() {
-        val files = lastRxEvidenceFiles.filter { it.isFile }
-        if (files.isEmpty()) {
-            rxEvidenceStatus = "save RX evidence first"
-            return
-        }
-
-        try {
-            val uris = files.map { file ->
-                FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-            }
-            val clipData = ClipData.newUri(context.contentResolver, "RX evidence", uris.first())
-            uris.drop(1).forEach { uri ->
-                clipData.addItem(ClipData.Item(uri))
-            }
-            val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                type = "*/*"
-                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                this.clipData = clipData
-            }
-            context.startActivity(Intent.createChooser(shareIntent, "Share RX evidence"))
-        } catch (error: Throwable) {
-            rxEvidenceStatus = "share failed: ${error.message ?: error::class.java.simpleName}"
         }
     }
 
@@ -526,7 +543,7 @@ private fun HFTextScreen(
         callsign = DEFAULT_CALLSIGN
         message = DEFAULT_MESSAGE
         selectedProfile = DEFAULT_SPEED_PROFILE
-        rxInputMode = DEFAULT_AUDIO_INPUT_MODE
+        pauseRxDuringTx = false
         txStatus = "ready"
         rxStatus = "local settings reset"
     }
@@ -540,22 +557,15 @@ private fun HFTextScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column {
-                    Text(
-                        text = "HFText",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Android JNI shell",
-                        color = Color(0xFF9FB3C8),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
+                Text(
+                    text = "HFText",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -588,26 +598,8 @@ private fun HFTextScreen(
 
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            ProfileButton(
-                                label = "Fast",
-                                selected = selectedProfile == HFTextSpeedProfile.Fast,
-                                onClick = { selectedProfile = HFTextSpeedProfile.Fast },
-                                modifier = Modifier.weight(1f)
-                            )
-                            ProfileButton(
-                                label = "Slow",
-                                selected = selectedProfile == HFTextSpeedProfile.Slow,
-                                onClick = { selectedProfile = HFTextSpeedProfile.Slow },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -646,6 +638,24 @@ private fun HFTextScreen(
                             !analysis.payloadTooLong &&
                             !estimateTooLong(analysis, selectedProfile)
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ProfileButton(
+                            label = "Fast",
+                            selected = selectedProfile == HFTextSpeedProfile.Fast,
+                            onClick = { selectedProfile = HFTextSpeedProfile.Fast },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ProfileButton(
+                            label = "Slow",
+                            selected = selectedProfile == HFTextSpeedProfile.Slow,
+                            onClick = { selectedProfile = HFTextSpeedProfile.Slow },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 } else {
                     HFTextField(
                         label = "Callsign",
@@ -655,34 +665,28 @@ private fun HFTextScreen(
                     )
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF202832), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        AudioInputButton(
-                            label = "Voice",
-                            selected = rxInputMode == HFTextAudioInputMode.VoiceRecognition,
-                            enabled = !isReceiving,
-                            onClick = { rxInputMode = HFTextAudioInputMode.VoiceRecognition },
+                        Text(
+                            text = "Pause RX during TX",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f)
                         )
-                        AudioInputButton(
-                            label = "Raw",
-                            selected = rxInputMode == HFTextAudioInputMode.Unprocessed,
-                            enabled = !isReceiving,
-                            onClick = { rxInputMode = HFTextAudioInputMode.Unprocessed },
-                            modifier = Modifier.weight(1f)
-                        )
-                        AudioInputButton(
-                            label = "Mic",
-                            selected = rxInputMode == HFTextAudioInputMode.Microphone,
-                            enabled = !isReceiving,
-                            onClick = { rxInputMode = HFTextAudioInputMode.Microphone },
-                            modifier = Modifier.weight(1f)
+                        Switch(
+                            checked = pauseRxDuringTx,
+                            onCheckedChange = { pauseRxDuringTx = it },
+                            enabled = !isTransmitting
                         )
                     }
 
                     OutlinedButton(
                         onClick = ::startOrStopRx,
+                        enabled = isReceiving || !isTransmitting || !pauseRxDuringTx,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color(0xFFE6EDF3)
@@ -698,44 +702,7 @@ private fun HFTextScreen(
                             contentColor = Color(0xFFE6EDF3)
                         )
                     ) {
-                        Text("Save RX evidence")
-                    }
-                    OutlinedButton(
-                        onClick = ::shareRxEvidence,
-                        enabled = lastRxEvidenceFiles.isNotEmpty() && !isSavingRxEvidence,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFFE6EDF3)
-                        )
-                    ) {
-                        Text("Share RX evidence")
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        StatusRow(label = "Bridge", value = nativeSnapshot.bridgeStatus)
-                        StatusRow(label = "Core", value = nativeSnapshot.core)
-                        StatusRow(label = "Protocol", value = nativeSnapshot.protocol)
-                        StatusRow(label = "Slow", value = nativeSnapshot.slowProfile)
-                        StatusRow(label = "Fast", value = nativeSnapshot.fastProfile)
-                        StatusRow(label = "Tones", value = toneFrequenciesText(selectedToneFrequencies))
-                        StatusRow(label = "RX level", value = rxLevelText(rxStats, rxReceiverStats, rxReceiverGain))
-                        StatusRow(label = "RX buffer", value = rxBufferText(rxBufferSeconds, analysis, selectedProfile))
-                        StatusRow(label = "Decoder", value = rxDecodeStatus)
-                        StatusRow(label = "RX session", value = "accepted $rxAccepted | rejected $rxRejected | sync $rxSync | events $rxEvents")
-                        StatusRow(label = "Last accepted", value = lastAcceptedMessage?.let { receivedMessageReportText(it) } ?: "--")
-                        StatusRow(label = "RX evidence", value = rxEvidenceStatus)
-                        StatusRow(label = "Screen", value = if (isReceiving || isTransmitting) "kept awake while active" else "normal timeout")
-                        StatusRow(label = "Sanitized", value = displayText(analysis.sanitizedMessage))
-                        StatusRow(label = "Payload", value = displayText(analysis.payload))
-                        StatusRow(
-                            label = "Symbols",
-                            value = "${analysis.payloadSymbols}/${analysis.maxPayloadSymbols} payload | ${analysis.messageSymbols} message"
-                        )
-                        StatusRow(label = "Slow TX", value = estimateText(analysis, slow = true))
-                        StatusRow(label = "Fast TX", value = estimateText(analysis, slow = false))
+                        Text(if (isSavingRxEvidence) "Saving RX evidence..." else "Save RX evidence")
                     }
 
                     OutlinedButton(
@@ -747,24 +714,6 @@ private fun HFTextScreen(
                         )
                     ) {
                         Text("Reset local settings")
-                    }
-
-                    Column {
-                        Text(
-                            text = if (nativeSnapshot.nativeAvailable) {
-                                "Kotlin is reading metadata, text preparation, and estimates through JNI and the C ABI."
-                            } else {
-                                "Native bridge is not available in this runtime."
-                            },
-                            color = Color(0xFFE6EDF3),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Audio TX is generated by the core. Android RX feeds captured audio to the native streaming receiver.",
-                            color = Color(0xFF9FB3C8),
-                            style = MaterialTheme.typography.bodySmall
-                        )
                     }
                 }
             }
@@ -809,57 +758,25 @@ private fun ProfileButton(
     if (selected) {
         Button(
             onClick = onClick,
-            modifier = modifier,
+            modifier = modifier.height(36.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF3C6F9F),
                 contentColor = Color.White
             )
         ) {
-            Text(label)
+            Text(label, style = MaterialTheme.typography.labelLarge)
         }
     } else {
         OutlinedButton(
             onClick = onClick,
-            modifier = modifier,
+            modifier = modifier.height(36.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = Color(0xFFE6EDF3)
             )
         ) {
-            Text(label)
-        }
-    }
-}
-
-@Composable
-private fun AudioInputButton(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (selected) {
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = modifier,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF2F5B7E),
-                contentColor = Color.White
-            )
-        ) {
-            Text(label)
-        }
-    } else {
-        OutlinedButton(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = modifier,
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = Color(0xFFE6EDF3)
-            )
-        ) {
-            Text(label)
+            Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -899,11 +816,13 @@ private fun ReceivedMessagesPanel(
             OutlinedButton(
                 onClick = onClear,
                 enabled = messages.isNotEmpty(),
+                modifier = Modifier.height(32.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color(0xFFE6EDF3)
                 )
             ) {
-                Text("Clear")
+                Text("Clear", style = MaterialTheme.typography.labelMedium)
             }
         }
 
@@ -1081,25 +1000,29 @@ private fun MessageComposer(
             )
         )
         Column(
-            modifier = Modifier.width(88.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.width(80.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             OutlinedButton(
                 onClick = onClear,
                 enabled = message.isNotEmpty() && !isTransmitting,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Color(0xFFE6EDF3)
                 )
             ) {
-                Text("Clear")
+                Text("Clear", style = MaterialTheme.typography.labelMedium)
             }
             Button(
                 onClick = onTransmit,
                 enabled = isTransmitting || transmitEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .height(46.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF3C6F9F),
                     contentColor = Color.White
@@ -1111,41 +1034,12 @@ private fun MessageComposer(
     }
 }
 
-@Composable
-private fun StatusRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF202832), RoundedCornerShape(8.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = label,
-            color = Color(0xFF9FB3C8),
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.width(100.dp)
-        )
-        Text(
-            text = value,
-            color = Color.White,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
 private fun displayText(value: String): String {
     return value.ifBlank { "--" }
 }
 
 private fun readSpeedProfile(value: String?): HFTextSpeedProfile {
     return HFTextSpeedProfile.values().firstOrNull { it.name == value } ?: HFTextSpeedProfile.Fast
-}
-
-private fun readAudioInputMode(value: String?): HFTextAudioInputMode {
-    return HFTextAudioInputMode.values().firstOrNull { it.name == value }
-        ?: HFTextAudioInputMode.VoiceRecognition
 }
 
 private fun readMessageDirection(value: String?): MessageDirection {
@@ -1230,16 +1124,6 @@ private fun receivedMessagesToJson(messages: List<ReceivedMessage>): String {
         )
     }
     return array.toString()
-}
-
-private fun textStatus(analysis: HFTextTextAnalysis): String {
-    return when {
-        !analysis.nativeAvailable -> analysis.error
-        analysis.status != "ok" -> analysis.error.ifBlank { "native analysis failed" }
-        analysis.messageEmpty -> "message empty"
-        analysis.payloadTooLong -> "payload too long"
-        else -> "ready"
-    }
 }
 
 private fun estimateTooLong(analysis: HFTextTextAnalysis, profile: HFTextSpeedProfile): Boolean {
@@ -1351,19 +1235,6 @@ private fun frequencyLabel(frequency: Int): String {
     }
 }
 
-private fun rxBufferText(
-    seconds: Double,
-    analysis: HFTextTextAnalysis,
-    profile: HFTextSpeedProfile
-): String {
-    val expected = estimateSeconds(analysis, profile)
-    return if (expected > 0.0) {
-        "${formatSeconds(seconds)} captured | local TX estimate ${formatSeconds(expected)}"
-    } else {
-        "${formatSeconds(seconds)} captured"
-    }
-}
-
 private fun emptyAudioStats(): HFTextAudioStats {
     return HFTextAudioStats(
         ok = true,
@@ -1374,31 +1245,6 @@ private fun emptyAudioStats(): HFTextAudioStats {
         clippingPercent = 0.0,
         durationSeconds = 0.0
     )
-}
-
-private fun rxLevelText(
-    rawStats: HFTextAudioStats,
-    receiverStats: HFTextAudioStats,
-    receiverGain: Float
-): String {
-    if (!rawStats.ok) {
-        return rawStats.error.ifBlank { "unavailable" }
-    }
-    if (!receiverStats.ok) {
-        return receiverStats.error.ifBlank { "unavailable" }
-    }
-    if (rawStats.sampleCount <= 0) {
-        return "--"
-    }
-
-    val levelHint = when {
-        rawStats.peak > 0.90f -> " high"
-        rawStats.peak >= 0.001f && rawStats.peak < 0.08f -> " low"
-        else -> ""
-    }
-    return "raw ${formatPercent(rawStats.peak.toDouble())}$levelHint | modem ${
-        formatPercent(receiverStats.peak.toDouble())
-    } | gain x${formatGain(receiverGain)} | clip ${formatPercent(rawStats.clippingPercent / 100.0)}"
 }
 
 private fun receiverStatusText(update: HFTextReceiverUpdate): String {
@@ -1424,19 +1270,12 @@ private fun evidenceReportFile(savedAudio: HFTextSavedRxAudio): File {
     return File(directory, "$baseName.txt")
 }
 
-private fun evidenceFiles(reportFile: File, savedAudio: HFTextSavedRxAudio): List<File> {
-    return listOf(
-        reportFile,
-        File(savedAudio.rawPath),
-        File(savedAudio.modemPath)
-    ).filter { it.isFile }
-}
-
 private fun buildRxEvidenceReport(
     nativeSnapshot: HFTextNativeSnapshot,
     callsign: String,
     selectedProfile: HFTextSpeedProfile,
     inputMode: HFTextAudioInputMode,
+    pauseRxDuringTx: Boolean,
     analysis: HFTextTextAnalysis,
     rxStatus: String,
     rxDecodeStatus: String,
@@ -1469,6 +1308,7 @@ private fun buildRxEvidenceReport(
         appendLine("Protocol: ${nativeSnapshot.protocol}")
         appendLine("Profile: ${selectedProfile.label}")
         appendLine("Input mode: ${inputMode.label}")
+        appendLine("Pause RX during TX: ${if (pauseRxDuringTx) "yes" else "no"}")
         appendLine("Tones: ${toneFrequenciesText(toneFrequencies)}")
         appendLine("Callsign: $callsign")
         appendLine("RX status: $rxStatus")
@@ -1508,6 +1348,7 @@ private fun buildRxEvidenceReport(
                 "protocol",
                 "profile",
                 "input_mode",
+                "pause_rx_during_tx",
                 "callsign",
                 "tones_hz",
                 "rx_buffer_s",
@@ -1540,6 +1381,7 @@ private fun buildRxEvidenceReport(
                 nativeSnapshot.protocol,
                 selectedProfile.label,
                 inputMode.label,
+                if (pauseRxDuringTx) "1" else "0",
                 callsign,
                 toneFrequenciesCsvText(toneFrequencies),
                 formatCsvNumber(rxBufferSeconds),
@@ -1695,7 +1537,7 @@ private fun previewSnapshot(): HFTextNativeSnapshot {
     return HFTextNativeSnapshot(
         nativeAvailable = true,
         bridgeStatus = "JNI OK via C ABI",
-        core = "HFText 0.4.0 (experimental)",
+        core = "HFText 0.5.0 (experimental)",
         protocol = "HFText Basic v0.1 + Text Codec v0.2",
         slowProfile = "8-FSK, 0.300 s/symbol, 1050-1960 Hz",
         fastProfile = "8-FSK, 0.100 s/symbol, 1050-1960 Hz"

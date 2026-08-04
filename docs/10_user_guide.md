@@ -20,7 +20,7 @@ The package includes:
 - project documentation;
 - `PACKAGE.txt` with version, build time, and git metadata.
 
-HFText 0.4.0 adopts Text Codec v0.2 and is not text-compatible with 0.3.x
+HFText 0.5.0 uses Text Codec v0.2 and is not text-compatible with 0.3.x
 builds. Use the same HFText version on both ends of a test link.
 
 ## First Launch
@@ -38,7 +38,7 @@ The Operation tab is for normal use:
 - short TX estimate and progress;
 - message field and send button at the bottom.
 
-The Settings tab is for callsign, audio devices, RX control, detailed log toggle, logs, and evidence export.
+The Settings tab is for callsign, audio devices, optional RX-during-TX pause, RX control, detailed log toggle, logs, and evidence export.
 
 Advanced modem parameters are stored in `hftext.ini`, created automatically next to `hftext_pc.exe` when missing.
 
@@ -53,6 +53,8 @@ Advanced modem parameters are stored in `hftext.ini`, created automatically next
 7. Press the send button.
 
 Transmission only starts after pressing the send button. While TX is active, the same button stops/cancels TX.
+
+For speaker/microphone operation, enable `Pause RX during TX` in Settings. This prevents HFText from decoding its own transmitted audio. A previously active RX session resumes after TX completes or is cancelled; the option does not start RX when RX was already stopped. Waterfall and evidence capture continue during the pause. The option is disabled by default.
 
 ## Basic Receive
 
@@ -95,24 +97,26 @@ The Android app uses the same portable core through JNI. Normal use is split int
 Operation and Settings panels:
 
 - Operation keeps the field workflow compact: TX/RX message history, RX
-  waterfall, Fast/Slow selection, symbol count, TX estimate/progress, message
-  draft, draft Clear, and explicit Send/Stop TX.
-- Settings shows callsign, audio input mode, RX capture control, evidence
-  actions, metadata, tone lists, RX levels, receiver counters, saved evidence
-  details, and reset actions.
+  waterfall, symbol count, TX estimate/progress, message draft, compact Clear
+  and Send/Stop controls, and the Fast/Slow selector below the composer.
+- Settings shows only callsign, `Pause RX during TX`, Start/Stop RX, Save RX
+  evidence, and Reset local settings.
 
-Android stores the local callsign, draft message, speed profile, audio input
-mode, and up to 100 recent TX/RX messages in app-private preferences. `Reset
+Android stores the local callsign, draft message, speed profile, RX-during-TX
+pause state, and up to 100 recent TX/RX messages in app-private preferences. `Reset
 local settings` in Settings restores operator settings to defaults, including
 `nocall`, but does not clear message history or saved evidence files.
 
 `Save RX evidence` writes recent 240 s raw and modem-input WAV files plus a TXT report.
-`Share RX evidence` shares the latest saved evidence bundle through the Android
-system share sheet. The TXT report includes the active RX profile and core
+The TXT report includes the active RX profile and core
 latency for accepted Android messages when available. Android Settings and
 evidence separate instantaneous decoder activity from the stable `Last accepted`
 message and record how long after that message the evidence was saved. The
 screen is kept awake while TX or RX is active.
+
+On Android, `Pause RX during TX` keeps microphone capture and evidence running but temporarily withholds samples from a reset decoder. Use it when the phone speaker can reach its microphone or an audio interface feeds TX back into RX.
+
+Android requests the voice-recognition audio source automatically and uses an internal fallback if the device does not provide it. There is no audio-source selector in normal operation.
 
 ## Save Evidence
 

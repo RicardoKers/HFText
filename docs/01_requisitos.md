@@ -50,6 +50,7 @@ The system must:
 - RX should start automatically when an input device is available.
 - TX should be direct through the sound card; saving WAV first must not be required.
 - The same send button may cancel TX while audio is playing.
+- Settings should provide an optional RX-during-TX pause for speaker/microphone operation; it must resume only if RX was active before TX.
 - A Fast/Slow speed selector should be available in the Operation tab.
 - Advanced modem parameters should live in an editable `hftext.ini` file instead of cluttering normal operation.
 - Settings and logs belong in a separate Settings tab.
@@ -61,5 +62,6 @@ The system must:
 - Keep the C++ core portable and UI-independent.
 - Keep tests close to every core behavior change.
 - Keep documentation synchronized with protocol and UI changes.
+- Keep RX-during-TX suppression in application audio/control glue, not in the modem protocol or portable DSP core.
 - Prefer clear, conservative implementation over clever shortcuts.
 - Do not add cryptography.

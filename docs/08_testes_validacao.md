@@ -5,7 +5,8 @@
 Run Python tests:
 
 ```powershell
-python -m pytest python-sim/tests
+cd python-sim
+python -m pytest tests
 ```
 
 Run C++ tests:
@@ -60,6 +61,9 @@ Application behavior:
 - English UI labels and logs;
 - direct TX from the message field;
 - TX cancellation;
+- optional RX-during-TX pause persists, suppresses local self-reception, and resumes a previously active RX session after both TX completion and cancellation;
+- RX-during-TX pause must not start RX when it was stopped before TX;
+- waterfall and evidence capture continue while decoder input is paused during TX;
 - PC TX and RX entries remain visible in one timestamped message history, with
   multiline text kept inside one record;
 - automatic RX start;
@@ -77,23 +81,23 @@ Application behavior:
 - Android JNI text-preparation and TX-estimate bridge loads successfully and updates the app from the native core path.
 - Android explicit TX audio generation loads successfully through JNI and plays with `AudioTrack` only after pressing `Send`.
 - Android Operation stays compact: timestamped TX/RX history, RX waterfall, Fast/Slow selector, TX symbol/duration estimate, live TX progress, message draft, Clear, and Send/Stop.
-- Android Settings contains callsign, audio input mode, RX capture controls, evidence actions, native metadata, receiver counters, and reset actions.
+- Android Settings contains only callsign, optional RX-during-TX pause, RX capture controls, evidence saving, and local reset.
 - Android RX capture requests microphone permission, starts/stops `AudioRecord`, and updates RX level/clipping through the native C ABI.
-- Android RX reports the selected microphone source and shows both raw peak and modem-input peak after limited digital gain.
+- Android RX requests voice-recognition input and falls back internally when that source cannot initialize; raw and modem-input levels remain available in saved evidence.
 - Android RX capture feeds audio blocks into the native streaming receiver and displays accepted messages only after core-side frame, payload, and CRC success.
 - Android RX counts low-confidence receiver events so weak activity can be distinguished from a completely idle decoder.
 - Android `Save RX evidence` writes recent 240 s raw and modem-input WAV files plus a TXT report that can be pulled with `adb`; the modem WAV can be replayed by the PC-side CLI tools.
 - Android TXT evidence records the RX profile and core-reported latency per accepted message when available, which should be used when comparing Fast and Slow receive timing.
 - Android TXT evidence records elapsed time from the latest accepted message to evidence save; this helps decide whether a long Slow packet may have already rolled out of the evidence buffer.
-- Android `Share RX evidence` exposes the latest saved TXT, raw WAV, and modem-input WAV through the system share sheet.
-- Android reopens with the last callsign, draft message, speed profile, and audio input mode restored from app-private preferences.
-- Android `Reset local settings` restores default callsign `nocall`, draft message, speed profile, and audio input mode without clearing message history.
+- Android reopens with the last callsign, draft message, speed profile, and RX-during-TX pause state restored from app-private preferences.
+- Android `Reset local settings` restores default callsign `nocall`, draft message, speed profile, and RX-during-TX pause state without clearing message history.
 - Android reopens with the recent TX/RX message history restored from app-private preferences; `Clear` should remove it.
 - Android keeps the screen awake while TX or RX is active and returns to normal timeout after activity stops.
 - Android RX evidence reports captured duration and should be saved only after it covers the selected TX duration plus margin.
 - Android `RX buffer` duration should advance in real time; slower growth indicates capture is blocked or audio data is being lost.
 - Android accepted RX messages and explicit TX messages remain visible in a timestamped chat-style history and are included in the TXT evidence report with direction.
 - Android Operation waterfall covers the normal audio passband and shows selected tone markers so tuning can be compared with the PC app.
+- Android persists `Pause RX during TX`, includes it in evidence, and resets the native receiver around TX while keeping `AudioRecord` capture active.
 
 ## Field Validation
 
@@ -286,6 +290,8 @@ After packaging:
 9. Save a log and RX evidence bundle.
 10. Confirm the files contain English labels, speed profile, modem config path, and CSV section names.
 11. Confirm version and protocol metadata appear in the app, logs, evidence, CLI tools, and `PACKAGE.txt`.
+12. Enable `Pause RX during TX`, transmit with RX active, and confirm no local RX message is accepted and RX resumes afterward.
+13. Cancel a second TX and confirm RX resumes; repeat with RX stopped and confirm TX does not start RX.
 
 ## Release Packaging
 

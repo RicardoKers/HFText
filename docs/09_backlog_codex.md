@@ -21,7 +21,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android AudioTrack TX after explicit operator action, with cancel/stop behavior.
 - Android AudioRecord capture with microphone permission, stop/release behavior, and C ABI audio level/clipping statistics.
 - Android AudioRecord blocks streamed through the C ABI receiver with accepted messages and filtered RX status in the UI.
-- Android RX diagnostic improvements: selectable microphone source, fallback source label, limited modem-input gain, raw/modem level display, low-level hint, and low-confidence event count.
+- Android RX diagnostic improvements: internal microphone-source fallback, limited modem-input gain, raw/modem evidence levels, low-level hint, and low-confidence event count.
 - Android RX debug WAV export for recent raw and modem-input audio.
 - Android RX buffer-duration display and saved-evidence duration warning.
 - Android RX capture/decoder thread separation so evidence capture can stay real-time when decoding lags.
@@ -35,9 +35,10 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android tone-frequency list shown in the UI and included in TXT evidence reports through the JNI/C ABI path.
 - Android Operation/Settings panel split to keep normal field use less cluttered while preserving native status details.
 - Android compact Operation panel with TX/RX history, RX waterfall, Fast/Slow selector, TX symbol/duration estimate, live TX progress, message composer, Clear, and Send/Stop.
-- Android RX evidence sharing through the Android system share sheet using scoped `FileProvider` access.
-- Android package version aligned with the shared HFText 0.4.0 application version.
-- Android local preference persistence for callsign, draft message, speed profile, and audio input mode.
+- Android RX evidence saving to the app-specific evidence directory.
+- Android package version aligned with the shared HFText 0.5.0 application version.
+- Android adaptive and legacy launcher icons derived from the PC HFText artwork.
+- Android local preference persistence for callsign, draft message, speed profile, and RX-during-TX pause state.
 - Android Settings action to reset local operator settings without clearing message history or evidence.
 - Android local persistence for recent TX/RX message history.
 - Android screen kept awake while TX or RX is active.
@@ -134,6 +135,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - RX worker backlog counters in log and evidence export.
 - Repeatable Windows release packaging script.
 - Basic GitHub Actions CI.
+- Persistent optional RX decoder pause during TX on PC and Android, preserving waterfall/evidence capture and resuming only a previously active RX session.
+- Simplified Android Settings with fixed voice-recognition capture plus internal fallback, and compact Operation controls with the speed selector below the composer.
 
 ## Current Validation Tasks
 

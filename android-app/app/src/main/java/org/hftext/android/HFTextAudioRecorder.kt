@@ -39,6 +39,9 @@ class HFTextAudioRecorder(
     @Volatile
     private var cancelled = false
 
+    private val decoderEnabled = AtomicBoolean(true)
+    private val decoderResetRequested = AtomicBoolean(false)
+
     private var rawEvidence = FloatRingBuffer(1)
     private var modemEvidence = FloatRingBuffer(1)
     private var evidenceSampleRate = 0
@@ -63,6 +66,8 @@ class HFTextAudioRecorder(
         }
 
         cancelled = false
+        decoderEnabled.set(true)
+        decoderResetRequested.set(false)
         resetEvidence(sampleRate)
         val receiverQueue = ArrayBlockingQueue<FloatArray>(1024)
         val errorReported = AtomicBoolean(false)
@@ -83,15 +88,25 @@ class HFTextAudioRecorder(
             try {
                 receiver = createReceiver(profile)
                 while (!cancelled) {
+                    if (decoderResetRequested.compareAndSet(true, false)) {
+                        receiver?.close()
+                        receiver = createReceiver(profile)
+                        receiverQueue.clear()
+                    }
+                    if (!decoderEnabled.get()) {
+                        receiverQueue.clear()
+                        Thread.sleep(20L)
+                        continue
+                    }
                     val receiverSamples = receiverQueue.poll(100L, TimeUnit.MILLISECONDS) ?: continue
                     val nowMs = System.currentTimeMillis()
-                    val receiverUpdate = receiver.pushSamples(receiverSamples)
+                    val receiverUpdate = requireNotNull(receiver).pushSamples(receiverSamples)
                     val shouldPostReceiverUpdate = receiverUpdate.hasActivity ||
                         (receiverUpdate.eventCount > 0L && nowMs - lastReceiverStatusMs >= 1000L)
-                    if (!cancelled && shouldPostReceiverUpdate) {
+                    if (!cancelled && decoderEnabled.get() && shouldPostReceiverUpdate) {
                         lastReceiverStatusMs = nowMs
                         mainHandler.post {
-                            if (!cancelled) {
+                            if (!cancelled && decoderEnabled.get()) {
                                 onReceiverUpdate(receiverUpdate)
                             }
                         }
@@ -153,7 +168,7 @@ class HFTextAudioRecorder(
                     val samples = buffer.copyOf(read)
                     val receiverSamples = amplifiedReceiverSamples(samples)
                     appendEvidence(samples, receiverSamples.samples)
-                    if (!receiverQueue.offer(receiverSamples.samples)) {
+                    if (decoderEnabled.get() && !receiverQueue.offer(receiverSamples.samples)) {
                         receiverQueue.poll()
                         receiverQueue.offer(receiverSamples.samples)
                     }
@@ -242,9 +257,20 @@ class HFTextAudioRecorder(
 
     fun stop() {
         cancelled = true
+        decoderEnabled.set(false)
         val recorder = activeRecorder
         activeRecorder = null
         releaseRecorder(recorder)
+    }
+
+    fun pauseDecoding() {
+        decoderEnabled.set(false)
+        decoderResetRequested.set(true)
+    }
+
+    fun resumeDecoding() {
+        decoderResetRequested.set(true)
+        decoderEnabled.set(true)
     }
 
     private fun releaseRecorder(recorder: AudioRecord?) {

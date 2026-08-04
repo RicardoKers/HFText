@@ -1,113 +1,100 @@
-# HFText
+<p align="center">
+  <img src="docs/assets/hftext-icon.png" width="128" alt="HFText icon">
+</p>
 
-HFText is an experimental digital text modem for HF radio. It converts short typed messages into audio tones, sends them through a radio audio path, and decodes received audio back into text.
+<h1 align="center">HFText</h1>
 
-The project favors weak-signal robustness and operator clarity over throughput. Useful data rates are intentionally low while the protocol, DSP core, and PC application are validated with real radio and SDR captures.
+<p align="center"><strong>Short text messages over HF radio, carried as audio.</strong></p>
 
-## Main Goals
+HFText turns a Windows PC or Android phone into a digital text modem for HF
+radio. Type a short message, press Send, and HFText converts it into audio tones.
+Another HFText device listens to the receiver audio and displays the decoded
+message with a timestamp.
 
-- Build a simple, robust audio-based text modem for HF radio.
-- Keep the DSP core independent from the graphical interface and audio APIs.
-- Validate the protocol first in Python, then in portable C++.
-- Provide a PC application for field testing.
-- Reuse the C++ core in both PC and Android applications.
-- Keep FEC, interleaving, diagnostics, and evidence export testable.
+It can be used through a simple speaker-to-microphone path, an audio cable, or a
+radio and remote SDR. No internet connection or user account is required.
 
-## Current State
+> HFText is experimental software intended for testing and learning. It does not
+> provide encryption and should not be relied on for emergency communication.
 
-Current application version:
+## Download
 
-- HFText 0.4.0, experimental track.
-- Operational protocol baseline: HFText Basic v0.1 + Text Codec v0.2.
-- Experimental physical modes: 4-FSK v0.2 and 8-FSK v0.3.
+Ready-to-use test builds are available on the
+[HFText Releases page](https://github.com/RicardoKers/HFText/releases/latest).
 
-The operational baseline is HFText Basic v0.1:
+- **Windows:** download the Windows ZIP, extract it, and run `hftext_pc.exe`.
+- **Android:** download the APK, install it, and grant microphone permission
+  when requested.
 
-- logical frame: `SYNC | LENGTH | PAYLOAD | CRC16`;
-- robust layer: convolutional code `conv_k3`, deterministic interleaving, and Viterbi decoding;
-- transmitted physical flow: `PREAMBLE | START_SYNC | PHYS_LENGTH | ROBUST_FRAME`;
-- continuous receive path in the Qt PC application;
-- weighted `START_SYNC`, `PHYS_LENGTH`, and Viterbi decisions when symbol confidence is available.
+Use the same HFText release at both ends of a link. Different releases may use
+incompatible text or modem formats.
 
-HFText 0.4.0 adopts Text Codec v0.2 and is not text-compatible with 0.3.x
-builds. Use the same HFText version on both ends of a test link.
+## Try It Without a Radio
 
-2-FSK is the conservative v0.1 baseline. 4-FSK v0.2 and 8-FSK v0.3 are experimental physical modulation modes that reuse the same logical frame and robust layer. They must be selected explicitly in the CLI tools or PC application.
+The easiest first test uses a speaker and microphone:
 
-The Qt PC application can transmit directly through the sound card, receive continuously, show RX level/quality/waterfall, track RX state/session diagnostics, save logs, and export field evidence bundles.
+1. Open HFText on two devices.
+2. In Settings, replace the `nocall` placeholder with your callsign or test name.
+3. Start RX on the receiving device. Windows normally starts RX automatically;
+   Android provides `Start RX capture` in Settings.
+4. Select the same speed, `Fast` or `Slow`, on both devices.
+5. Place the receiving microphone near the transmitting speaker.
+6. Type a short message such as `hello` and press Send.
+7. The decoded message should appear in the receiving history.
 
-The Android app is an incremental Kotlin/Compose client. It uses JNI and the portable C ABI for metadata, text preparation, TX estimates, tone frequencies, explicit AudioTrack TX, audio level statistics, AudioRecord streaming RX through the native receiver, timestamped received-message history, Android RX evidence export/share, and a compact Operation/Diagnostics UI split.
+When a device can hear its own speaker, enable `Pause RX during TX` in Settings
+to prevent it from decoding its own transmission.
 
-## Development Strategy
+## Use It With a Radio
 
-1. Python simulation.
-2. Portable C++ core.
-3. CLI tools.
-4. PC application.
-5. Android application.
-6. Protocol and robustness improvements.
+HFText works through the radio's normal audio path:
 
-## Technology
+1. Feed the transmitting device audio into the radio data or microphone input.
+2. Feed receiver or SDR audio into the receiving device audio input.
+3. Select the same `Fast` or `Slow` profile at both ends.
+4. Tune until the received tones align with the yellow markers in the waterfall.
+5. Keep the signal visible without driving the input into the red clipping range.
+6. Type the message and press Send.
 
-- Python, NumPy, and pytest for simulation and validation.
-- C++17 for the portable DSP core.
-- CMake for the C++ core, CLI tools, and PC app.
-- Qt 6 Widgets for the PC application.
-- Kotlin, Jetpack Compose, JNI, AudioTrack, and AudioRecord for Android.
+Every transmission requires an explicit press of the Send button. Always follow
+your local amateur-radio rules, band plan, and licensing requirements.
 
-## Quick Start
+## What You See
 
-Build and test locally:
+- **Message history:** timestamped TX and RX messages in visually distinct
+  bubbles.
+- **Waterfall:** a live view of received audio between 300 Hz and 3 kHz, with
+  markers for the expected modem tones.
+- **Fast / Slow:** Fast occupies the channel for less time; Slow is more
+  forgiving when conditions are difficult.
+- **TX estimate:** the number of encoded symbols and expected transmission time.
+- **Settings:** callsign, audio controls, RX control, local echo prevention, and
+  test-evidence tools.
 
-```powershell
-cmake -S . -B build-qt15
-cmake --build build-qt15 --config Release
-ctest --test-dir build-qt15 -C Release --output-on-failure
-```
+## Help Improve HFText
 
-Run Python validation:
+Real audio and radio tests are especially valuable. After a useful success or
+failure, use `Save RX evidence` on the receiving device. The report and audio
+capture help identify tuning, level, timing, and channel problems.
 
-```powershell
-cd python-sim
-python -m pytest tests
-```
+See the [Field Test Guide](docs/14_field_test_guide.md) for a short test procedure
+and feedback template. Problems and observations can be reported through
+[GitHub Issues](https://github.com/RicardoKers/HFText/issues).
 
-Create a Windows release package:
+Do not include private or sensitive communication in shared evidence files.
 
-```powershell
-.\scripts\package_release.ps1
-```
+## Documentation
 
-The package is written under `dist/` and includes the PC app, CLI tools, Qt/runtime dependencies, and documentation.
+- [User Guide](docs/10_user_guide.md)
+- [Field Test Guide](docs/14_field_test_guide.md)
+- [Project Overview](docs/00_visao_geral.md)
+- [PC Application](docs/05_pc_app.md)
+- [Android Application](docs/06_android_app.md)
+- [Modem Protocol](docs/03_protocolo_modem.md)
+- [Text Codec](docs/13_text_codec_v02.md)
+- [Architecture](docs/02_arquitetura.md)
+- [Audio and DSP](docs/04_dsp_audio.md)
+- [Validation](docs/08_testes_validacao.md)
 
-For sharing test builds, publish the generated Windows ZIP and Android APK as
-assets of a GitHub Release. Do not commit generated executables or APK/ZIP files
-to the repository itself.
-
-Check the Android development environment:
-
-```powershell
-.\scripts\check_android_environment.ps1
-```
-
-This only reports installed tools; it does not install or change anything.
-
-For Android tool installation steps, see `docs/11_android_windows_setup.md`.
-
-Build the current Android debug shell:
-
-```powershell
-.\scripts\build_android_debug.ps1
-```
-
-For the native C API used by JNI integration, see
-`docs/12_c_api_reference.md`.
-
-For operator workflow, see `docs/10_user_guide.md`.
-
-For external field-test instructions and the feedback template, see
-`docs/14_field_test_guide.md`.
-
-## Core Principle
-
-The modem core must not depend on Qt, Android, platform audio APIs, or UI code. User interfaces provide text, settings, audio input/output, logs, and visual feedback; modem behavior belongs in the core and its tests.
+Developers should also read [AGENTS.md](AGENTS.md) before changing the modem core
+or protocol.

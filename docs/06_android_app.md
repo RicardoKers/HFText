@@ -2,9 +2,13 @@
 
 ## Status
 
-The Android application has started with a Kotlin/Compose shell and JNI bridge. It builds as a debug APK and displays version, protocol, Fast/Slow profile summaries, sanitized text, payload preview, symbol counts, tone frequencies, and TX estimates read through the portable C ABI. It can generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It can capture microphone audio with `AudioRecord`, display native audio level/clipping statistics, feed captured blocks to the native streaming receiver, and show accepted messages in a timestamped chat-style history plus receiver status summarized through the shared C ABI RX-event helper. Android RX can select voice-recognition, raw/unprocessed, or normal microphone input, applies limited digital gain before the receiver, counts low-confidence receiver activity for field diagnosis, and saves recent 240 s raw/modem-input WAV evidence for PC-side replay with captured-duration reporting. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks so saving should not spend several seconds on many tiny writes. Android evidence export also writes a TXT report with metadata, tone frequencies, RX counters, and TX/RX message history. The latest saved evidence bundle can be shared through Android's system share sheet using a scoped `FileProvider`, without broad storage permissions.
+The Android application has started with a Kotlin/Compose shell and JNI bridge. It builds as a debug APK and reads version, protocol, Fast/Slow profiles, sanitized text, payload symbols, tone frequencies, and TX estimates through the portable C ABI. It can generate TX audio through the native core and play it with `AudioTrack` after an explicit operator action. It captures microphone audio with `AudioRecord`, feeds captured blocks to the native streaming receiver, and shows accepted messages in a timestamped chat-style history. Normal operation fixes the requested input to voice-recognition audio, with automatic internal fallback when a device does not provide that source. Android RX applies limited digital gain before the receiver, counts low-confidence receiver activity for saved field diagnosis, and saves recent 240 s raw/modem-input WAV evidence for PC-side replay. Audio capture is intentionally decoupled from receiver processing so evidence capture can remain real-time even when native decoding is slower on the device. Saved WAV evidence is written in buffered PCM chunks, and Android evidence export also writes a TXT report with metadata, tone frequencies, RX counters, and TX/RX message history.
 
-The Compose UI now separates normal field operation from settings/debug details. Operation keeps the chat-style TX/RX history, a compact RX waterfall with tone markers, the Fast/Slow selector, a symbol/duration/TX-progress line, a thin TX progress bar, and a message composer with Clear plus Send/Stop controls. Settings holds callsign, audio input mode, RX capture controls, evidence sharing, native metadata, receiver counters, and reset actions. The Android message panel keeps a scrollable recent history of up to 100 timestamped TX/RX messages. Local operator state, including callsign, draft message, Fast/Slow profile, audio input mode, and recent message history, is restored from app-private preferences on launch. Settings can reset the local operator settings without clearing messages or saved evidence files; reset uses `nocall` as a generic callsign placeholder. The screen is kept awake while TX or RX is active to avoid interrupting long field captures.
+The Compose UI separates normal field operation from a deliberately small Settings screen. Operation keeps the chat-style TX/RX history, compact RX waterfall, symbol/duration/TX-progress line, message composer, and a compact Fast/Slow selector below the composer. The title, navigation, Clear, Send/Stop, Fast, and Slow controls use reduced heights to preserve vertical space. Settings contains only callsign, `Pause RX during TX`, Start/Stop RX, Save RX evidence, and Reset local settings. The Android message panel keeps a scrollable recent history of up to 100 timestamped TX/RX messages. Local operator state, including callsign, draft message, Fast/Slow profile, RX-during-TX pause state, and recent message history, is restored from app-private preferences on launch. Settings can reset the local operator settings without clearing messages or saved evidence files; reset uses `nocall` as a generic callsign placeholder. The screen is kept awake while TX or RX is active to avoid interrupting long field captures.
+
+The Android launcher uses adaptive and legacy resources derived from the same HFText artwork as the PC application. The adaptive foreground keeps the central mark inside the launcher safe area so circular and rounded launchers do not crop the identity.
+
+`Pause RX during TX` is disabled by default. When enabled and RX capture is active, Android keeps `AudioRecord`, waterfall, and evidence capture running but pauses native decoder input. The receiver is reset before it resumes after TX completion or cancellation, preventing local speaker audio from being accepted as RX. RX is not started automatically if it was stopped before TX.
 
 Development should remain incremental. The PC app and C++ core are still the reference implementation for modem behavior.
 
@@ -104,7 +108,7 @@ Evidence export and higher-level Android UI state should be added around this C 
 - `.\scripts\build_android_debug.ps1` builds the debug APK.
 - `.\scripts\install_android_debug.ps1` installs the debug APK on a connected
   emulator or Android device and launches the app by default.
-- The Android package version is aligned with the shared HFText 0.4.0 application version.
+- The Android package version is aligned with the shared HFText 0.5.0 application version.
 - The APK packages `libhftext_c_api.so` and `libhftext_android_jni.so`.
 - The debug APK builds the native modem libraries with optimization enabled so
   Android field tests exercise realistic streaming-decoder performance.
@@ -115,23 +119,24 @@ Evidence export and higher-level Android UI state should be added around this C 
 - `Send` generates normalized float TX audio through JNI and plays it with `AudioTrack`.
 - `Stop TX` cancels active Android audio playback.
 - `Start RX capture` requests microphone permission when needed, captures float mono audio with `AudioRecord`, and shows peak/clipping stats computed through the C ABI.
-- Android RX lets the operator choose voice-recognition, raw/unprocessed, or normal microphone capture and falls back when a selected source does not initialize.
+- Android RX requests voice-recognition capture automatically and falls back internally when that source does not initialize; no audio-source choice is exposed in normal Settings.
 - Android RX shows both raw peak level and the modem-input peak level after limited digital gain.
 - `Save RX evidence` writes the recent 240 s raw microphone buffer and modem-input buffer as WAV files plus a TXT report in the app-specific `rx-evidence` directory.
 - Android TXT evidence includes direction, active RX/TX profile, and core-reported latency for each accepted RX message when available.
 - Android Settings and TXT evidence keep `Decoder` as the instantaneous receiver state and `Last accepted` as the stable latest CRC-valid message.
 - Android TXT evidence records elapsed time from the stable latest accepted message to the evidence save time.
-- `Share RX evidence` shares the latest saved TXT, raw WAV, and modem-input WAV through Android's system share sheet with temporary read access.
 - The Android UI shows the current RX buffer duration and warns when saved RX evidence is shorter than the selected TX estimate.
 - Android RX capture and native decoding run on separate threads; `RX buffer` should advance in real time even if the decoder status lags.
 - The native streaming receiver uses a bounded live 8-FSK search grid to reduce Android decode backlog while preserving +/-15 Hz frequency-offset coverage. For long 8-FSK symbols, the timing grid uses 10 phase divisions and includes +/-5 Hz offsets so weak field captures with small tuning errors remain decodable without the heavier 20-phase live search.
 - Captured Android RX blocks are streamed into a native receiver handle through JNI.
-- The Android UI separates Operation and Settings panels; Operation keeps chat history, RX waterfall, speed selection, TX estimate/progress, and message composition while Settings keeps callsign, RX capture, evidence, metadata, tone lists, RX buffer, decoder, and session counters.
+- The Android UI separates Operation and Settings panels; Operation keeps chat history, RX waterfall, TX estimate/progress, message composition, and the bottom Fast/Slow selector, while Settings keeps only callsign, RX-during-TX pause, RX capture, evidence saving, and local reset.
 - Android JNI uses the shared C ABI RX-event summary helper for status, quality, and session counter updates instead of duplicating event filtering in Kotlin or JNI glue.
-- The Android UI restores callsign, draft message, selected speed profile, and selected audio input mode from app-private preferences on launch.
+- The Android UI restores callsign, draft message, selected speed profile, and RX-during-TX pause state from app-private preferences on launch.
+- The Android UI persists the optional RX-during-TX pause setting and reports it in saved TXT/CSV evidence.
+- With RX-during-TX pause enabled, explicit TX suspends and resets decoder input while preserving capture, waterfall, and evidence; completion and cancellation both resume a previously active RX session.
 - The Android UI can reset local operator settings from Settings while preserving message history and evidence files; the reset callsign is `nocall`.
 - The Android UI restores up to 100 recent timestamped TX/RX chat messages from app-private preferences on launch.
-- The Android UI keeps the screen awake while TX or RX is active and reports that state in Settings.
+- The Android UI keeps the screen awake while TX or RX is active.
 - The Android UI displays accepted RX messages only after the native receiver reports frame, payload, and CRC success, and keeps recent RX and explicit TX messages in a timestamped chat-style history. Multiline messages are rendered inside a single bubble so timestamps are not repeated in the middle of the text.
 - The Android Operation panel shows a lightweight 300 Hz to 3 kHz RX waterfall, selected-tone markers, TX symbol count, estimated TX duration, and live TX progress.
 - Low-confidence receiver events are throttled and counted for diagnosis without flooding the UI.

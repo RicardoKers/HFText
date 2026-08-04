@@ -89,6 +89,7 @@ They are useful for tests, packaging checks, and replaying field captures. They 
 - a Fast/Slow operating profile selector;
 - direct sound-card TX;
 - continuous sound-card RX;
+- optional application-level RX decoder gating during local TX;
 - waterfall and tone markers;
 - a local editable `hftext.ini` file for advanced modem parameters;
 - compact settings, logs, and evidence export.
@@ -96,6 +97,8 @@ They are useful for tests, packaging checks, and replaying field captures. They 
 `ModemController` connects the UI to the C++ core. It must not implement DSP logic itself.
 
 The PC app reads and writes its local `hftext.ini`, but the meaning of profile settings is provided by the core-level application settings helpers.
+
+The optional `Pause RX during TX` setting is platform control behavior. Audio capture may continue for waterfall and evidence, while samples are withheld from a reset decoder until explicit TX finishes or is cancelled. This does not change the modem protocol or DSP core.
 
 ## Android Application
 
@@ -114,6 +117,8 @@ Portable C++ core
 ```
 
 Android should reuse the same protocol and core behavior validated on PC. It should also reuse the core-level application settings helpers so the Android Fast/Slow profiles match the PC defaults unless a deliberate product decision changes them. Kotlin must remain glue: protocol encoding, modulation, demodulation, FEC, frame validation, and CRC checks stay in the portable core.
+
+Android implements optional RX-during-TX suppression in its Kotlin audio controller: `AudioRecord` may continue feeding waterfall/evidence, while native decoder input is paused and reset until TX ends. This mirrors the PC behavior without adding protocol state.
 
 The Android Gradle project is intentionally isolated under `android-app/` so the root CMake build remains focused on the portable core, CLI tools, and PC app.
 

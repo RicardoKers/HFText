@@ -84,6 +84,8 @@ private:
     void setRxSessionText();
     void rememberAcceptedRx(const hftext::DecodeResult& result, const hftext::ModemConfig& config);
     bool hasRecentAcceptedRx() const;
+    void pauseReceiveForTransmit();
+    void resumeReceiveAfterTransmit();
     void setTransmitButtonTransmitting(bool transmitting);
     void setReceiveControlsRecording(bool recording);
     QString selectedSpeedProfileKey() const;
@@ -133,6 +135,7 @@ private:
     std::atomic<std::size_t> rxPendingSampleCount_{0};
     std::atomic<std::size_t> rxMaxObservedPendingSamples_{0};
     std::atomic<std::size_t> rxDroppedSamples_{0};
+    std::atomic<bool> rxDecodeEnabled_{false};
     std::mutex rxEvidenceMutex_;
     std::deque<float> rxEvidenceSamples_;
     int rxEvidenceSampleRate_ = 48000;
@@ -157,6 +160,7 @@ private:
     QLabel* rxSessionLabel_ = nullptr;
     WaterfallWidget* waterfallWidget_ = nullptr;
     QCheckBox* detailedRxLogCheck_ = nullptr;
+    QCheckBox* pauseRxDuringTxCheck_ = nullptr;
     QScrollArea* messageHistoryScroll_ = nullptr;
     QWidget* messageHistoryContainer_ = nullptr;
     QVBoxLayout* messageHistoryLayout_ = nullptr;
@@ -188,4 +192,5 @@ private:
     std::int64_t lastAcceptedRxAtMsecs_ = 0;
     std::int64_t rxProgressSyncSample_ = -1;
     int rxDisplayedFrameProgressPermille_ = 0;
+    bool rxDecoderPausedForTransmit_ = false;
 };

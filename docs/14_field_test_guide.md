@@ -11,8 +11,9 @@ Use the latest GitHub Release assets:
   folder, and run `hftext_pc.exe`.
 - Android: download the APK and install it manually on the test device.
 
-Use the same HFText release on both ends of a link. HFText 0.4.0 uses Text Codec
-v0.2 and is not text-compatible with older builds.
+Use the same HFText release on both ends of a link. HFText 0.5.0 uses Text Codec
+v0.2, remains compatible with 0.4.0, and is not text-compatible with 0.3.x or
+earlier builds.
 
 ## Safety and Operating Notes
 
@@ -35,6 +36,8 @@ Start with a local audio-path test before using RF:
 7. Confirm the received message appears in the history.
 8. Repeat with `Slow`.
 9. Save RX evidence after each receive test.
+
+When one device can hear its own speaker, enable `Pause RX during TX` in Settings. Verify that no local RX bubble appears for the transmitted message and that reception continues after TX. Leave it disabled when intentionally testing full-duplex/self-reception behavior.
 
 This confirms installation, audio output, audio input, and basic modem operation.
 
@@ -70,8 +73,8 @@ On Windows:
 On Android:
 
 - use `Save RX evidence`;
-- use `Share RX evidence` when practical;
-- send the TXT report and both saved WAV files when available.
+- retrieve the TXT report and both saved WAV files from the app-specific
+  `rx-evidence` directory by USB or ADB when a developer requests them.
 
 Evidence is useful even when decoding fails. Failed captures help identify audio
 level, tuning, timing, receiver backlog, and channel problems.
@@ -98,6 +101,7 @@ Message length: short / medium / 127 symbols
 Result: decoded / failed / partial / app problem
 Decoded text:
 RX signal notes: strong / weak / noisy / fading / mistuned / clipped
+Pause RX during TX: on / off
 What happened:
 Evidence files attached: yes / no
 ```

@@ -459,6 +459,13 @@ MainWindow::MainWindow(QWidget* parent)
     configForm->addRow("Audio input", inputDeviceCombo_);
     populateInputDevices();
 
+    pauseRxDuringTxCheck_ = new QCheckBox("Pause RX during TX", this);
+    pauseRxDuringTxCheck_->setChecked(false);
+    pauseRxDuringTxCheck_->setToolTip(
+        "Prevents the local transmit audio from being decoded as a received message."
+    );
+    configForm->addRow("Echo prevention", pauseRxDuringTxCheck_);
+
     detailedRxLogCheck_ = new QCheckBox("Detailed RX log", this);
     detailedRxLogCheck_->setChecked(false);
     configForm->addRow("Diagnostics", detailedRxLogCheck_);
@@ -584,6 +591,7 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow() {
     saveSettings();
+    rxDecodeEnabled_.store(false, std::memory_order_relaxed);
     stopRxWorker();
     audioInput_.setSamplesCallback({});
     (void)audioInput_.stopAndSave({});
@@ -681,6 +689,7 @@ void MainWindow::transmitWav() {
         auto audio = controller_.generateAudio(callsign, message);
         const QString txPeak = audioPeakPercent(audio);
         const unsigned int deviceId = outputDeviceCombo_->currentData().toUInt();
+        pauseReceiveForTransmit();
         audioOutput_.playSamplesAsync(std::move(audio), config.sampleRate, deviceId);
         txProgressBar_->setValue(0);
         setTransmitButtonTransmitting(true);
@@ -691,6 +700,7 @@ void MainWindow::transmitWav() {
         appendLog("Generated TX peak: " + txPeak);
         appendLog("Payload TX: " + QString::fromStdString(estimate.payload));
     } catch (const std::exception& exc) {
+        resumeReceiveAfterTransmit();
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Error while transmitting: " + QString::fromUtf8(exc.what()));
     }
@@ -702,6 +712,7 @@ void MainWindow::stopTransmit() {
     txProgressTimer_->stop();
     txProgressBar_->setValue(0);
     setTransmitButtonTransmitting(false);
+    resumeReceiveAfterTransmit();
     if (wasPlaying) {
         appendLog("TX interrupted.");
     }
@@ -713,10 +724,17 @@ void MainWindow::startReceive() {
         return;
     }
 
+    if (audioOutput_.isPlaying() && pauseRxDuringTxCheck_->isChecked()) {
+        appendLog("RX start deferred: TX is active and echo prevention is enabled.");
+        return;
+    }
+
     try {
         const auto rxConfig = readRxConfig();
         stopRxWorker();
         startRxWorker(rxConfig, detailedRxLogCheck_->isChecked());
+        rxDecodeEnabled_.store(true, std::memory_order_relaxed);
+        rxDecoderPausedForTransmit_ = false;
         clearRxEvidenceSamples(rxConfig.sampleRate);
         waterfallWidget_->clear();
         waterfallUpdatePending_.store(false);
@@ -728,7 +746,9 @@ void MainWindow::startReceive() {
         setRxSessionText();
         audioInput_.setSamplesCallback([this, sampleRate = rxConfig.sampleRate](const std::vector<float>& samples) {
             appendRxEvidenceSamples(samples, sampleRate);
-            enqueueRxSamples(samples);
+            if (rxDecodeEnabled_.load(std::memory_order_relaxed)) {
+                enqueueRxSamples(samples);
+            }
             if (!waterfallUpdatePending_.exchange(true)) {
                 auto chunk = samples;
                 QMetaObject::invokeMethod(
@@ -751,6 +771,8 @@ void MainWindow::startReceive() {
             + " (capture " + QString::number(rxConfig.sampleRate) + " Hz)"
         );
     } catch (const std::exception& exc) {
+        rxDecodeEnabled_.store(false, std::memory_order_relaxed);
+        stopRxWorker(false);
         setReceiveControlsRecording(false);
         QMessageBox::warning(this, "HFText", QString::fromUtf8(exc.what()));
         appendLog("Error while starting RX: " + QString::fromUtf8(exc.what()));
@@ -758,6 +780,8 @@ void MainWindow::startReceive() {
 }
 
 void MainWindow::stopReceive() {
+    rxDecodeEnabled_.store(false, std::memory_order_relaxed);
+    rxDecoderPausedForTransmit_ = false;
     if (!audioInput_.isRecording()) {
         setReceiveControlsRecording(false);
         appendLog("RX is not running.");
@@ -828,6 +852,7 @@ void MainWindow::updateTxProgress() {
     if (duration <= 0.0) {
         txProgressBar_->setValue(0);
         setTransmitButtonTransmitting(false);
+        resumeReceiveAfterTransmit();
         return;
     }
 
@@ -839,6 +864,7 @@ void MainWindow::updateTxProgress() {
         txProgressTimer_->stop();
         txProgressBar_->setValue(1000);
         setTransmitButtonTransmitting(false);
+        resumeReceiveAfterTransmit();
         appendLog("TX completed.");
     }
 }
@@ -948,6 +974,7 @@ void MainWindow::applyDefaultSettings() {
     loadModemConfigFile();
     callsignEdit_->setText(kDefaultCallsign);
     detailedRxLogCheck_->setChecked(false);
+    pauseRxDuringTxCheck_->setChecked(false);
     updateTxEstimate();
     updateWaterfallMarkers();
     appendLog("Default modem configuration written: " + modemConfigPath_);
@@ -1218,6 +1245,7 @@ void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
     stream << "Preamble: " << txConfig.preambleBits << " bits\n";
     stream << "Audio output: " << outputDeviceCombo_->currentText() << '\n';
     stream << "Audio input: " << inputDeviceCombo_->currentText() << '\n';
+    stream << "Pause RX during TX: " << (pauseRxDuringTxCheck_->isChecked() ? "yes" : "no") << '\n';
     stream << "Detailed RX log: " << (detailedRxLogCheck_->isChecked() ? "yes" : "no") << '\n';
     if (rxDiagnosticLabel_ != nullptr) {
         stream << "Current RX state: " << rxDiagnosticLabel_->text() << '\n';
@@ -1258,7 +1286,7 @@ void MainWindow::writeFieldSummaryCsv(
     stream
         << "generated_at,hftext_version,release_track,protocol,callsign,modulation,"
         << "speed_profile,modem_config_file,symbol_duration_s,tx_sample_rate_hz,rx_sample_rate_hz,"
-        << "f0_hz,f1_hz,tone_spacing_hz,amplitude,preamble_bits,detailed_log,"
+        << "f0_hz,f1_hz,tone_spacing_hz,amplitude,preamble_bits,detailed_log,pause_rx_during_tx,"
         << "rx_elapsed_s,rx_accepted,accepted_frames,rx_rejected_strong,rx_phys_length,rx_sync,"
         << "rx_quality,last_phys_length,last_reject,received_lines,received_text,"
         << "message_history_entries,message_history,"
@@ -1287,6 +1315,7 @@ void MainWindow::writeFieldSummaryCsv(
         << QString::number(txConfig.amplitude, 'f', 2) << ','
         << txConfig.preambleBits << ','
         << csvBool(detailedRxLogCheck_->isChecked()) << ','
+        << csvBool(pauseRxDuringTxCheck_->isChecked()) << ','
         << QString::number(elapsedSeconds, 'f', 2) << ','
         << rxSessionAcceptedCount_ << ','
         << static_cast<qulonglong>(acceptedRxFrames_.size()) << ','
@@ -1574,6 +1603,43 @@ bool MainWindow::hasRecentAcceptedRx() const {
     return elapsed >= 0 && elapsed <= kAcceptedRxStateHoldSeconds * 1000;
 }
 
+void MainWindow::pauseReceiveForTransmit() {
+    if (pauseRxDuringTxCheck_ == nullptr || !pauseRxDuringTxCheck_->isChecked()
+        || !audioInput_.isRecording() || rxDecoderPausedForTransmit_) {
+        return;
+    }
+
+    rxDecodeEnabled_.store(false, std::memory_order_relaxed);
+    stopRxWorker(false);
+    rxDecoderPausedForTransmit_ = true;
+    resetRxFrameProgress();
+    resetRxDiagnostic("Paused during TX");
+    appendLog("RX decoder paused during TX (echo prevention).");
+}
+
+void MainWindow::resumeReceiveAfterTransmit() {
+    if (!rxDecoderPausedForTransmit_) {
+        return;
+    }
+
+    rxDecoderPausedForTransmit_ = false;
+    if (!audioInput_.isRecording()) {
+        rxDecodeEnabled_.store(false, std::memory_order_relaxed);
+        return;
+    }
+
+    try {
+        startRxWorker(readRxConfig(), detailedRxLogCheck_->isChecked());
+        rxDecodeEnabled_.store(true, std::memory_order_relaxed);
+        resetRxFrameProgress();
+        resetRxDiagnostic("Listening");
+        appendLog("RX decoder resumed after TX.");
+    } catch (const std::exception& exc) {
+        rxDecodeEnabled_.store(false, std::memory_order_relaxed);
+        appendLog("Error while resuming RX after TX: " + QString::fromUtf8(exc.what()));
+    }
+}
+
 void MainWindow::setTransmitButtonTransmitting(bool transmitting) {
     if (transmitButton_ == nullptr) {
         return;
@@ -1581,6 +1647,14 @@ void MainWindow::setTransmitButtonTransmitting(bool transmitting) {
 
     transmitButton_->setIcon(style()->standardIcon(transmitting ? QStyle::SP_MediaStop : QStyle::SP_ArrowForward));
     transmitButton_->setToolTip(transmitting ? "Stop TX" : "Send");
+    callsignEdit_->setEnabled(!transmitting);
+    messageEdit_->setEnabled(!transmitting);
+    speedProfileCombo_->setEnabled(!transmitting);
+    outputDeviceCombo_->setEnabled(!transmitting && outputDeviceCombo_->currentText() != "No device found");
+    inputDeviceCombo_->setEnabled(!transmitting && inputDeviceCombo_->currentText() != "No device found");
+    detailedRxLogCheck_->setEnabled(!transmitting);
+    pauseRxDuringTxCheck_->setEnabled(!transmitting);
+    setReceiveControlsRecording(audioInput_.isRecording());
 }
 
 void MainWindow::setReceiveControlsRecording(bool recording) {
@@ -1689,6 +1763,7 @@ void MainWindow::loadSettings() {
         speedProfileCombo_->setCurrentIndex(speedIndex);
     }
     detailedRxLogCheck_->setChecked(settings.value("detailedRxLog", detailedRxLogCheck_->isChecked()).toBool());
+    pauseRxDuringTxCheck_->setChecked(settings.value("pauseRxDuringTx", false).toBool());
     selectComboText(outputDeviceCombo_, settings.value("outputDevice").toString());
     selectComboText(inputDeviceCombo_, settings.value("inputDevice").toString());
 }
@@ -1700,6 +1775,7 @@ void MainWindow::saveSettings() const {
     settings.setValue("callsign", callsignEdit_->text());
     settings.setValue("speedProfile", selectedSpeedProfileKey());
     settings.setValue("detailedRxLog", detailedRxLogCheck_->isChecked());
+    settings.setValue("pauseRxDuringTx", pauseRxDuringTxCheck_->isChecked());
     settings.setValue("outputDevice", outputDeviceCombo_->currentText());
     settings.setValue("inputDevice", inputDeviceCombo_->currentText());
 }

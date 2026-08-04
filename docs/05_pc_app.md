@@ -34,6 +34,7 @@ The Settings tab contains:
 - callsign;
 - audio output and input device;
 - detailed RX log toggle;
+- optional `Pause RX during TX` echo-prevention toggle;
 - manual Start RX / Stop RX controls;
 - log and evidence export buttons;
 - a Load Defaults button that rewrites the default `hftext.ini`.
@@ -74,6 +75,8 @@ preamble_bits=72
 RX starts automatically when the app opens and an input device is available. RX can be stopped manually and restarted from Settings.
 
 TX is direct through the selected audio output. The operator does not need to save a WAV first. Transmission happens only after pressing the send button.
+
+`Pause RX during TX` is disabled by default. When enabled and RX is already active, explicit TX pauses and resets only the local decoder. Audio input remains available to the waterfall and circular evidence buffer. The decoder resumes automatically after TX completes or is cancelled. If RX was stopped before TX, it remains stopped.
 
 If the Fast/Slow profile or RX-affecting Settings values change while RX is active, the app restarts RX automatically so the streaming receiver uses the new configuration.
 
@@ -173,6 +176,7 @@ The app stores locally:
 - selected Fast/Slow speed profile;
 - selected audio devices;
 - detailed-log state;
+- RX-during-TX pause state;
 - window geometry.
 
 Advanced modem profile parameters are stored in `hftext.ini` beside the executable rather than in the Qt settings store.

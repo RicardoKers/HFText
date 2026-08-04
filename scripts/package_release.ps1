@@ -155,6 +155,10 @@ try {
 
     New-Item -ItemType Directory -Path (Join-Path $packageDir "docs") -Force | Out-Null
     Copy-Item -Path (Join-Path $repoRoot "docs\*.md") -Destination (Join-Path $packageDir "docs") -Force
+    $docsAssets = Join-Path $repoRoot "docs\assets"
+    if (Test-Path -LiteralPath $docsAssets) {
+        Copy-Item -LiteralPath $docsAssets -Destination (Join-Path $packageDir "docs\assets") -Recurse -Force
+    }
 
     New-Item -ItemType Directory -Path (Join-Path $packageDir "core") -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repoRoot "core\README.md") -Destination (Join-Path $packageDir "core\README.md") -Force
