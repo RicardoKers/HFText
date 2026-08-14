@@ -109,6 +109,7 @@ private:
 
     AudioInput audioInput_;
     AudioOutput audioOutput_;
+    std::vector<AudioInput::DeviceInfo> inputDevices_;
     ModemController controller_;
     struct AcceptedRxFrame {
         QString acceptedAtIso;
@@ -145,6 +146,7 @@ private:
     QString lastRxWavPath_;
     QString modemConfigPath_;
     QString modemConfigWarning_;
+    QString inputSourceWarning_;
     hftext::AppModemProfiles modemProfiles_;
     QLineEdit* callsignEdit_ = nullptr;
     QPlainTextEdit* messageEdit_ = nullptr;

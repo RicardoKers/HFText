@@ -36,7 +36,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android Operation/Settings panel split to keep normal field use less cluttered while preserving native status details.
 - Android compact Operation panel with TX/RX history, RX waterfall, Fast/Slow selector, TX symbol/duration estimate, live TX progress, message composer, Clear, and Send/Stop.
 - Android RX evidence saving to the app-specific evidence directory.
-- Android package version aligned with the shared HFText 0.5.0 application version.
+- Android package version aligned with the shared HFText 0.6.0 application version.
 - Android adaptive and legacy launcher icons derived from the PC HFText artwork.
 - Android local preference persistence for callsign, draft message, speed profile, and RX-during-TX pause state.
 - Android Settings action to reset local operator settings without clearing message history or evidence.
@@ -136,6 +136,9 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Repeatable Windows release packaging script.
 - Basic GitHub Actions CI.
 - Persistent optional RX decoder pause during TX on PC and Android, preserving waterfall/evidence capture and resuming only a previously active RX session.
+- Windows WASAPI output-device loopback sources for direct SDR/application audio,
+  with mono conversion, streaming sample-rate conversion, stable endpoint persistence,
+  physical-input fallback, continuous silence retention, and fixed 100 ms blocks.
 - Simplified Android Settings with fixed voice-recognition capture plus internal fallback, and compact Operation controls with the speed selector below the composer.
 
 ## Current Validation Tasks
@@ -146,6 +149,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 4. Track field acceptance rate and quality using `field_summary.py`.
 5. Replay accepted evidence with `field_replay.py` after decoder changes.
 6. Watch for repeated failure causes: missed sync, invalid `PHYS_LENGTH`, CRC failure, payload failure, latency after frame end, evidence-save time, RX worker backlog/drop counters, or UI responsiveness.
+7. Validate Windows output loopback with two HFText instances, then with a real
+   SDR, while retaining a physical-input regression test.
 
 ## Near-Term UI Tasks
 

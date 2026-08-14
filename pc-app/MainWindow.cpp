@@ -57,6 +57,7 @@ constexpr int kMaxAcceptedRxSnapshots = 512;
 constexpr int kMaxMessageHistoryEntries = 100;
 constexpr int kAcceptedRxStateHoldSeconds = 60;
 constexpr const char* kDefaultCallsign = "nocall";
+constexpr int kInputSourceKeyRole = Qt::UserRole + 1;
 
 QString modulationModeIniName(hftext::ModulationMode mode) {
     return QString::fromLatin1(hftext::modulationModeKey(mode));
@@ -579,6 +580,9 @@ MainWindow::MainWindow(QWidget* parent)
     if (!modemConfigWarning_.isEmpty()) {
         appendLog("Modem config warning: " + modemConfigWarning_);
     }
+    if (!inputSourceWarning_.isEmpty()) {
+        appendLog("Audio input warning: " + inputSourceWarning_);
+    }
     appendLog("Speed profile: " + speedProfileDescription(selectedSpeedProfileKey()));
     QTimer::singleShot(0, this, [this]() {
         if (inputDeviceCombo_ != nullptr && inputDeviceCombo_->isEnabled() && inputDeviceCombo_->count() > 0) {
@@ -761,14 +765,18 @@ void MainWindow::startReceive() {
                 );
             }
         });
-        const unsigned int deviceId = inputDeviceCombo_->currentData().toUInt();
-        audioInput_.start(deviceId, rxConfig.sampleRate);
+        const int sourceIndex = inputDeviceCombo_->currentData().toInt();
+        if (sourceIndex < 0 || static_cast<std::size_t>(sourceIndex) >= inputDevices_.size()) {
+            throw std::runtime_error("selected audio input source is unavailable");
+        }
+        audioInput_.start(inputDevices_[static_cast<std::size_t>(sourceIndex)], rxConfig.sampleRate);
         lastRxWavPath_.clear();
         rxLevelTimer_->start();
         setReceiveControlsRecording(true);
         appendLog(
             QStringLiteral("RX streaming started")
-            + " (capture " + QString::number(rxConfig.sampleRate) + " Hz)"
+            + " (capture " + QString::number(rxConfig.sampleRate) + " Hz, "
+            + inputDeviceCombo_->currentText() + ")"
         );
     } catch (const std::exception& exc) {
         rxDecodeEnabled_.store(false, std::memory_order_relaxed);
@@ -844,6 +852,24 @@ void MainWindow::updateRxLevel() {
     rxLevelBar_->setValue(level);
     if (audioInput_.isRecording()) {
         setRxSessionText();
+        return;
+    }
+
+    const std::string error = audioInput_.lastError();
+    if (!error.empty()) {
+        rxLevelTimer_->stop();
+        rxDecodeEnabled_.store(false, std::memory_order_relaxed);
+        (void)audioInput_.stopAndSave({});
+        audioInput_.setSamplesCallback({});
+        stopRxWorker(false);
+        waterfallUpdatePending_.store(false);
+        rxLevelBar_->setValue(0);
+        setReceiveControlsRecording(false);
+        resetRxFrameProgress();
+        resetRxDiagnostic("Stopped");
+        const QString message = QString::fromStdString(error);
+        appendLog("RX audio source stopped: " + message);
+        QMessageBox::warning(this, "HFText", message);
     }
 }
 
@@ -1013,15 +1039,13 @@ void MainWindow::saveLog() {
 }
 
 void MainWindow::saveFieldEvidence() {
-    std::vector<float> samples;
-    int sampleRate = 48000;
+    bool hasRecentSamples = false;
     {
         std::lock_guard<std::mutex> lock(rxEvidenceMutex_);
-        samples.assign(rxEvidenceSamples_.begin(), rxEvidenceSamples_.end());
-        sampleRate = rxEvidenceSampleRate_;
+        hasRecentSamples = !rxEvidenceSamples_.empty();
     }
 
-    if (samples.empty()) {
+    if (!hasRecentSamples) {
         QMessageBox::information(this, "HFText", "There is no recent RX audio to save.");
         appendLog("RX evidence not saved: no recent audio.");
         return;
@@ -1032,6 +1056,19 @@ void MainWindow::saveFieldEvidence() {
         "Save RX evidence"
     );
     if (outputDir.isEmpty()) {
+        return;
+    }
+
+    std::vector<float> samples;
+    int sampleRate = 48000;
+    {
+        std::lock_guard<std::mutex> lock(rxEvidenceMutex_);
+        samples.assign(rxEvidenceSamples_.begin(), rxEvidenceSamples_.end());
+        sampleRate = rxEvidenceSampleRate_;
+    }
+    if (samples.empty()) {
+        QMessageBox::information(this, "HFText", "There is no recent RX audio to save.");
+        appendLog("RX evidence not saved: no recent audio.");
         return;
     }
 
@@ -1765,7 +1802,22 @@ void MainWindow::loadSettings() {
     detailedRxLogCheck_->setChecked(settings.value("detailedRxLog", detailedRxLogCheck_->isChecked()).toBool());
     pauseRxDuringTxCheck_->setChecked(settings.value("pauseRxDuringTx", false).toBool());
     selectComboText(outputDeviceCombo_, settings.value("outputDevice").toString());
-    selectComboText(inputDeviceCombo_, settings.value("inputDevice").toString());
+    const QString savedInputSourceKey = settings.value("inputSourceKey").toString();
+    const int sourceIndex = inputDeviceCombo_->findData(savedInputSourceKey, kInputSourceKeyRole);
+    if (!savedInputSourceKey.isEmpty() && sourceIndex >= 0) {
+        inputDeviceCombo_->setCurrentIndex(sourceIndex);
+    } else {
+        if (!savedInputSourceKey.isEmpty()) {
+            inputSourceWarning_ = "saved source is unavailable; using " + inputDeviceCombo_->currentText();
+        }
+        const QString legacyInputName = settings.value("inputDevice").toString();
+        if (savedInputSourceKey.isEmpty()) {
+            selectComboText(inputDeviceCombo_, legacyInputName);
+            if (!legacyInputName.isEmpty() && inputDeviceCombo_->currentText() != legacyInputName) {
+                selectComboText(inputDeviceCombo_, "Input: " + legacyInputName);
+            }
+        }
+    }
 }
 
 void MainWindow::saveSettings() const {
@@ -1778,20 +1830,31 @@ void MainWindow::saveSettings() const {
     settings.setValue("pauseRxDuringTx", pauseRxDuringTxCheck_->isChecked());
     settings.setValue("outputDevice", outputDeviceCombo_->currentText());
     settings.setValue("inputDevice", inputDeviceCombo_->currentText());
+    settings.setValue("inputSourceKey", inputDeviceCombo_->currentData(kInputSourceKeyRole));
 }
 
 void MainWindow::populateInputDevices() {
     inputDeviceCombo_->clear();
-    const auto devices = audioInput_.devices();
-    if (devices.empty()) {
-        inputDeviceCombo_->addItem("No device found", 0U);
+    inputDevices_ = audioInput_.devices();
+    if (inputDevices_.empty()) {
+        inputDeviceCombo_->addItem("No device found", -1);
         inputDeviceCombo_->setEnabled(false);
         return;
     }
 
-    for (const auto& device : devices) {
-        inputDeviceCombo_->addItem(QString::fromStdString(device.name), device.id);
+    for (std::size_t index = 0; index < inputDevices_.size(); ++index) {
+        const auto& device = inputDevices_[index];
+        inputDeviceCombo_->addItem(
+            QString::fromStdString(device.name),
+            static_cast<int>(index)
+        );
+        inputDeviceCombo_->setItemData(
+            static_cast<int>(index),
+            QString::fromStdString(device.persistentKey),
+            kInputSourceKeyRole
+        );
     }
+    inputDeviceCombo_->setEnabled(true);
 }
 
 void MainWindow::populateOutputDevices() {

@@ -12,7 +12,9 @@ Another HFText device listens to the receiver audio and displays the decoded
 message with a timestamp.
 
 It can be used through a simple speaker-to-microphone path, an audio cable, or a
-radio and remote SDR. No internet connection or user account is required.
+radio and remote SDR. On Windows, SDR audio can also be captured directly from
+the selected output device through WASAPI loopback, avoiding an acoustic
+speaker-to-microphone path. No internet connection or user account is required.
 
 > HFText is experimental software intended for testing and learning. It does not
 > provide encryption and should not be relied on for emergency communication.
@@ -56,6 +58,13 @@ HFText works through the radio's normal audio path:
 5. Keep the signal visible without driving the input into the red clipping range.
 6. Type the message and press Send.
 
+On Windows, an SDR that plays through the PC can be received digitally by
+selecting `Loopback: <output device>` as the HFText audio input. Select the same
+output endpoint used by the SDR. Loopback captures the complete mix played on
+that endpoint, including notification sounds and other applications. Its receive
+timeline remains active through quiet periods, so the waterfall and decoder keep
+running even when the SDR output is temporarily silent.
+
 Every transmission requires an explicit press of the Send button. Always follow
 your local amateur-radio rules, band plan, and licensing requirements.
 
@@ -95,6 +104,7 @@ Do not include private or sensitive communication in shared evidence files.
 - [Architecture](docs/02_arquitetura.md)
 - [Audio and DSP](docs/04_dsp_audio.md)
 - [Validation](docs/08_testes_validacao.md)
+- [HFText 0.6.0 Release Notes](docs/15_release_notes_0.6.0.md)
 
 Developers should also read [AGENTS.md](AGENTS.md) before changing the modem core
 or protocol.

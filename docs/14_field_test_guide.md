@@ -11,7 +11,7 @@ Use the latest GitHub Release assets:
   folder, and run `hftext_pc.exe`.
 - Android: download the APK and install it manually on the test device.
 
-Use the same HFText release on both ends of a link. HFText 0.5.0 uses Text Codec
+Use the same HFText release on both ends of a link. HFText 0.6.0 uses Text Codec
 v0.2, remains compatible with 0.4.0, and is not text-compatible with 0.3.x or
 earlier builds.
 
@@ -56,6 +56,7 @@ For RF tests, keep the procedure simple:
 Useful test paths:
 
 - direct speaker to microphone;
+- Windows SDR/output endpoint to HFText through `Loopback:` capture;
 - PC to PC through radio/SDR;
 - PC to Android through radio/SDR;
 - Android to PC through radio/SDR;

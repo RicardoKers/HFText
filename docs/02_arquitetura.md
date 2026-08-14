@@ -89,6 +89,7 @@ They are useful for tests, packaging checks, and replaying field captures. They 
 - a Fast/Slow operating profile selector;
 - direct sound-card TX;
 - continuous sound-card RX;
+- Windows WASAPI output-device loopback RX for direct SDR/application audio;
 - optional application-level RX decoder gating during local TX;
 - waterfall and tone markers;
 - a local editable `hftext.ini` file for advanced modem parameters;
@@ -99,6 +100,17 @@ They are useful for tests, packaging checks, and replaying field captures. They 
 The PC app reads and writes its local `hftext.ini`, but the meaning of profile settings is provided by the core-level application settings helpers.
 
 The optional `Pause RX during TX` setting is platform control behavior. Audio capture may continue for waterfall and evidence, while samples are withheld from a reset decoder until explicit TX finishes or is cancelled. This does not change the modem protocol or DSP core.
+
+PC capture sources are selected in `AudioInput`. Physical recording inputs keep
+the existing `waveIn` backend. Output endpoints use WASAPI shared-mode loopback,
+then a PC-only conversion stage downmixes the endpoint format to mono and
+resamples it to the configured RX sample rate. Both paths produce the same
+`std::vector<float>` blocks for evidence, waterfall, and the portable streaming
+receiver. The loopback backend keeps the shared output engine active with an
+inaudible silent render stream, then aggregates the captured mix into fixed
+100 ms blocks. This preserves wall-clock silence and prevents endpoint packet
+size from changing waterfall speed or receiver timing. No WASAPI type,
+resampling, or block-cadence concern crosses into `core/`.
 
 ## Android Application
 

@@ -16,6 +16,24 @@ The C++ core uses mono floating-point samples:
 
 WAV debug tools read and write PCM16 files. The PC app captures and plays PCM audio through platform audio APIs outside the core.
 
+On Windows, physical input devices use the legacy `waveIn` capture path. Output
+devices may also be captured with WASAPI loopback in shared mode. Loopback input
+is converted from the endpoint's PCM or float mix format, averaged to mono, and
+linearly resampled to the configured RX rate before it reaches the normal
+streaming pipeline. This conversion belongs to the PC audio layer, not the modem
+DSP core.
+
+Some Windows output endpoints stop producing loopback packets while no
+application is rendering audio. The PC backend therefore maintains an inaudible
+shared render stream and groups the resulting mix into 100 ms blocks. Silence is
+retained in the RX timeline; it is not removed or compressed. Physical input and
+loopback consequently present equivalent block timing to evidence capture,
+waterfall rendering, and the streaming modem.
+
+Loopback captures the complete mix rendered to the selected endpoint. It does
+not isolate the SDR process, and it may therefore contain system notifications,
+browser audio, or HFText's own TX when they use the same output.
+
 ## Modulation
 
 HFText uses non-coherent FSK-style modulation.

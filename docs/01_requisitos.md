@@ -48,6 +48,12 @@ The system must:
 - The interface language must be English.
 - Normal operation should resemble a compact chat-style interface.
 - RX should start automatically when an input device is available.
+- Windows RX should offer WASAPI loopback sources for active output endpoints so
+  SDR audio can reach the decoder without an acoustic speaker/microphone path.
+- Loopback capture must convert the endpoint mix to mono normalized samples at
+  the configured RX sample rate before feeding the existing receiver.
+- Loopback capture must preserve elapsed time during output silence and deliver
+  the same fixed 100 ms block cadence used by physical PC inputs.
 - TX should be direct through the sound card; saving WAV first must not be required.
 - The same send button may cancel TX while audio is playing.
 - Settings should provide an optional RX-during-TX pause for speaker/microphone operation; it must resume only if RX was active before TX.

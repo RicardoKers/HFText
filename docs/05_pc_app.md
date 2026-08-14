@@ -32,7 +32,7 @@ The normal operation tab is chat-like:
 The Settings tab contains:
 
 - callsign;
-- audio output and input device;
+- audio output and input source, including Windows output loopback;
 - detailed RX log toggle;
 - optional `Pause RX during TX` echo-prevention toggle;
 - manual Start RX / Stop RX controls;
@@ -73,6 +73,25 @@ preamble_bits=72
 ## Normal Operation
 
 RX starts automatically when the app opens and an input device is available. RX can be stopped manually and restarted from Settings.
+
+The `Audio input` selector contains two source families:
+
+- `Input: ...` for microphones, line inputs, and the Windows default recording device;
+- `Loopback: ...` for the complete digital mix played on a Windows output endpoint.
+
+Select the loopback endpoint used by an SDR to decode its audio without playing
+it through a speaker and recapturing it with a microphone. The loopback backend
+accepts the endpoint's native PCM/float channel layout and sample rate, converts
+it to mono, resamples it to the configured RX rate, and emits fixed 100 ms blocks.
+An inaudible shared-mode keep-alive keeps silence in the capture timeline when
+Windows would otherwise suspend loopback packets. A source change while RX is
+active restarts RX automatically. Source persistence uses the Windows endpoint
+identifier; if a previously saved endpoint is absent, HFText falls back to the
+default recording input.
+
+Output loopback captures all applications playing on that endpoint. Notification
+sounds and HFText TX can therefore be present. `Pause RX during TX` remains useful
+when TX and loopback share an output device.
 
 TX is direct through the selected audio output. The operator does not need to save a WAV first. Transmission happens only after pressing the send button.
 
@@ -175,6 +194,7 @@ The app stores locally:
 - callsign;
 - selected Fast/Slow speed profile;
 - selected audio devices;
+- the stable selected audio-input source key, including loopback endpoint ID;
 - detailed-log state;
 - RX-during-TX pause state;
 - window geometry.

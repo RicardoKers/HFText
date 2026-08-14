@@ -70,6 +70,14 @@ Application behavior:
 - Fast/Slow speed profile selection from Operation;
 - automatic `hftext.ini` creation when missing;
 - RX restart when the speed profile, input device, or detailed-log setting changes;
+- Windows audio-source enumeration distinguishes physical `Input:` sources from
+  WASAPI `Loopback:` output sources and persists the selected endpoint ID;
+- loopback format conversion handles PCM16 and float32, stereo-to-mono downmix,
+  silent packets, and streaming 44.1-to-48 kHz resampling;
+- loopback keeps advancing during output silence and aggregates native WASAPI
+  packets into the same fixed 100 ms blocks used by physical input;
+- a loopback endpoint failure or disconnect stops RX cleanly and reports the
+  audio-source error;
 - evidence and log export;
 - PC evidence includes `Message History CSV` with direction, timestamp, and text;
 - waterfall tone markers;
@@ -110,6 +118,38 @@ Useful field test matrix:
 - direct speaker/microphone path;
 - radio-to-SDR path;
 - partial packets for negative testing.
+
+### Windows Output Loopback Smoke Test
+
+Use headphones so success cannot come from speaker-to-microphone leakage:
+
+1. Open two HFText instances.
+2. In the TX instance, select a Windows audio output and stop its RX.
+3. In the RX instance, select `Loopback:` for that same output endpoint.
+4. Keep both instances on `Fast`, send five short and five long messages, and
+   confirm each result appears shortly after TX ends.
+5. Repeat on `Slow`.
+6. Select a different loopback endpoint and confirm the modem signal disappears;
+   then restore the correct endpoint.
+7. Return to a physical `Input:` source and confirm microphone/line capture still works.
+8. Save RX evidence and inspect duration, clipping, backlog, and accepted-frame data.
+
+Before sending audio, leave the RX instance on loopback for at least 10 seconds.
+The waterfall must continue scrolling at the normal physical-input speed. After
+the test, the saved evidence duration should approximately match elapsed RX time,
+apart from the bounded recent-audio window and short endpoint startup delay.
+
+Developers can run the optional local continuity diagnostic after building:
+
+```powershell
+build-loopback\pc-app\Release\hftext_pc_audio_input_devices_test.exe --capture-default-loopback
+```
+
+It opens the Windows default loopback for 3.25 seconds and verifies that at least
+2.5 seconds of fixed-cadence audio were delivered even when the endpoint is quiet.
+
+For an SDR test, configure the SDR to render to the selected loopback endpoint.
+Remember that other sounds rendered there are intentionally part of the capture.
 
 For each test, save RX evidence from the app. Evidence should include the recent WAV, settings, logs, `Summary CSV`, and `Accepted Frames CSV`.
 

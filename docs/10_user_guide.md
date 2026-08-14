@@ -20,7 +20,7 @@ The package includes:
 - project documentation;
 - `PACKAGE.txt` with version, build time, and git metadata.
 
-HFText 0.5.0 uses Text Codec v0.2 and is not text-compatible with 0.3.x
+HFText 0.6.0 uses Text Codec v0.2 and is not text-compatible with 0.3.x
 builds. Use the same HFText version on both ends of a test link.
 
 ## First Launch
@@ -58,7 +58,8 @@ For speaker/microphone operation, enable `Pause RX during TX` in Settings. This 
 
 ## Basic Receive
 
-1. Connect radio or SDR audio to the selected input device.
+1. Connect radio audio to an `Input:` source, or select the `Loopback:` output
+   endpoint where a Windows SDR is playing.
 2. Confirm RX is running.
 3. Tune until received tone tracks align with the yellow waterfall markers.
 4. Keep input level below clipping.
@@ -67,6 +68,23 @@ For speaker/microphone operation, enable `Pause RX during TX` in Settings. This 
 The PC message history follows the latest TX/RX entry automatically. Scroll upward when older traffic needs inspection.
 
 Blue waterfall traces are weak/normal energy, yellow indicates strong energy near saturation, and red indicates near-full-scale input blocks.
+
+### Receive Windows SDR Audio Directly
+
+Windows builds list output endpoints in Settings as `Loopback: ...`. Choose the
+same endpoint selected in the SDR application. HFText then receives the digital
+output mix directly, without requiring a speaker and microphone or a virtual
+audio cable. The waterfall continues scrolling at its normal speed during quiet
+periods; silence remains part of the receive timeline.
+
+Loopback captures every sound played on that endpoint. Silence notifications and
+unrelated applications during weak-signal tests. If HFText also transmits through
+the same endpoint, enable `Pause RX during TX` unless intentional self-reception
+is part of the test.
+
+If a saved output endpoint is disconnected, select an available source and start
+RX again. HFText retains physical `Input:` sources and falls back to the Windows
+default recording input when a saved source is unavailable at launch.
 
 ## Recommended Test Settings
 

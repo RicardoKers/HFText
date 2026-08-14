@@ -18,8 +18,16 @@ class AudioInput {
 public:
     using SamplesCallback = std::function<void(const std::vector<float>& samples)>;
 
+    enum class DeviceKind {
+        RecordingInput,
+        OutputLoopback,
+    };
+
     struct DeviceInfo {
-        unsigned int id = 0;
+        DeviceKind kind = DeviceKind::RecordingInput;
+        unsigned int waveDeviceId = 0;
+        std::string endpointId;
+        std::string persistentKey;
         std::string name;
     };
 
@@ -40,14 +48,17 @@ public:
 
     std::vector<DeviceInfo> devices() const;
     void setSamplesCallback(SamplesCallback callback);
-    void start(unsigned int deviceId, int sampleRate);
+    void start(const DeviceInfo& device, int sampleRate);
     CaptureStats stopAndSave(const std::string& path);
     bool isRecording() const;
     float level() const;
     std::string lastError() const;
 
 private:
-    void recordThread(unsigned int deviceId, int sampleRate);
+    void recordThread(DeviceInfo device, int sampleRate);
+    void recordWaveInput(unsigned int deviceId, int sampleRate);
+    void recordOutputLoopback(const std::string& endpointId, int sampleRate);
+    void deliverSamples(const std::vector<float>& samples, int sampleRate);
 
     mutable std::mutex mutex_;
     SamplesCallback samplesCallback_;
@@ -63,5 +74,6 @@ private:
     std::atomic<float> level_{0.0F};
 #ifdef _WIN32
     HWAVEIN currentHandle_ = nullptr;
+    HANDLE currentWakeEvent_ = nullptr;
 #endif
 };
