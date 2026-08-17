@@ -36,7 +36,7 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Android Operation/Settings panel split to keep normal field use less cluttered while preserving native status details.
 - Android compact Operation panel with TX/RX history, RX waterfall, Fast/Slow selector, TX symbol/duration estimate, live TX progress, message composer, Clear, and Send/Stop.
 - Android RX evidence saving to the app-specific evidence directory.
-- Android package version aligned with the shared HFText 0.6.0 application version.
+- Android package version aligned with the shared HFText 0.7.0 application version.
 - Android adaptive and legacy launcher icons derived from the PC HFText artwork.
 - Android local preference persistence for callsign, draft message, speed profile, and RX-during-TX pause state.
 - Android Settings action to reset local operator settings without clearing message history or evidence.
@@ -123,6 +123,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Chat-like Operation tab.
 - PC TX composer shortcuts: Enter sends, Shift+Enter inserts a newline, and
   Up/Down browse session TX history while preserving the current draft.
+- PC and Android RX sender highlighting populated from callsigns already in the
+  message-history buffer, without hiding other traffic.
 - Settings tab for callsign, audio devices, RX control, logs, and evidence export.
 - Fast/Slow speed profile selector in Operation.
 - Editable `hftext.ini` for advanced modem parameters.
@@ -184,8 +186,9 @@ Completed foundation:
 
 Next actions:
 
-1. Preserve the Fast/Slow target-PC and Android evidence as the performance regression
-   baseline.
+1. Preserve the documented Fast/Slow target-PC and Android metrics as the
+   performance regression baseline; raw field WAVs may be archived outside the
+   source working tree.
 2. Defer candidate/search changes and parallelism unless new field evidence
    shows a remaining performance or sensitivity problem.
 
@@ -215,8 +218,6 @@ weak-signal coverage as optimization.
 
 ## Near-Term DSP Tasks
 
-- Complete the receiver performance priority and its acceptance targets before
-  optional DSP features.
 - Validate 8-FSK with real captures before promoting it.
 - Improve frequency tolerance only from repeatable evidence.
 - Consider a lightweight frequency tracking loop if mistuning remains common.
@@ -224,6 +225,13 @@ weak-signal coverage as optimization.
 - Monitor PC live RX backlog counters and long Slow 8-FSK frequency-grid
   behavior in future field captures.
 - Keep 2-FSK as the conservative baseline until field data says otherwise.
+
+## Future Receiver Tasks
+
+- Consider automatic Fast/Slow RX selection using lightweight parallel
+  preamble/synchronization detectors before arming one full decoder. Do not try
+  one complete frame after another, and do not double continuous decoder cost
+  without new performance measurements.
 
 ## Future Protocol Tasks
 

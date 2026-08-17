@@ -64,6 +64,10 @@ The system must:
 - On PC, Enter in the TX composer sends the message, Shift+Enter inserts a
   newline, and Up/Down browse session TX message history while preserving the
   current draft.
+- PC and Android must let the operator highlight RX messages from one sender
+  selected from callsigns already present in the local message history. Other
+  traffic remains visible, TX messages are never highlighted by this control,
+  and matching is case-insensitive against the first payload token.
 - Advanced modem parameters should live in an editable `hftext.ini` file instead of cluttering normal operation.
 - Settings and logs belong in a separate Settings tab.
 - Waterfall markers, logs, and evidence export must help the operator tune and debug without overwhelming normal operation.

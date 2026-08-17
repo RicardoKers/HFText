@@ -71,7 +71,8 @@ your local amateur-radio rules, band plan, and licensing requirements.
 ## What You See
 
 - **Message history:** timestamped TX and RX messages in visually distinct
-  bubbles.
+  bubbles, with optional sender highlighting from callsigns already present in
+  the RX history.
 - **Waterfall:** a live view of received audio between 300 Hz and 3 kHz, with
   markers for the expected modem tones.
 - **Fast / Slow:** Fast occupies the channel for less time; Slow is more
@@ -105,6 +106,7 @@ Do not include private or sensitive communication in shared evidence files.
 - [Audio and DSP](docs/04_dsp_audio.md)
 - [Validation](docs/08_testes_validacao.md)
 - [Receiver Performance Plan](docs/16_receiver_performance_plan.md)
+- [HFText 0.7.0 Release Notes](docs/17_release_notes_0.7.0.md)
 - [HFText 0.6.0 Release Notes](docs/15_release_notes_0.6.0.md)
 
 Developers should also read [AGENTS.md](AGENTS.md) before changing the modem core

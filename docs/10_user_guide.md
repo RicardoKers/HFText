@@ -20,7 +20,7 @@ The package includes:
 - project documentation;
 - `PACKAGE.txt` with version, build time, and git metadata.
 
-HFText 0.6.0 uses Text Codec v0.2 and is not text-compatible with 0.3.x
+HFText 0.7.0 uses Text Codec v0.2 and is not text-compatible with 0.3.x
 builds. Use the same HFText version on both ends of a test link.
 
 ## First Launch
@@ -72,6 +72,11 @@ For speaker/microphone operation, enable `Pause RX during TX` in Settings. This 
 5. Accepted RX messages appear in the message history with a local timestamp. Explicit TX messages are recorded there too.
 
 The PC message history follows the latest TX/RX entry automatically. Scroll upward when older traffic needs inspection.
+
+Right-click the PC message history and open `Highlight sender` to choose a
+callsign already present at the beginning of an RX message. Matching received
+messages use an amber background; all other RX and TX traffic remains visible.
+Choose `All senders` to remove the highlight.
 
 Blue waterfall traces are weak/normal energy, yellow indicates strong energy near saturation, and red indicates near-full-scale input blocks.
 
@@ -127,9 +132,13 @@ Operation and Settings panels:
   evidence, and Reset local settings.
 
 Android stores the local callsign, draft message, speed profile, RX-during-TX
-pause state, and up to 100 recent TX/RX messages in app-private preferences. `Reset
+pause state, sender highlight, and up to 100 recent TX/RX messages in app-private preferences. `Reset
 local settings` in Settings restores operator settings to defaults, including
 `nocall`, but does not clear message history or saved evidence files.
+
+Use the compact `Sender` button beside Clear to select a callsign already found
+in received history. Matching RX bubbles turn amber without hiding other
+messages. Choose `All senders` to return to the normal colors.
 
 `Save RX evidence` writes recent 240 s raw and modem-input WAV files plus a TXT report.
 The TXT report includes the active RX profile and core

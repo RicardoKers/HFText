@@ -11,7 +11,7 @@ Use the latest GitHub Release assets:
   folder, and run `hftext_pc.exe`.
 - Android: download the APK and install it manually on the test device.
 
-Use the same HFText release on both ends of a link. HFText 0.6.0 uses Text Codec
+Use the same HFText release on both ends of a link. HFText 0.7.0 uses Text Codec
 v0.2, remains compatible with 0.4.0, and is not text-compatible with 0.3.x or
 earlier builds.
 

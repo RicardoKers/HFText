@@ -117,6 +117,8 @@ Normal logs are compact and timestamped. Robust-frame progress is summarized in 
 
 The message history records both explicit TX entries and accepted RX/decode entries. Each record has a `TX` or `RX` direction prefix and local date/time. TX and RX records are visually distinguished by alignment and background color. Message bubbles use most of the available width on large windows so long field traffic remains readable. Multiline messages stay inside one record, so the timestamp is not repeated in the middle of the text. The history auto-scrolls to the latest entry after new TX/RX activity; the operator can still scroll upward to inspect older traffic.
 
+The history context menu contains `Highlight sender`, populated from the first token of RX messages currently in the history. Selecting a callsign gives matching RX bubbles a muted amber background without hiding other traffic; `All senders` removes the highlight. Callsign matching is case-insensitive and never changes TX bubbles. Clearing the history also clears the active highlight.
+
 ## RX State and Session
 
 The current RX state is no longer shown as a large always-visible Settings field. It is still written to logs and evidence reports. It summarizes the most useful recent event:

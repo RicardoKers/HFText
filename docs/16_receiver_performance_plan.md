@@ -13,6 +13,10 @@ arrives.
 
 ## Evidence Behind the Priority
 
+The paths below identify the local field corpus used during development. Raw
+WAV evidence is intentionally not committed to the source repository and may be
+archived outside the working tree after its results are documented.
+
 The August 16 and 17, 2026 evidence provides both a sensitivity guardrail and
 performance stress cases:
 

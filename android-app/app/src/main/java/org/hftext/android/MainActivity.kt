@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -106,6 +109,7 @@ private const val PREF_MESSAGE = "message"
 private const val PREF_SPEED_PROFILE = "speed_profile"
 private const val PREF_PAUSE_RX_DURING_TX = "pause_rx_during_tx"
 private const val PREF_RECEIVED_MESSAGES = "received_messages"
+private const val PREF_HIGHLIGHTED_SENDER = "highlighted_sender"
 private const val DEFAULT_CALLSIGN = "nocall"
 private const val DEFAULT_MESSAGE = "Hello HFText!"
 private const val MAX_RECEIVED_MESSAGES = 100
@@ -183,6 +187,14 @@ private fun HFTextScreen(
     var receivedMessages by remember {
         mutableStateOf(readReceivedMessages(preferences.getString(PREF_RECEIVED_MESSAGES, null)))
     }
+    var highlightedSenderCallsign by remember {
+        mutableStateOf(
+            preferences.getString(PREF_HIGHLIGHTED_SENDER, null)
+                ?.trim()
+                ?.uppercase(Locale.ROOT)
+                ?.takeIf { it.isNotEmpty() }
+        )
+    }
     var hasRecordPermission by remember {
         mutableStateOf(
             context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
@@ -202,6 +214,15 @@ private fun HFTextScreen(
     }
     val lastAcceptedMessage = receivedMessages.lastOrNull {
         it.direction == MessageDirection.Incoming
+    }
+    val receivedSenderCallsigns = remember(receivedMessages) {
+        senderCallsignsFromMessages(
+            receivedMessages
+                .asSequence()
+                .filter { it.direction == MessageDirection.Incoming }
+                .map { it.text }
+                .asIterable()
+        )
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -241,6 +262,19 @@ private fun HFTextScreen(
         preferences.edit()
             .putString(PREF_RECEIVED_MESSAGES, receivedMessagesToJson(receivedMessages))
             .apply()
+    }
+
+    LaunchedEffect(highlightedSenderCallsign) {
+        preferences.edit()
+            .putString(PREF_HIGHLIGHTED_SENDER, highlightedSenderCallsign.orEmpty())
+            .apply()
+    }
+
+    LaunchedEffect(receivedSenderCallsigns, highlightedSenderCallsign) {
+        if (highlightedSenderCallsign != null
+            && highlightedSenderCallsign !in receivedSenderCallsigns) {
+            highlightedSenderCallsign = null
+        }
     }
 
     fun appendHistoryMessage(historyMessage: ReceivedMessage) {
@@ -553,6 +587,7 @@ private fun HFTextScreen(
         message = DEFAULT_MESSAGE
         selectedProfile = DEFAULT_SPEED_PROFILE
         pauseRxDuringTx = false
+        highlightedSenderCallsign = null
         txStatus = "ready"
         rxStatus = "local settings reset"
     }
@@ -625,7 +660,13 @@ private fun HFTextScreen(
                 if (selectedPanel == AndroidPanel.Operation) {
                     ReceivedMessagesPanel(
                         messages = receivedMessages,
-                        onClear = { receivedMessages = emptyList() }
+                        senderCallsigns = receivedSenderCallsigns,
+                        highlightedSenderCallsign = highlightedSenderCallsign,
+                        onHighlightedSenderChange = { highlightedSenderCallsign = it },
+                        onClear = {
+                            receivedMessages = emptyList()
+                            highlightedSenderCallsign = null
+                        }
                     )
 
                     RxWaterfall(
@@ -821,9 +862,13 @@ private fun ProfileButton(
 @Composable
 private fun ReceivedMessagesPanel(
     messages: List<ReceivedMessage>,
+    senderCallsigns: List<String>,
+    highlightedSenderCallsign: String?,
+    onHighlightedSenderChange: (String?) -> Unit,
     onClear: () -> Unit
 ) {
     val messageScrollState = rememberScrollState()
+    var senderMenuExpanded by remember { mutableStateOf(false) }
     LaunchedEffect(messages.size) {
         messageScrollState.animateScrollTo(messageScrollState.maxValue)
     }
@@ -850,6 +895,55 @@ private fun ReceivedMessagesPanel(
                 style = MaterialTheme.typography.labelLarge
             )
             Spacer(modifier = Modifier.weight(1f))
+            Box {
+                OutlinedButton(
+                    onClick = { senderMenuExpanded = true },
+                    enabled = senderCallsigns.isNotEmpty(),
+                    modifier = Modifier.height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (highlightedSenderCallsign == null) {
+                            Color.Transparent
+                        } else {
+                            Color(0xFF66531F)
+                        },
+                        contentColor = if (highlightedSenderCallsign == null) {
+                            Color(0xFFE6EDF3)
+                        } else {
+                            Color(0xFFFFE5A3)
+                        }
+                    )
+                ) {
+                    Text(
+                        highlightedSenderCallsign ?: "Sender",
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1
+                    )
+                }
+                DropdownMenu(
+                    expanded = senderMenuExpanded,
+                    onDismissRequest = { senderMenuExpanded = false },
+                    containerColor = Color(0xFF202832)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("All senders", color = Color.White) },
+                        onClick = {
+                            onHighlightedSenderChange(null)
+                            senderMenuExpanded = false
+                        }
+                    )
+                    senderCallsigns.forEach { callsign ->
+                        DropdownMenuItem(
+                            text = { Text(callsign, color = Color.White) },
+                            onClick = {
+                                onHighlightedSenderChange(callsign)
+                                senderMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.width(6.dp))
             OutlinedButton(
                 onClick = onClear,
                 enabled = messages.isNotEmpty(),
@@ -878,7 +972,11 @@ private fun ReceivedMessagesPanel(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 messages.forEach { message ->
-                    MessageBubble(message)
+                    MessageBubble(
+                        message = message,
+                        highlighted = message.direction == MessageDirection.Incoming
+                            && messageMatchesSender(message.text, highlightedSenderCallsign)
+                    )
                 }
             }
         }
@@ -886,7 +984,7 @@ private fun ReceivedMessagesPanel(
 }
 
 @Composable
-private fun MessageBubble(message: ReceivedMessage) {
+private fun MessageBubble(message: ReceivedMessage, highlighted: Boolean) {
     val outgoing = message.direction == MessageDirection.Outgoing
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -894,7 +992,11 @@ private fun MessageBubble(message: ReceivedMessage) {
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(0.88f),
-            color = if (outgoing) Color(0xFF275B7A) else Color(0xFF151D27),
+            color = when {
+                outgoing -> Color(0xFF275B7A)
+                highlighted -> Color(0xFF66531F)
+                else -> Color(0xFF151D27)
+            },
             shape = RoundedCornerShape(8.dp)
         ) {
             Column(
@@ -903,7 +1005,7 @@ private fun MessageBubble(message: ReceivedMessage) {
             ) {
                 Text(
                     text = "${messageDirectionLabel(message.direction)} ${message.clockText}",
-                    color = Color(0xFFB7C8D9),
+                    color = if (highlighted) Color(0xFFFFE5A3) else Color(0xFFB7C8D9),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1571,7 +1673,7 @@ private fun previewSnapshot(): HFTextNativeSnapshot {
     return HFTextNativeSnapshot(
         nativeAvailable = true,
         bridgeStatus = "JNI OK via C ABI",
-        core = "HFText 0.6.0 (experimental)",
+        core = "HFText 0.7.0 (experimental)",
         protocol = "HFText Basic v0.1 + Text Codec v0.2",
         slowProfile = "8-FSK, 0.300 s/symbol, 1050-1960 Hz",
         fastProfile = "8-FSK, 0.100 s/symbol, 1050-1960 Hz"

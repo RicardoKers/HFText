@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "MessageSenderHighlight.h"
 #include "TxMessageEdit.h"
 #include "hftext_app_rx.h"
 #include "hftext_audio_stats.h"
@@ -569,9 +570,35 @@ MainWindow::MainWindow(QWidget* parent)
     connect(defaultSettingsButton_, &QPushButton::clicked, this, &MainWindow::applyDefaultSettings);
     connect(messageHistoryScroll_, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
         QMenu menu(this);
+        QMenu* highlightMenu = menu.addMenu("Highlight sender");
+        QAction* allSendersAction = highlightMenu->addAction("All senders");
+        allSendersAction->setCheckable(true);
+        allSendersAction->setChecked(highlightedSenderCallsign_.isEmpty());
+
+        const QStringList callsigns = receivedSenderCallsigns();
+        if (callsigns.isEmpty()) {
+            QAction* emptyAction = highlightMenu->addAction("No RX callsigns in history");
+            emptyAction->setEnabled(false);
+        } else {
+            highlightMenu->addSeparator();
+            for (const QString& callsign : callsigns) {
+                QAction* callsignAction = highlightMenu->addAction(callsign);
+                callsignAction->setCheckable(true);
+                callsignAction->setChecked(
+                    callsign.compare(highlightedSenderCallsign_, Qt::CaseInsensitive) == 0
+                );
+                callsignAction->setData(callsign);
+            }
+        }
+
+        menu.addSeparator();
         QAction* clearAction = menu.addAction("Clear history");
         QAction* selected = menu.exec(messageHistoryScroll_->mapToGlobal(pos));
-        if (selected == clearAction) {
+        if (selected == allSendersAction) {
+            setHighlightedSender({});
+        } else if (selected != nullptr && !selected->data().toString().isEmpty()) {
+            setHighlightedSender(selected->data().toString());
+        } else if (selected == clearAction) {
             clearReceivedText();
         }
     });
@@ -871,6 +898,7 @@ void MainWindow::stopReceive() {
 
 void MainWindow::clearReceivedText() {
     messageHistory_.clear();
+    highlightedSenderCallsign_.clear();
     refreshMessageHistoryText();
 }
 
@@ -1172,6 +1200,25 @@ void MainWindow::appendMessageHistory(const QString& direction, const QString& t
     if (messageHistory_.size() > kMaxMessageHistoryEntries) {
         messageHistory_.erase(messageHistory_.begin());
     }
+    if (!highlightedSenderCallsign_.isEmpty()
+        && !receivedSenderCallsigns().contains(highlightedSenderCallsign_, Qt::CaseInsensitive)) {
+        highlightedSenderCallsign_.clear();
+    }
+    refreshMessageHistoryText();
+}
+
+QStringList MainWindow::receivedSenderCallsigns() const {
+    QStringList messages;
+    for (const auto& entry : messageHistory_) {
+        if (entry.direction.compare("RX", Qt::CaseInsensitive) == 0) {
+            messages.push_back(entry.text);
+        }
+    }
+    return hftext_pc::senderCallsignsFromMessages(messages);
+}
+
+void MainWindow::setHighlightedSender(const QString& callsign) {
+    highlightedSenderCallsign_ = callsign.trimmed().toUpper();
     refreshMessageHistoryText();
 }
 
@@ -1201,6 +1248,8 @@ void MainWindow::refreshMessageHistoryText() {
 
     for (const auto& entry : messageHistory_) {
         const bool tx = entry.direction.compare("TX", Qt::CaseInsensitive) == 0;
+        const bool highlighted = !tx
+            && hftext_pc::messageMatchesSender(entry.text, highlightedSenderCallsign_);
 
         auto* row = new QWidget(messageHistoryContainer_);
         row->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -1215,7 +1264,8 @@ void MainWindow::refreshMessageHistoryText() {
         bubble->setFixedWidth(bubbleWidth);
         bubble->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         bubble->setText(
-            "<span style=\"color: #d5e8f4; font-size: 8pt; font-weight: 600;\">"
+            QString("<span style=\"color: %1; font-size: 8pt; font-weight: 600;\">")
+                .arg(highlighted ? "#ffe5a3" : "#d5e8f4")
             + entry.direction.toHtmlEscaped()
             + " "
             + entry.timestampDisplay.toHtmlEscaped()
@@ -1227,7 +1277,9 @@ void MainWindow::refreshMessageHistoryText() {
         bubble->setStyleSheet(
             tx
                 ? "QLabel { background-color: #2f6f93; border: 1px solid #3f86ad; padding: 7px; }"
-                : "QLabel { background-color: #111823; border: 1px solid #273241; padding: 7px; }"
+                : highlighted
+                    ? "QLabel { background-color: #66531f; border: 1px solid #a98d36; padding: 7px; }"
+                    : "QLabel { background-color: #111823; border: 1px solid #273241; padding: 7px; }"
         );
 
         if (tx) {

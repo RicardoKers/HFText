@@ -16,6 +16,7 @@
 #include <deque>
 #include <mutex>
 #include <QString>
+#include <QStringList>
 #include <thread>
 #include <vector>
 
@@ -67,6 +68,8 @@ private:
     void appendLog(const QString& text);
     void appendReceivedLine(const QString& text);
     void appendMessageHistory(const QString& direction, const QString& text);
+    QStringList receivedSenderCallsigns() const;
+    void setHighlightedSender(const QString& callsign);
     void refreshMessageHistoryText();
     void scrollMessageHistoryToBottom();
     QString messageHistoryPlainText() const;
@@ -194,6 +197,7 @@ private:
     int lastAcceptedRxOffsetsTried_ = 0;
     std::vector<AcceptedRxFrame> acceptedRxFrames_;
     std::vector<MessageHistoryEntry> messageHistory_;
+    QString highlightedSenderCallsign_;
     int rxSessionSyncCount_ = 0;
     int rxSessionLengthCount_ = 0;
     int rxSessionRejectedCount_ = 0;

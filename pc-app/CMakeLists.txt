@@ -18,6 +18,8 @@ add_executable(hftext_pc WIN32
     AudioSampleConverter.h
     MainWindow.cpp
     MainWindow.h
+    MessageSenderHighlight.cpp
+    MessageSenderHighlight.h
     ModemController.cpp
     ModemController.h
     TxMessageEdit.cpp
@@ -80,6 +82,16 @@ if(HFTEXT_BUILD_CORE_TESTS)
     set_tests_properties(hftext_pc_tx_message_edit_test PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    add_executable(hftext_pc_message_sender_highlight_test
+        MessageSenderHighlight.cpp
+        MessageSenderHighlight.h
+        tests/test_message_sender_highlight.cpp
+    )
+    target_compile_features(hftext_pc_message_sender_highlight_test PRIVATE cxx_std_17)
+    target_include_directories(hftext_pc_message_sender_highlight_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(hftext_pc_message_sender_highlight_test PRIVATE Qt6::Core)
+    add_test(NAME hftext_pc_message_sender_highlight_test COMMAND hftext_pc_message_sender_highlight_test)
 endif()
 
 if(MSVC)
@@ -98,6 +110,11 @@ if(MSVC)
     endif()
     if(TARGET hftext_pc_tx_message_edit_test)
         set_target_properties(hftext_pc_tx_message_edit_test PROPERTIES
+            MSVC_DEBUG_INFORMATION_FORMAT Embedded
+        )
+    endif()
+    if(TARGET hftext_pc_message_sender_highlight_test)
+        set_target_properties(hftext_pc_message_sender_highlight_test PROPERTIES
             MSVC_DEBUG_INFORMATION_FORMAT Embedded
         )
     endif()

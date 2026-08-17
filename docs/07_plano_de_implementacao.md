@@ -37,35 +37,26 @@
 
 ## Current Focus
 
-The current focus is receiver compute-cost reduction, based on field evidence
-from a second-generation Core i5 notebook:
+The receiver compute-cost priority is complete. Fast and Slow remained ahead of
+real time during long tests on a second-generation Core i5 notebook, with zero
+sample drops and substantially lower CPU use. The measurements and guardrails
+remain documented in `docs/16_receiver_performance_plan.md`.
 
-- establish structured Release-build performance measurements;
-- keep continuous RX ahead of real time under noise and false candidates;
-- preserve the accepted very-weak-signal regression capture;
-- reduce message latency and prevent pending-audio growth on older PCs;
-- continue field validation while the receiver changes remain behaviorally
-  compatible.
-
-The detailed sequence and exit criteria are in
-`docs/16_receiver_performance_plan.md`.
+The current focus is field validation, release quality, and small operational
+improvements that do not silently change the on-air protocol.
 
 ## Near-Term Tasks
 
-1. Record the instrumented Release baseline on the old notebook.
-2. Profile the tone-demodulation kernel identified by the development-PC corpus.
-3. Remove the largest measured repeated tone-analysis, allocation, or setup costs
-   and verify exact corpus parity after each change.
-4. Improve candidate/search efficiency only with weak-signal regression proof.
-5. Validate 30-minute continuous RX, Fast/Slow latency, and zero sample drops on
-   the target notebook.
-6. Continue representative radio/SDR and Android regression tests.
-7. Resume lower-priority UI refinement after the performance exit criteria are
-   met or a critical usability defect requires attention.
+1. Continue representative radio/SDR and Android regression tests.
+2. Preserve documented weak-signal and performance metrics when changing DSP.
+3. Keep PC and Android operation ergonomics aligned where practical.
+4. Improve candidate/search behavior only with repeatable field evidence.
+5. Keep Windows and Android release packaging reproducible.
 
 ## Future Tasks
 
 - Automatic frequency/tone tracking.
+- Automatic Fast/Slow receive-profile detection from the known preamble.
 - Automatic gain or level guidance.
 - Further Android conversation UI refinements after the TX/RX chat-style history is field-tested.
 - Replay selected evidence files from the app.
