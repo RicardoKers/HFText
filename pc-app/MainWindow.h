@@ -22,6 +22,7 @@
 class QLineEdit;
 class QLabel;
 class QPlainTextEdit;
+class TxMessageEdit;
 class QPushButton;
 class QCheckBox;
 class QComboBox;
@@ -156,7 +157,7 @@ private:
     QString inputSourceWarning_;
     hftext::AppModemProfiles modemProfiles_;
     QLineEdit* callsignEdit_ = nullptr;
-    QPlainTextEdit* messageEdit_ = nullptr;
+    TxMessageEdit* messageEdit_ = nullptr;
     QComboBox* speedProfileCombo_ = nullptr;
     QComboBox* inputDeviceCombo_ = nullptr;
     QComboBox* outputDeviceCombo_ = nullptr;

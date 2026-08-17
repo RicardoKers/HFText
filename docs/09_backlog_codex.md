@@ -121,6 +121,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 
 - Qt 6 Widgets app.
 - Chat-like Operation tab.
+- PC TX composer shortcuts: Enter sends, Shift+Enter inserts a newline, and
+  Up/Down browse session TX history while preserving the current draft.
 - Settings tab for callsign, audio devices, RX control, logs, and evidence export.
 - Fast/Slow speed profile selector in Operation.
 - Editable `hftext.ini` for advanced modem parameters.

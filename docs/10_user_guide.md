@@ -50,9 +50,15 @@ Advanced modem parameters are stored in `hftext.ini`, created automatically next
 4. Return to Operation.
 5. Select `Fast` or `Slow`.
 6. Type a message.
-7. Press the send button.
+7. Press the send button or Enter.
 
-Transmission only starts after pressing the send button. While TX is active, the same button stops/cancels TX.
+On PC, Enter sends the current draft and Shift+Enter inserts a newline. The Up
+arrow recalls earlier messages transmitted during the current session; continue
+with Up for older messages and use Down to move forward and restore the draft
+that was present before browsing history.
+
+Transmission only starts after an explicit send-button or Enter action. While
+TX is active, the same button stops/cancels TX.
 
 For speaker/microphone operation, enable `Pause RX during TX` in Settings. This prevents HFText from decoding its own transmitted audio. A previously active RX session resumes after TX completes or is cancelled; the option does not start RX when RX was already stopped. Waterfall and evidence capture continue during the pause. The option is disabled by default.
 

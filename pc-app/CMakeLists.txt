@@ -20,6 +20,8 @@ add_executable(hftext_pc WIN32
     MainWindow.h
     ModemController.cpp
     ModemController.h
+    TxMessageEdit.cpp
+    TxMessageEdit.h
     WaterfallWidget.cpp
     WaterfallWidget.h
     hftext_pc.rc
@@ -65,6 +67,19 @@ if(HFTEXT_BUILD_CORE_TESTS)
         target_link_libraries(hftext_pc_audio_input_devices_test PRIVATE ole32 uuid winmm)
     endif()
     add_test(NAME hftext_pc_audio_input_devices_test COMMAND hftext_pc_audio_input_devices_test)
+
+    add_executable(hftext_pc_tx_message_edit_test
+        TxMessageEdit.cpp
+        TxMessageEdit.h
+        tests/test_tx_message_edit.cpp
+    )
+    target_compile_features(hftext_pc_tx_message_edit_test PRIVATE cxx_std_17)
+    target_include_directories(hftext_pc_tx_message_edit_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(hftext_pc_tx_message_edit_test PRIVATE Qt6::Widgets)
+    add_test(NAME hftext_pc_tx_message_edit_test COMMAND hftext_pc_tx_message_edit_test)
+    set_tests_properties(hftext_pc_tx_message_edit_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
 endif()
 
 if(MSVC)
@@ -78,6 +93,11 @@ if(MSVC)
     endif()
     if(TARGET hftext_pc_audio_input_devices_test)
         set_target_properties(hftext_pc_audio_input_devices_test PROPERTIES
+            MSVC_DEBUG_INFORMATION_FORMAT Embedded
+        )
+    endif()
+    if(TARGET hftext_pc_tx_message_edit_test)
+        set_target_properties(hftext_pc_tx_message_edit_test PROPERTIES
             MSVC_DEBUG_INFORMATION_FORMAT Embedded
         )
     endif()

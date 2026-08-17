@@ -7,7 +7,7 @@
 <p align="center"><strong>Short text messages over HF radio, carried as audio.</strong></p>
 
 HFText turns a Windows PC or Android phone into a digital text modem for HF
-radio. Type a short message, press Send, and HFText converts it into audio tones.
+radio. Type a short message, press Send or Enter, and HFText converts it into audio tones.
 Another HFText device listens to the receiver audio and displays the decoded
 message with a timestamp.
 
@@ -41,7 +41,7 @@ The easiest first test uses a speaker and microphone:
    Android provides `Start RX capture` in Settings.
 4. Select the same speed, `Fast` or `Slow`, on both devices.
 5. Place the receiving microphone near the transmitting speaker.
-6. Type a short message such as `hello` and press Send.
+6. Type a short message such as `hello` and press Send or Enter.
 7. The decoded message should appear in the receiving history.
 
 When a device can hear its own speaker, enable `Pause RX during TX` in Settings
@@ -56,7 +56,7 @@ HFText works through the radio's normal audio path:
 3. Select the same `Fast` or `Slow` profile at both ends.
 4. Tune until the received tones align with the yellow markers in the waterfall.
 5. Keep the signal visible without driving the input into the red clipping range.
-6. Type the message and press Send.
+6. Type the message and press Send or Enter.
 
 On Windows, an SDR that plays through the PC can be received digitally by
 selecting `Loopback: <output device>` as the HFText audio input. Select the same
@@ -65,7 +65,7 @@ that endpoint, including notification sounds and other applications. Its receive
 timeline remains active through quiet periods, so the waterfall and decoder keep
 running even when the SDR output is temporarily silent.
 
-Every transmission requires an explicit press of the Send button. Always follow
+Every transmission requires an explicit Send action from the button or keyboard. Always follow
 your local amateur-radio rules, band plan, and licensing requirements.
 
 ## What You See

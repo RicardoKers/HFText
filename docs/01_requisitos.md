@@ -61,6 +61,9 @@ The system must:
 - The same send button may cancel TX while audio is playing.
 - Settings should provide an optional RX-during-TX pause for speaker/microphone operation; it must resume only if RX was active before TX.
 - A Fast/Slow speed selector should be available in the Operation tab.
+- On PC, Enter in the TX composer sends the message, Shift+Enter inserts a
+  newline, and Up/Down browse session TX message history while preserving the
+  current draft.
 - Advanced modem parameters should live in an editable `hftext.ini` file instead of cluttering normal operation.
 - Settings and logs belong in a separate Settings tab.
 - Waterfall markers, logs, and evidence export must help the operator tune and debug without overwhelming normal operation.

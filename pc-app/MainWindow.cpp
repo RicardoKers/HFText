@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "TxMessageEdit.h"
 #include "hftext_app_rx.h"
 #include "hftext_audio_stats.h"
 #include "hftext_encoder.h"
@@ -444,7 +445,7 @@ MainWindow::MainWindow(QWidget* parent)
     operationLayout->addWidget(txProgressBar_);
 
     auto* composerLayout = new QHBoxLayout();
-    messageEdit_ = new QPlainTextEdit(this);
+    messageEdit_ = new TxMessageEdit(this);
     messageEdit_->setPlaceholderText("Message");
     messageEdit_->setMinimumHeight(44);
     messageEdit_->setMaximumHeight(64);
@@ -559,6 +560,7 @@ MainWindow::MainWindow(QWidget* parent)
     applySelectedSpeedProfile();
 
     connect(transmitButton_, &QPushButton::clicked, this, &MainWindow::transmitWav);
+    connect(messageEdit_, &TxMessageEdit::sendRequested, this, &MainWindow::transmitWav);
     connect(startReceiveButton_, &QPushButton::clicked, this, &MainWindow::startReceive);
     connect(stopReceiveButton_, &QPushButton::clicked, this, &MainWindow::stopReceive);
     connect(saveLogButton_, &QPushButton::clicked, this, &MainWindow::saveLog);
@@ -709,6 +711,7 @@ void MainWindow::transmitWav() {
         const unsigned int deviceId = outputDeviceCombo_->currentData().toUInt();
         pauseReceiveForTransmit();
         audioOutput_.playSamplesAsync(std::move(audio), config.sampleRate, deviceId);
+        messageEdit_->rememberSentMessage(QString::fromUtf8(message));
         txProgressBar_->setValue(0);
         setTransmitButtonTransmitting(true);
         txProgressTimer_->start();
