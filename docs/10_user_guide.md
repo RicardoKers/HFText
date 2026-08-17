@@ -164,3 +164,6 @@ hftext_stream_wav.exe --verbose test.wav
 ```
 
 Use `--version` on any CLI tool to print version and protocol information.
+Developers can add `--metrics-json metrics.json` to `hftext_stream_wav.exe` for
+a structured receiver performance report; this does not change the WAV or the
+decoded payload.

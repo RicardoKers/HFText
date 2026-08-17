@@ -104,6 +104,7 @@ Do not include private or sensitive communication in shared evidence files.
 - [Architecture](docs/02_arquitetura.md)
 - [Audio and DSP](docs/04_dsp_audio.md)
 - [Validation](docs/08_testes_validacao.md)
+- [Receiver Performance Plan](docs/16_receiver_performance_plan.md)
 - [HFText 0.6.0 Release Notes](docs/15_release_notes_0.6.0.md)
 
 Developers should also read [AGENTS.md](AGENTS.md) before changing the modem core

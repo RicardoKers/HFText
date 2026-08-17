@@ -270,6 +270,7 @@ if(HFTEXT_CORE_BUILD_TESTS)
             --symbol-duration 0.01
             --f0 1000
             --f1 2000
+            --metrics-json "$<TARGET_FILE_DIR:hftext_stream_wav>/ctest_stream_metrics.json"
             "$<TARGET_FILE_DIR:hftext_tx_wav>/ctest_roundtrip.wav"
     )
     add_test(

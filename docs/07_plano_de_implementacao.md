@@ -37,23 +37,31 @@
 
 ## Current Focus
 
-The current focus is field validation and operator usability:
+The current focus is receiver compute-cost reduction, based on field evidence
+from a second-generation Core i5 notebook:
 
-- compare 2-FSK, 4-FSK, and 8-FSK with real radio/SDR captures;
-- keep continuous RX responsive under noise and false candidates;
-- improve diagnostics without cluttering normal operation;
-- package repeatable Windows releases for testing on multiple computers.
+- establish structured Release-build performance measurements;
+- keep continuous RX ahead of real time under noise and false candidates;
+- preserve the accepted very-weak-signal regression capture;
+- reduce message latency and prevent pending-audio growth on older PCs;
+- continue field validation while the receiver changes remain behaviorally
+  compatible.
+
+The detailed sequence and exit criteria are in
+`docs/16_receiver_performance_plan.md`.
 
 ## Near-Term Tasks
 
-1. Validate 8-FSK in real HF/SDR captures.
-2. Compare symbol durations such as 0.1 s, 0.3 s, and 0.5 s in each modulation mode.
-3. Review field evidence CSVs for acceptance rate, quality, and failure modes.
-4. Improve frequency/timing tolerance only when field logs show a repeatable weakness.
-5. Keep the PC interface polished and simple.
-6. Refresh release packages after meaningful user-visible changes.
-7. Keep the user guide aligned with the packaged interface.
-8. Keep growing Android around the C ABI only as each capability is needed.
+1. Record the instrumented Release baseline on the old notebook.
+2. Profile the tone-demodulation kernel identified by the development-PC corpus.
+3. Remove the largest measured repeated tone-analysis, allocation, or setup costs
+   and verify exact corpus parity after each change.
+4. Improve candidate/search efficiency only with weak-signal regression proof.
+5. Validate 30-minute continuous RX, Fast/Slow latency, and zero sample drops on
+   the target notebook.
+6. Continue representative radio/SDR and Android regression tests.
+7. Resume lower-priority UI refinement after the performance exit criteria are
+   met or a critical usability defect requires attention.
 
 ## Future Tasks
 

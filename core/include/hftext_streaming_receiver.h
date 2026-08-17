@@ -36,6 +36,31 @@ struct StreamingReceiverEvent {
     float latencySeconds = 0.0F;
 };
 
+struct StreamingReceiverMetrics {
+    std::uint64_t pushCalls = 0;
+    std::uint64_t samplesPushed = 0;
+    std::uint64_t phaseSymbolsProcessed = 0;
+    std::uint64_t bitDecisionsProduced = 0;
+    std::uint64_t syncPositionsExamined = 0;
+    std::uint64_t syncPatternMatches = 0;
+    std::uint64_t rejectedSyncCacheHits = 0;
+    std::uint64_t physicalLengthAttempts = 0;
+    std::uint64_t physicalLengthValid = 0;
+    std::uint64_t physicalLengthInvalid = 0;
+    std::uint64_t frameWaitingChecks = 0;
+    std::uint64_t robustDecodeAttempts = 0;
+    std::uint64_t validFrameCandidates = 0;
+    std::uint64_t rejectedFrameCandidates = 0;
+    std::uint64_t framesDecoded = 0;
+    std::uint64_t demodulationTimeNs = 0;
+    std::uint64_t frameSearchTimeNs = 0;
+    std::uint64_t robustDecodeTimeNs = 0;
+    std::uint64_t totalPushTimeNs = 0;
+    std::uint64_t maxPushTimeNs = 0;
+    std::uint64_t phaseCount = 0;
+    bool timingEnabled = false;
+};
+
 class StreamingReceiver {
 public:
     explicit StreamingReceiver(const ModemConfig& config = ModemConfig{});
@@ -46,6 +71,10 @@ public:
     void reset();
     std::vector<DecodeResult> pushSamples(const std::vector<float>& samples);
     std::vector<StreamingReceiverEvent> takeEvents();
+    void setPerformanceTimingEnabled(bool enabled);
+    bool performanceTimingEnabled() const;
+    void resetMetrics();
+    StreamingReceiverMetrics metrics() const;
 
 private:
     struct EventKey {
@@ -88,6 +117,8 @@ private:
     std::vector<PhaseState> phases_;
     std::vector<StreamingReceiverEvent> events_;
     std::set<EventKey> reportedEvents_;
+    StreamingReceiverMetrics metrics_;
+    bool performanceTimingEnabled_ = false;
 };
 
 }  // namespace hftext

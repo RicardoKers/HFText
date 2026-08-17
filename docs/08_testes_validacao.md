@@ -302,6 +302,92 @@ python python-sim\field_replay.py --input-dir logs --rx-exe build-qt15\core\Rele
 
 The summary parser accepts both current English evidence markers and older Portuguese markers.
 
+## Receiver Performance Validation
+
+Receiver performance is a correctness property for continuous operation, not
+only a speed comparison. A build that eventually decodes a WAV but falls behind
+live audio is not acceptable for unattended RX.
+
+The benchmark corpus, metrics, target hardware, hashes, and phased acceptance
+criteria are defined in `docs/16_receiver_performance_plan.md`. Preserve the
+August 16 and 17, 2026 WAVs under local `Evidence/` storage and identify them by
+the hashes in that plan.
+
+Every receiver optimization must compare a Release build before and after the
+change and record:
+
+- audio duration, wall time, and offline real-time factor;
+- captured, processed, current/peak pending, and dropped audio;
+- accepted payloads and acceptance latency;
+- sync, `PHYS_LENGTH`, Viterbi, CRC, and payload candidate counts;
+- CPU model, logical cores, power mode, profile, and detailed-log state.
+
+The minimum regression set is the very-weak accepted frame, both 300-second old
+notebook captures, the long-message old notebook capture, synthetic short and
+127-symbol Fast/Slow frames, corrupt/partial frames, and continuous channel
+noise. Run the 30-minute live/corpus loop on the old notebook before declaring
+the performance phase complete.
+
+Replay an evidence directory through the instrumented streaming receiver:
+
+```powershell
+python -B python-sim\receiver_benchmark.py `
+  --input-dir Evidence `
+  --stream-exe build-performance\core\Release\hftext_stream_wav.exe
+```
+
+The runner writes `logs/receiver_benchmark.csv` and one JSON report per case
+under `logs/receiver_benchmark_metrics/` by default. It prefers a WAV beside the
+evidence TXT, even when the TXT contains an absolute path from another PC.
+
+Measure one WAV directly when a corpus report is not needed:
+
+```powershell
+hftext_stream_wav.exe --mode 8fsk --symbol-duration 0.1 `
+  --f0 1050 --f1 1180 --metrics-json metrics.json capture.wav
+```
+
+PC evidence now includes captured and processed audio durations, the active
+worker block, session processing rate, decoder real-time factor, core workload
+counters, and optional core stage timing. Stage timing is enabled with
+`Detailed RX log`; ordinary RX keeps only the lower-cost counters and total
+decoder processing time.
+
+The August 17 old-notebook baseline is a required regression case: its live
+receiver processed only `0.724x` real time, accumulated `119.80 s` pending, and
+dropped `453.60 s` during a 34-minute session. Offline replay recovers all five
+transmissions. Optimized builds must recover those same five payloads and then
+pass the same-machine live no-drop test.
+
+The first optimized Fast-profile run passed that test over `2,039.60 s`:
+captured and processed durations matched, peak pending was `0.10 s`, no samples
+were dropped, decoder headroom was `4.009x`, and all nine transmissions were
+accepted. Five accepted payloads used the maximum 127-symbol length. Observed
+process CPU fell from about `43%` to `23-25%` on the same notebook.
+
+The optimized Slow-profile run also passed over `3,401.90 s`: seven frames were
+accepted, including three 127-symbol payloads, decoder headroom was `3.303x`,
+peak pending remained `0.10 s`, and no audio was dropped. The operator observed
+immediate presentation, `23-26%` CPU, and stable `196 MB` RAM. Its saved final
+window independently replayed both contained frames. Fast and Slow target-PC
+performance validation is complete.
+
+The rebuilt Android shared core accepted two Fast and two Slow transmissions,
+with one short and one 127-symbol payload in each profile. Independent C++
+streaming replay recovered all four saved modem WAV frames. The Fast capture
+replayed at `21.504x` real time and the Slow capture at `22.024x`, completing the
+cross-platform performance guardrail.
+
+Android evidence level fields must summarize the complete saved raw/modem
+window, not only the most recent live statistics block. This keeps exported
+peak, clipping, and effective RMS gain meaningful when evidence is saved during
+post-frame silence.
+
+On-device verification after this correction reported a `23.21 s` saved window
+with `43.0%` raw/modem peak, zero clipping, effective RMS gain `3.9x`, and an
+accepted Fast frame with core latency rounded to `0.00 s`. These values matched
+the visibly strong waterfall signal.
+
 ## Acceptance Criteria
 
 A receive test is successful only when:
@@ -315,6 +401,10 @@ A receive test is successful only when:
 - the displayed text matches the transmitted payload.
 
 No message should be shown as accepted without CRC and payload validation.
+
+For continuous RX performance, success additionally requires no dropped audio,
+no sustained pending-queue growth, exact benchmark payload parity, and the
+real-time/latency targets in `docs/16_receiver_performance_plan.md`.
 
 ## Manual Release Smoke Test
 

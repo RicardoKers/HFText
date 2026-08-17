@@ -91,6 +91,18 @@ int main() {
         assert(fsk8Decisions[index].quality > 0.9F);
     }
 
+    // Exercise long 48 kHz windows so oscillator recurrence drift cannot alter
+    // the tone decision used by the field profiles.
+    const std::vector<std::uint8_t> longWindow8FskBits = {
+        1, 1, 1,
+        0, 0, 0,
+        1, 0, 1,
+        0, 1, 0,
+    };
+    audio = hftext::modulateBits8Fsk(longWindow8FskBits, 48000, 0.5F, 1050.0F, 1180.0F, 0.8F);
+    decoded = hftext::demodulateBits8Fsk(audio, 48000, 0.5F, 1050.0F, 1180.0F);
+    assert(decoded == longWindow8FskBits);
+
     std::uint32_t noiseState = 0xA53C19D2U;
     std::vector<float> noiseOnly(800);
     for (auto& sample : noiseOnly) {

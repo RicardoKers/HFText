@@ -1,6 +1,7 @@
 #include "hftext_demodulator.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -9,10 +10,25 @@ namespace hftext {
 namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr std::size_t kMaxToneCount = 8;
 
 struct SymbolMetrics {
-    std::vector<double> energies;
+    std::array<double, kMaxToneCount> energies{};
+    int tones = 0;
     double power = 0.0;
+};
+
+struct ToneOscillator {
+    double cosine = 1.0;
+    double sine = 0.0;
+    double cosineStep = 1.0;
+    double sineStep = 0.0;
+
+    void advance() {
+        const double nextCosine = cosine * cosineStep - sine * sineStep;
+        sine = sine * cosineStep + cosine * sineStep;
+        cosine = nextCosine;
+    }
 };
 
 int samplesPerSymbol(int sampleRate, float symbolDurationSec) {
@@ -59,13 +75,16 @@ double toneEnergyWindow(
 ) {
     double inPhase = 0.0;
     double quadrature = 0.0;
+    const double phaseStep = 2.0 * kPi * frequencyHz / sampleRate;
+    ToneOscillator oscillator;
+    oscillator.cosineStep = std::cos(phaseStep);
+    oscillator.sineStep = std::sin(phaseStep);
 
     for (std::size_t index = 0; index < count; ++index) {
-        const double t = static_cast<double>(index) / sampleRate;
-        const double phase = 2.0 * kPi * frequencyHz * t;
         const double sample = samples[start + index];
-        inPhase += sample * std::cos(phase);
-        quadrature += sample * std::sin(phase);
+        inPhase += sample * oscillator.cosine;
+        quadrature += sample * oscillator.sine;
+        oscillator.advance();
     }
 
     return inPhase * inPhase + quadrature * quadrature;
@@ -78,56 +97,69 @@ SymbolMetrics symbolMetricsWindow(
     const ModemConfig& config
 ) {
     const int tones = toneCount(config.modulationMode);
-    std::vector<double> inPhase(static_cast<std::size_t>(tones), 0.0);
-    std::vector<double> quadrature(static_cast<std::size_t>(tones), 0.0);
+    std::array<double, kMaxToneCount> inPhase{};
+    std::array<double, kMaxToneCount> quadrature{};
+    std::array<ToneOscillator, kMaxToneCount> oscillators{};
+    for (int tone = 0; tone < tones; ++tone) {
+        const double phaseStep = 2.0 * kPi * modulationToneFrequencyHz(config, tone) / config.sampleRate;
+        auto& oscillator = oscillators[static_cast<std::size_t>(tone)];
+        oscillator.cosineStep = std::cos(phaseStep);
+        oscillator.sineStep = std::sin(phaseStep);
+    }
     double power = 0.0;
 
     for (std::size_t index = 0; index < count; ++index) {
-        const double t = static_cast<double>(index) / config.sampleRate;
         const double sample = samples[start + index];
         for (int tone = 0; tone < tones; ++tone) {
-            const double phase = 2.0 * kPi * modulationToneFrequencyHz(config, tone) * t;
-            inPhase[static_cast<std::size_t>(tone)] += sample * std::cos(phase);
-            quadrature[static_cast<std::size_t>(tone)] += sample * std::sin(phase);
+            const auto toneIndex = static_cast<std::size_t>(tone);
+            auto& oscillator = oscillators[toneIndex];
+            inPhase[toneIndex] += sample * oscillator.cosine;
+            quadrature[toneIndex] += sample * oscillator.sine;
+            oscillator.advance();
         }
         power += sample * sample;
     }
 
-    std::vector<double> energies;
-    energies.reserve(static_cast<std::size_t>(tones));
+    SymbolMetrics metrics;
+    metrics.tones = tones;
+    metrics.power = power;
     for (int tone = 0; tone < tones; ++tone) {
         const auto index = static_cast<std::size_t>(tone);
-        energies.push_back(inPhase[index] * inPhase[index] + quadrature[index] * quadrature[index]);
+        metrics.energies[index] = inPhase[index] * inPhase[index] + quadrature[index] * quadrature[index];
     }
 
-    return {std::move(energies), power};
+    return metrics;
 }
 
 std::size_t bestToneIndex(const SymbolMetrics& metrics) {
-    if (metrics.energies.empty()) {
+    if (metrics.tones <= 0) {
         return 0;
     }
     return static_cast<std::size_t>(
-        std::distance(metrics.energies.begin(), std::max_element(metrics.energies.begin(), metrics.energies.end()))
+        std::distance(
+            metrics.energies.begin(),
+            std::max_element(metrics.energies.begin(), metrics.energies.begin() + metrics.tones)
+        )
     );
 }
 
 double totalToneEnergy(const SymbolMetrics& metrics) {
     double total = 0.0;
-    for (double energy : metrics.energies) {
-        total += energy;
+    for (int tone = 0; tone < metrics.tones; ++tone) {
+        total += metrics.energies[static_cast<std::size_t>(tone)];
     }
     return total;
 }
 
 double symbolSeparation(const SymbolMetrics& metrics) {
-    if (metrics.energies.empty()) {
+    if (metrics.tones <= 0) {
         return 0.0;
     }
 
     double best = 0.0;
     double second = 0.0;
-    for (double energy : metrics.energies) {
+    for (int tone = 0; tone < metrics.tones; ++tone) {
+        const double energy = metrics.energies[static_cast<std::size_t>(tone)];
         if (energy >= best) {
             second = best;
             best = energy;

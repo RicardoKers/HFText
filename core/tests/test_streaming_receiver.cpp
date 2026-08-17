@@ -98,6 +98,7 @@ int main() {
     const auto audio = hftext::modulateText("pu5lrk streaming", config);
 
     hftext::StreamingReceiver receiver(config);
+    receiver.setPerformanceTimingEnabled(true);
     std::vector<hftext::DecodeResult> allResults;
     const std::size_t chunkSize = 137;
 
@@ -118,6 +119,24 @@ int main() {
     assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::PhysicalLengthRecovered));
     assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::FrameWaiting));
     assert(hasEvent(firstEvents, hftext::StreamingReceiverEventType::FrameDecoded));
+    const auto firstMetrics = receiver.metrics();
+    assert(firstMetrics.timingEnabled);
+    assert(firstMetrics.pushCalls > 1);
+    assert(firstMetrics.samplesPushed == audio.size());
+    assert(firstMetrics.phaseCount == static_cast<std::uint64_t>(allResults.front().offsetsTried));
+    assert(firstMetrics.phaseSymbolsProcessed > 0);
+    assert(firstMetrics.bitDecisionsProduced >= firstMetrics.phaseSymbolsProcessed);
+    assert(firstMetrics.syncPositionsExamined > 0);
+    assert(firstMetrics.syncPatternMatches > 0);
+    assert(firstMetrics.physicalLengthAttempts > 0);
+    assert(firstMetrics.physicalLengthValid > 0);
+    assert(firstMetrics.frameWaitingChecks > 0);
+    assert(firstMetrics.robustDecodeAttempts > 0);
+    assert(firstMetrics.validFrameCandidates > 0);
+    assert(firstMetrics.framesDecoded == 1);
+    assert(firstMetrics.totalPushTimeNs > 0);
+    assert(firstMetrics.maxPushTimeNs > 0);
+    assert(firstMetrics.maxPushTimeNs <= firstMetrics.totalPushTimeNs);
 
     hftext::ModemConfig fsk4Config = config;
     fsk4Config.modulationMode = hftext::ModulationMode::Fsk4;
@@ -210,6 +229,11 @@ int main() {
     assert(receiver.takeEvents().empty());
 
     receiver.reset();
+    const auto resetMetrics = receiver.metrics();
+    assert(resetMetrics.timingEnabled);
+    assert(resetMetrics.pushCalls == 0);
+    assert(resetMetrics.samplesPushed == 0);
+    assert(resetMetrics.framesDecoded == 0);
     const auto replayResults = receiver.pushSamples(audio);
     assert(replayResults.size() == 1);
     assert(replayResults.front().text == "pu5lrk streaming");

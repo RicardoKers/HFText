@@ -79,6 +79,12 @@ The CLI tools are thin wrappers around the core:
 - `hftext_rx_wav`: decode a WAV offline.
 - `hftext_stream_wav`: replay a WAV through the streaming receiver.
 
+`hftext_stream_wav --metrics-json <path>` enables optional core stage timing and
+writes a machine-readable report containing the modem configuration, decoded
+messages, replay real-time factor, workload counters, and stage durations. The
+Python `receiver_benchmark.py` runner executes evidence corpora and flattens
+these reports into CSV without moving benchmark logic into the modem core.
+
 They are useful for tests, packaging checks, and replaying field captures. They are not the primary operating UI.
 
 ## PC Application
@@ -164,6 +170,24 @@ audio input blocks
 -> logical frame validation
 -> text display
 ```
+
+## Receiver Performance Boundary
+
+Audio capture, waterfall rendering, and evidence storage must remain responsive
+while the portable streaming receiver processes queued blocks. The PC
+application owns queueing and platform timing; the core owns modem analysis and
+must expose enough low-overhead counters to identify expensive search stages and
+candidates without moving DSP into the UI.
+
+Performance evidence should distinguish captured, processed, pending, and
+dropped samples. Core metrics should distinguish tone-analysis work,
+timing/frequency hypotheses, synchronization candidates, physical-length
+recovery, and robust/Viterbi decoding. Machine-readable replay results belong in
+the CLI/debug boundary, while the algorithms and counters remain portable.
+
+The implementation and acceptance sequence is defined in
+`docs/16_receiver_performance_plan.md`. This work does not change the on-air
+protocol or the Android/PC layering.
 
 ## Build Targets
 

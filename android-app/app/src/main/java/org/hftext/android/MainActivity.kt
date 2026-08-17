@@ -501,9 +501,6 @@ private fun HFTextScreen(
                         analysis = analysis,
                         rxStatus = rxStatus,
                         rxDecodeStatus = rxDecodeStatus,
-                        rxStats = rxStats,
-                        rxReceiverStats = rxReceiverStats,
-                        rxReceiverGain = rxReceiverGain,
                         rxBufferSeconds = rxBufferSeconds,
                         rxAccepted = rxAccepted,
                         rxRejected = rxRejected,
@@ -1319,9 +1316,6 @@ private fun buildRxEvidenceReport(
     analysis: HFTextTextAnalysis,
     rxStatus: String,
     rxDecodeStatus: String,
-    rxStats: HFTextAudioStats,
-    rxReceiverStats: HFTextAudioStats,
-    rxReceiverGain: Float,
     rxBufferSeconds: Double,
     rxAccepted: Long,
     rxRejected: Long,
@@ -1360,9 +1354,9 @@ private fun buildRxEvidenceReport(
         appendLine("Saved audio: ${formatSeconds(savedAudio.durationSeconds)}")
         appendLine("Sample rate: ${savedAudio.sampleRate} Hz")
         appendLine("Samples: ${savedAudio.sampleCount}")
-        appendLine("Raw level: ${rxLevelReportText(rxStats)}")
-        appendLine("Modem level: ${rxLevelReportText(rxReceiverStats)}")
-        appendLine("Receiver gain: x${formatGain(rxReceiverGain)}")
+        appendLine("Raw saved-window level: ${rxLevelReportText(savedAudio.rawStats)}")
+        appendLine("Modem saved-window level: ${rxLevelReportText(savedAudio.modemStats)}")
+        appendLine("Effective receiver gain (RMS): x${formatGain(savedAudio.effectiveGain)}")
         appendLine("Raw WAV: ${savedAudio.rawPath}")
         appendLine("Modem WAV: ${savedAudio.modemPath}")
         appendLine("Sanitized: ${displayText(analysis.sanitizedMessage)}")
@@ -1428,10 +1422,10 @@ private fun buildRxEvidenceReport(
                 formatCsvNumber(savedAudio.durationSeconds),
                 savedAudio.sampleRate.toString(),
                 savedAudio.sampleCount.toString(),
-                formatCsvNumber(rxStats.peak.toDouble()),
-                formatCsvNumber(rxReceiverStats.peak.toDouble()),
-                formatCsvNumber(rxReceiverGain.toDouble()),
-                formatCsvNumber(rxStats.clippingPercent),
+                formatCsvNumber(savedAudio.rawStats.peak.toDouble()),
+                formatCsvNumber(savedAudio.modemStats.peak.toDouble()),
+                formatCsvNumber(savedAudio.effectiveGain.toDouble()),
+                formatCsvNumber(savedAudio.rawStats.clippingPercent),
                 rxAccepted.toString(),
                 rxRejected.toString(),
                 rxSync.toString(),

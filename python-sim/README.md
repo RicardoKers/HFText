@@ -85,6 +85,21 @@ python field_replay.py --input-dir ..\logs --output ..\logs\field_replay.csv
 
 The script searches for `hftext_rx_wav`, uses the settings saved in the evidence TXT, and compares the decoded line with the received text saved by the app. Use `--rx-exe` when the executable is in another location.
 
+## Receiver Performance Benchmark
+
+Replay evidence through the C++ streaming receiver and collect comparable
+workload/timing metrics:
+
+```powershell
+python receiver_benchmark.py `
+  --input-dir ..\Evidence `
+  --stream-exe ..\build-performance\core\Release\hftext_stream_wav.exe
+```
+
+The runner writes a flattened CSV under `logs/` and retains the schema-versioned
+JSON from every case. Companion WAV files take precedence over absolute WAV
+paths saved on a different test computer.
+
 ## Historical Experiments
 
 The following scripts remain useful for controlled comparisons:

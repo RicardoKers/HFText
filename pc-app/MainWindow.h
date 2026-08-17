@@ -106,6 +106,7 @@ private:
     void clearRxEvidenceSamples(int sampleRate);
     void appendRxEvidenceSamples(const std::vector<float>& samples, int sampleRate);
     void rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog);
+    hftext::StreamingReceiverMetrics rxReceiverMetricsSnapshot() const;
 
     AudioInput audioInput_;
     AudioOutput audioOutput_;
@@ -136,7 +137,13 @@ private:
     std::atomic<std::size_t> rxPendingSampleCount_{0};
     std::atomic<std::size_t> rxMaxObservedPendingSamples_{0};
     std::atomic<std::size_t> rxDroppedSamples_{0};
+    std::atomic<std::uint64_t> rxCapturedSamples_{0};
+    std::atomic<std::uint64_t> rxProcessedSamples_{0};
+    std::atomic<std::uint64_t> rxWorkerActiveSamples_{0};
+    std::atomic<std::uint64_t> rxDecoderProcessingTimeNs_{0};
     std::atomic<bool> rxDecodeEnabled_{false};
+    mutable std::mutex rxReceiverMetricsMutex_;
+    hftext::StreamingReceiverMetrics rxReceiverMetrics_;
     std::mutex rxEvidenceMutex_;
     std::deque<float> rxEvidenceSamples_;
     int rxEvidenceSampleRate_ = 48000;

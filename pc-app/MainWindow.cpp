@@ -39,6 +39,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <exception>
@@ -100,6 +101,19 @@ QString sampleDurationText(std::size_t samples, int sampleRate) {
         return "--";
     }
     return QString::number(static_cast<double>(samples) / static_cast<double>(sampleRate), 'f', 2) + " s";
+}
+
+double samplesToSeconds(std::uint64_t samples, int sampleRate) {
+    return sampleRate <= 0
+        ? 0.0
+        : static_cast<double>(samples) / static_cast<double>(sampleRate);
+}
+
+QString factorText(double numerator, double denominator) {
+    if (denominator <= 0.0) {
+        return "--";
+    }
+    return QString::number(numerator / denominator, 'f', 3) + "x";
 }
 
 std::string toStdString(const QString& text) {
@@ -821,6 +835,20 @@ void MainWindow::stopReceive() {
             + ", dropped " + sampleDurationText(droppedSamples, stats.sampleRate)
             + " (" + QString::number(static_cast<qulonglong>(droppedSamples)) + " samples)"
         );
+        const double processedSeconds = samplesToSeconds(
+            rxProcessedSamples_.load(std::memory_order_relaxed),
+            stats.sampleRate
+        );
+        const double decoderSeconds = static_cast<double>(
+            rxDecoderProcessingTimeNs_.load(std::memory_order_relaxed)
+        ) / 1.0e9;
+        appendLog(
+            "RX processing: captured "
+            + QString::number(samplesToSeconds(rxCapturedSamples_.load(std::memory_order_relaxed), stats.sampleRate), 'f', 2)
+            + " s, processed " + QString::number(processedSeconds, 'f', 2)
+            + " s, session rate " + factorText(processedSeconds, stats.durationSeconds())
+            + ", decoder real-time factor " + factorText(processedSeconds, decoderSeconds)
+        );
         appendLog(
             "RX duration: " + QString::number(stats.durationSeconds(), 'f', 2)
             + " s, sample rate: " + QString::number(stats.sampleRate)
@@ -1293,10 +1321,50 @@ void MainWindow::writeLogHeader(QTextStream& stream, const char* title) const {
     const auto currentPendingSamples = rxPendingSampleCount_.load(std::memory_order_relaxed);
     const auto maxPendingSamples = rxMaxObservedPendingSamples_.load(std::memory_order_relaxed);
     const auto droppedSamples = rxDroppedSamples_.load(std::memory_order_relaxed);
+    const auto capturedSamples = rxCapturedSamples_.load(std::memory_order_relaxed);
+    const auto processedSamples = rxProcessedSamples_.load(std::memory_order_relaxed);
+    const auto activeSamples = rxWorkerActiveSamples_.load(std::memory_order_relaxed);
+    const auto decoderTimeNs = rxDecoderProcessingTimeNs_.load(std::memory_order_relaxed);
+    const auto elapsedMsecs = rxSessionStartedAtMsecs_ <= 0
+        ? 0
+        : QDateTime::currentMSecsSinceEpoch() - rxSessionStartedAtMsecs_;
+    const double elapsedSeconds = static_cast<double>(elapsedMsecs) / 1000.0;
+    const double capturedSeconds = samplesToSeconds(capturedSamples, rxConfig.sampleRate);
+    const double processedSeconds = samplesToSeconds(processedSamples, rxConfig.sampleRate);
+    const double decoderSeconds = static_cast<double>(decoderTimeNs) / 1.0e9;
+    const auto receiverMetrics = rxReceiverMetricsSnapshot();
     stream << "RX worker pending: current " << sampleDurationText(currentPendingSamples, rxConfig.sampleRate)
            << ", peak " << sampleDurationText(maxPendingSamples, rxConfig.sampleRate)
            << ", dropped " << sampleDurationText(droppedSamples, rxConfig.sampleRate)
            << " (" << static_cast<qulonglong>(droppedSamples) << " samples)\n";
+    stream << "RX processing: captured " << QString::number(capturedSeconds, 'f', 2)
+           << " s, processed " << QString::number(processedSeconds, 'f', 2)
+           << " s, active " << QString::number(samplesToSeconds(activeSamples, rxConfig.sampleRate), 'f', 2)
+           << " s, session rate " << factorText(processedSeconds, elapsedSeconds)
+           << ", decoder real-time factor " << factorText(processedSeconds, decoderSeconds) << '\n';
+    stream << "RX core workload: phases " << receiverMetrics.phaseCount
+           << ", phase symbols " << receiverMetrics.phaseSymbolsProcessed
+           << ", sync positions " << receiverMetrics.syncPositionsExamined
+           << ", sync matches " << receiverMetrics.syncPatternMatches
+           << ", PHYS_LENGTH " << receiverMetrics.physicalLengthAttempts
+           << " (valid " << receiverMetrics.physicalLengthValid
+           << ", invalid " << receiverMetrics.physicalLengthInvalid << ")"
+           << ", robust attempts " << receiverMetrics.robustDecodeAttempts
+           << ", valid candidates " << receiverMetrics.validFrameCandidates
+           << ", rejected candidates " << receiverMetrics.rejectedFrameCandidates << '\n';
+    if (receiverMetrics.timingEnabled) {
+        stream << "RX core timing: demodulation "
+               << QString::number(static_cast<double>(receiverMetrics.demodulationTimeNs) / 1.0e9, 'f', 3)
+               << " s, search "
+               << QString::number(static_cast<double>(receiverMetrics.frameSearchTimeNs) / 1.0e9, 'f', 3)
+               << " s, robust decode "
+               << QString::number(static_cast<double>(receiverMetrics.robustDecodeTimeNs) / 1.0e9, 'f', 3)
+               << " s, max push "
+               << QString::number(static_cast<double>(receiverMetrics.maxPushTimeNs) / 1.0e6, 'f', 3)
+               << " ms\n";
+    } else {
+        stream << "RX core timing: disabled (enable Detailed RX log for profiling)\n";
+    }
     stream << "Stored accepted frames: " << static_cast<qulonglong>(acceptedRxFrames_.size()) << '\n';
 }
 
@@ -1318,6 +1386,17 @@ void MainWindow::writeFieldSummaryCsv(
     const QString receivedText = acceptedRxText().trimmed();
     const int receivedLines = nonEmptyLineCount(receivedText);
     const QString messageHistoryText = messageHistoryPlainText().trimmed();
+    const auto capturedSamples = rxCapturedSamples_.load(std::memory_order_relaxed);
+    const auto processedSamples = rxProcessedSamples_.load(std::memory_order_relaxed);
+    const auto activeSamples = rxWorkerActiveSamples_.load(std::memory_order_relaxed);
+    const auto decoderTimeNs = rxDecoderProcessingTimeNs_.load(std::memory_order_relaxed);
+    const double capturedSeconds = samplesToSeconds(capturedSamples, rxConfig.sampleRate);
+    const double processedSeconds = samplesToSeconds(processedSamples, rxConfig.sampleRate);
+    const double activeSeconds = samplesToSeconds(activeSamples, rxConfig.sampleRate);
+    const double decoderSeconds = static_cast<double>(decoderTimeNs) / 1.0e9;
+    const double sessionProcessingRate = elapsedSeconds <= 0.0 ? 0.0 : processedSeconds / elapsedSeconds;
+    const double decoderRealtimeFactor = decoderSeconds <= 0.0 ? 0.0 : processedSeconds / decoderSeconds;
+    const auto receiverMetrics = rxReceiverMetricsSnapshot();
 
     stream << "--- Summary CSV ---\n";
     stream
@@ -1329,6 +1408,15 @@ void MainWindow::writeFieldSummaryCsv(
         << "message_history_entries,message_history,"
         << "accepted_length,accepted_offset_samples,accepted_offsets_tried,"
         << "rx_pending_current_s,rx_pending_peak_s,rx_pending_dropped_s,rx_pending_dropped_samples,"
+        << "rx_captured_s,rx_processed_s,rx_worker_active_s,rx_session_processing_rate,"
+        << "rx_decoder_busy_s,rx_decoder_realtime_factor,rx_core_timing_enabled,"
+        << "rx_core_phase_count,rx_core_push_calls,rx_core_samples_pushed,"
+        << "rx_core_phase_symbols,rx_core_bit_decisions,rx_core_sync_positions,rx_core_sync_matches,"
+        << "rx_core_rejected_sync_cache_hits,rx_core_phys_length_attempts,"
+        << "rx_core_phys_length_valid,rx_core_phys_length_invalid,rx_core_frame_waiting_checks,"
+        << "rx_core_robust_decode_attempts,rx_core_valid_candidates,rx_core_rejected_candidates,"
+        << "rx_core_frames_decoded,rx_core_demodulation_s,rx_core_search_s,"
+        << "rx_core_robust_decode_s,rx_core_total_push_s,rx_core_max_push_ms,"
         << "saved_audio_s,saved_samples,wav_path\n";
     const QString summaryQuality = hasLastAcceptedRx_ ? lastAcceptedRxQualityText_ : lastRxQualityText_;
     const QString summaryPhysicalLength = hasLastAcceptedRx_
@@ -1388,6 +1476,34 @@ void MainWindow::writeFieldSummaryCsv(
             2
         ) << ','
         << static_cast<qulonglong>(rxDroppedSamples_.load(std::memory_order_relaxed)) << ','
+        << QString::number(capturedSeconds, 'f', 3) << ','
+        << QString::number(processedSeconds, 'f', 3) << ','
+        << QString::number(activeSeconds, 'f', 3) << ','
+        << QString::number(sessionProcessingRate, 'f', 6) << ','
+        << QString::number(decoderSeconds, 'f', 6) << ','
+        << QString::number(decoderRealtimeFactor, 'f', 6) << ','
+        << csvBool(receiverMetrics.timingEnabled) << ','
+        << static_cast<qulonglong>(receiverMetrics.phaseCount) << ','
+        << static_cast<qulonglong>(receiverMetrics.pushCalls) << ','
+        << static_cast<qulonglong>(receiverMetrics.samplesPushed) << ','
+        << static_cast<qulonglong>(receiverMetrics.phaseSymbolsProcessed) << ','
+        << static_cast<qulonglong>(receiverMetrics.bitDecisionsProduced) << ','
+        << static_cast<qulonglong>(receiverMetrics.syncPositionsExamined) << ','
+        << static_cast<qulonglong>(receiverMetrics.syncPatternMatches) << ','
+        << static_cast<qulonglong>(receiverMetrics.rejectedSyncCacheHits) << ','
+        << static_cast<qulonglong>(receiverMetrics.physicalLengthAttempts) << ','
+        << static_cast<qulonglong>(receiverMetrics.physicalLengthValid) << ','
+        << static_cast<qulonglong>(receiverMetrics.physicalLengthInvalid) << ','
+        << static_cast<qulonglong>(receiverMetrics.frameWaitingChecks) << ','
+        << static_cast<qulonglong>(receiverMetrics.robustDecodeAttempts) << ','
+        << static_cast<qulonglong>(receiverMetrics.validFrameCandidates) << ','
+        << static_cast<qulonglong>(receiverMetrics.rejectedFrameCandidates) << ','
+        << static_cast<qulonglong>(receiverMetrics.framesDecoded) << ','
+        << QString::number(static_cast<double>(receiverMetrics.demodulationTimeNs) / 1.0e9, 'f', 6) << ','
+        << QString::number(static_cast<double>(receiverMetrics.frameSearchTimeNs) / 1.0e9, 'f', 6) << ','
+        << QString::number(static_cast<double>(receiverMetrics.robustDecodeTimeNs) / 1.0e9, 'f', 6) << ','
+        << QString::number(static_cast<double>(receiverMetrics.totalPushTimeNs) / 1.0e9, 'f', 6) << ','
+        << QString::number(static_cast<double>(receiverMetrics.maxPushTimeNs) / 1.0e6, 'f', 6) << ','
         << QString::number(savedSeconds, 'f', 2) << ','
         << static_cast<qulonglong>(sampleCount) << ','
         << csvCell(wavPath) << '\n';
@@ -1884,7 +2000,15 @@ void MainWindow::startRxWorker(const hftext::ModemConfig& config, bool detailedR
         rxPendingSampleCount_.store(0, std::memory_order_relaxed);
         rxMaxObservedPendingSamples_.store(0, std::memory_order_relaxed);
         rxDroppedSamples_.store(0, std::memory_order_relaxed);
+        rxCapturedSamples_.store(0, std::memory_order_relaxed);
+        rxProcessedSamples_.store(0, std::memory_order_relaxed);
+        rxWorkerActiveSamples_.store(0, std::memory_order_relaxed);
+        rxDecoderProcessingTimeNs_.store(0, std::memory_order_relaxed);
         rxWorkerStop_ = false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(rxReceiverMetricsMutex_);
+        rxReceiverMetrics_ = {};
     }
     rxWorker_ = std::thread(&MainWindow::rxWorkerLoop, this, config, detailedRxLog);
 }
@@ -1902,6 +2026,7 @@ void MainWindow::stopRxWorker(bool drainPending) {
     if (rxWorker_.joinable()) {
         rxWorker_.join();
     }
+    rxWorkerActiveSamples_.store(0, std::memory_order_relaxed);
 }
 
 void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
@@ -1913,6 +2038,7 @@ void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
         if (rxWorkerStop_) {
             return;
         }
+        rxCapturedSamples_.fetch_add(static_cast<std::uint64_t>(samples.size()), std::memory_order_relaxed);
         rxPendingSamples_.insert(rxPendingSamples_.end(), samples.begin(), samples.end());
         updateAtomicMax(rxMaxObservedPendingSamples_, rxPendingSamples_.size());
         if (rxMaxPendingSamples_ > 0 && rxPendingSamples_.size() > rxMaxPendingSamples_) {
@@ -1926,6 +2052,11 @@ void MainWindow::enqueueRxSamples(const std::vector<float>& samples) {
         rxPendingSampleCount_.store(rxPendingSamples_.size(), std::memory_order_relaxed);
     }
     rxCondition_.notify_one();
+}
+
+hftext::StreamingReceiverMetrics MainWindow::rxReceiverMetricsSnapshot() const {
+    std::lock_guard<std::mutex> lock(rxReceiverMetricsMutex_);
+    return rxReceiverMetrics_;
 }
 
 void MainWindow::clearRxEvidenceSamples(int sampleRate) {
@@ -1958,6 +2089,7 @@ void MainWindow::appendRxEvidenceSamples(const std::vector<float>& samples, int 
 
 void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
     hftext::StreamingReceiver receiver(config);
+    receiver.setPerformanceTimingEnabled(detailedRxLog);
     std::vector<QString> emittedNormalRxStatusLines;
 
     while (true) {
@@ -1981,9 +2113,23 @@ void MainWindow::rxWorkerLoop(hftext::ModemConfig config, bool detailedRxLog) {
                 rxPendingSamples_.begin() + static_cast<std::ptrdiff_t>(maxChunk)
             );
             rxPendingSampleCount_.store(rxPendingSamples_.size(), std::memory_order_relaxed);
+            rxWorkerActiveSamples_.store(static_cast<std::uint64_t>(chunk.size()), std::memory_order_relaxed);
         }
 
+        const auto decodeStart = std::chrono::steady_clock::now();
         const auto results = receiver.pushSamples(chunk);
+        const auto decodeNanoseconds = static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - decodeStart
+            ).count()
+        );
+        rxDecoderProcessingTimeNs_.fetch_add(decodeNanoseconds, std::memory_order_relaxed);
+        rxProcessedSamples_.fetch_add(static_cast<std::uint64_t>(chunk.size()), std::memory_order_relaxed);
+        rxWorkerActiveSamples_.store(0, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lock(rxReceiverMetricsMutex_);
+            rxReceiverMetrics_ = receiver.metrics();
+        }
         const auto events = receiver.takeEvents();
         if (!events.empty()) {
             const int frameQuality = hftext::rxQualityPermille(events);

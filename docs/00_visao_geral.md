@@ -53,6 +53,8 @@ SYNC | LENGTH | PAYLOAD | CRC16
 
 ## Not Yet Implemented
 
+- Measured receiver cost reduction for sustainable real-time operation on older
+  PCs, tracked in `docs/16_receiver_performance_plan.md`.
 - Polished Android operating UI and richer Android logs.
 - Automatic gain control.
 - Fine continuous carrier/timing tracking.

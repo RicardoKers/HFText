@@ -80,6 +80,23 @@ On Android:
 Evidence is useful even when decoding fails. Failed captures help identify audio
 level, tuning, timing, receiver backlog, and channel problems.
 
+## Optional Older-PC Performance Test
+
+Older Windows PCs are especially useful for the current receiver performance
+work. This test is optional:
+
+1. Use a Release package and start normal RX with detailed logging disabled.
+2. Leave RX active on ordinary channel audio for at least 30 minutes.
+3. Receive one short and one long message in both Fast and Slow when practical.
+4. Note the PC CPU model, logical-core count, Windows power mode, approximate
+   stable HFText CPU percentage, and whether the UI remained responsive.
+5. Save RX evidence before stopping the session.
+6. Report current/peak pending audio and dropped samples from the evidence TXT.
+
+A steadily increasing pending value is important even when every message is
+eventually decoded. Do not compensate by restarting RX; preserve the evidence
+so the processing deficit can be measured.
+
 ## Minimum Feedback Template
 
 Copy this template into a message when reporting a test:

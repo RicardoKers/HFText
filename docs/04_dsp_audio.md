@@ -4,7 +4,9 @@
 
 The DSP layer must generate and decode HFText audio tones reliably on ordinary sound cards, radio audio interfaces, and SDR audio paths.
 
-The first priority is robustness and debuggability. Throughput is secondary.
+Robustness remains the first design constraint. The current implementation
+priority is reducing continuous receiver cost enough to stay ahead of real time
+on older PCs, without weakening demonstrated weak-signal behavior.
 
 ## Audio Representation
 
@@ -56,6 +58,12 @@ All tones must stay below Nyquist. For HF SSB field operation, tones should norm
 
 The demodulator estimates tone energy in each symbol window and chooses the strongest tone. It also estimates confidence from the separation between the winning tone and the alternatives.
 
+Tone analysis precomputes one complex oscillator step per configured tone and
+advances it with a double-precision recurrence inside each symbol window. The
+oscillators reset at every window. This preserves the existing tone-energy and
+confidence model while avoiding per-sample trigonometric calls and inner-loop
+energy allocations.
+
 The receiver may use confidence for:
 
 - `START_SYNC` search;
@@ -100,6 +108,12 @@ The receiver must avoid unbounded growth:
 - detailed logs may drop or aggregate excessive events;
 - stopping RX must not trigger a full offline decode of the whole capture.
 - the live search grid must stay small enough that decoding does not build a long backlog after the audio frame has ended.
+- a bounded queue is a safety limit, not a normal load-shedding mechanism;
+- live processing rate, pending-audio trend, dropped samples, candidate load,
+  and acceptance latency must be measurable in Release builds.
+
+The staged optimization and regression guardrails are documented in
+`docs/16_receiver_performance_plan.md`.
 
 ## Preamble and Synchronization
 

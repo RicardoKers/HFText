@@ -88,6 +88,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - WAV TX/RX scripts.
 - Noise, channel, FEC, interleaving, repetition, and MFSK sweeps.
 - Field evidence aggregation and replay helpers.
+- Streaming receiver corpus benchmark runner with flattened CSV and retained
+  per-case JSON metrics.
 
 ### C++ Core
 
@@ -111,6 +113,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - Explicit public-symbol export macro for the C ABI shared-library target.
 - Runtime dynamic-loading, full public-symbol lookup, helper-call, and generated-audio roundtrip test for the portable C ABI shared-library target.
 - CLI tools for TX WAV, RX WAV, and streaming WAV replay.
+- Cumulative streaming workload counters and optional stage timing.
+- Machine-readable `hftext_stream_wav` performance reports.
 - Regression tests.
 
 ### PC Application
@@ -133,6 +137,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 - HFText app icon and release packaging.
 - Visible app, CLI, log, and evidence version metadata.
 - RX worker backlog counters in log and evidence export.
+- Captured/processed audio accounting, decoder real-time factor, and core
+  workload snapshots in PC evidence.
 - Repeatable Windows release packaging script.
 - Basic GitHub Actions CI.
 - Persistent optional RX decoder pause during TX on PC and Android, preserving waterfall/evidence capture and resuming only a previously active RX session.
@@ -140,6 +146,49 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
   with mono conversion, streaming sample-rate conversion, stable endpoint persistence,
   physical-input fallback, continuous silence retention, and fixed 100 ms blocks.
 - Simplified Android Settings with fixed voice-recognition capture plus internal fallback, and compact Operation controls with the speed selector below the composer.
+
+## Completed Priority: Receiver Compute Cost
+
+Fast and Slow now have measured real-time headroom on the tested
+second-generation Core i5 notebook. Keep the evidence and metrics as regression
+guardrails under `docs/16_receiver_performance_plan.md`; this work no longer
+blocks unrelated development.
+
+Completed foundation:
+
+- Structured captured/processed rate and stage/candidate instrumentation.
+- Repeatable corpus replay with machine-readable output.
+- Algorithm-compatible Release baseline on the development PC for the three
+  August 16 regression captures.
+- Instrumented live baseline on the old notebook: `0.724x` processing rate,
+  `119.80 s` pending, and `453.60 s` dropped over a 34-minute session.
+- First low-risk demodulator optimization: precomputed oscillator steps,
+  recurrence-based tone analysis, and fixed-size inner-loop energy storage.
+- Exact payload preservation across the priority corpus and the August 17
+  stress capture, with development-PC replay speedups from `5.1x` to `13.4x`.
+- Optimized 34-minute Fast 8-FSK validation on the old notebook: nine accepted
+  frames, including five 127-symbol payloads, `4.009x` decoder headroom,
+  `0.10 s` peak pending, zero drops, and CPU reduced from about `43%` to
+  `23-25%`.
+- Optimized 57-minute Slow 8-FSK validation on the old notebook: seven accepted
+  frames, including three 127-symbol payloads, `3.303x` decoder headroom,
+  `0.10 s` peak pending, zero drops, `23-26%` CPU, and stable `196 MB` RAM.
+- Rebuilt Android shared-core validation: two Fast and two Slow frames accepted,
+  including one 127-symbol payload per profile, with independent replay parity.
+- Android evidence statistics now summarize the saved raw/modem window instead
+  of a potentially silent final live block.
+- On-device evidence-report verification matched the waterfall: `43.0%` saved
+  raw/modem peak, zero clipping, `3.9x` effective RMS gain, and immediate decode.
+
+Next actions:
+
+1. Preserve the Fast/Slow target-PC and Android evidence as the performance regression
+   baseline.
+2. Defer candidate/search changes and parallelism unless new field evidence
+   shows a remaining performance or sensitivity problem.
+
+Do not treat a larger pending queue, intentional sample dropping, or reduced
+weak-signal coverage as optimization.
 
 ## Current Validation Tasks
 
@@ -164,6 +213,8 @@ This backlog is intentionally incremental. Do not implement multiple unrelated i
 
 ## Near-Term DSP Tasks
 
+- Complete the receiver performance priority and its acceptance targets before
+  optional DSP features.
 - Validate 8-FSK with real captures before promoting it.
 - Improve frequency tolerance only from repeatable evidence.
 - Consider a lightweight frequency tracking loop if mistuning remains common.

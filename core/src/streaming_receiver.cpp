@@ -5,6 +5,7 @@
 #include "hftext_robust.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -51,6 +52,14 @@ constexpr float kLong8FskStreamingFrequencyOffsetsHz[] = {
     15.0F,
     -15.0F,
 };
+
+using PerformanceClock = std::chrono::steady_clock;
+
+std::uint64_t elapsedNanoseconds(PerformanceClock::time_point start) {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(PerformanceClock::now() - start).count()
+    );
+}
 
 std::size_t packedPayloadBytes(int symbolCount) {
     if (symbolCount <= 0) {
@@ -260,6 +269,7 @@ void StreamingReceiver::reset() {
     sampleCursor_ = 0;
     events_.clear();
     reportedEvents_.clear();
+    resetMetrics();
     resetPhaseStates();
 }
 
@@ -267,6 +277,10 @@ std::vector<DecodeResult> StreamingReceiver::pushSamples(const std::vector<float
     if (samples.empty()) {
         return {};
     }
+
+    const auto pushStart = performanceTimingEnabled_ ? PerformanceClock::now() : PerformanceClock::time_point{};
+    ++metrics_.pushCalls;
+    metrics_.samplesPushed += static_cast<std::uint64_t>(samples.size());
 
     if (phases_.empty()) {
         resetPhaseStates();
@@ -295,6 +309,11 @@ std::vector<DecodeResult> StreamingReceiver::pushSamples(const std::vector<float
 
     trimBitBuffers();
     trimBuffer();
+    if (performanceTimingEnabled_) {
+        const auto elapsed = elapsedNanoseconds(pushStart);
+        metrics_.totalPushTimeNs += elapsed;
+        metrics_.maxPushTimeNs = std::max(metrics_.maxPushTimeNs, elapsed);
+    }
     return results;
 }
 
@@ -302,6 +321,25 @@ std::vector<StreamingReceiverEvent> StreamingReceiver::takeEvents() {
     auto events = events_;
     events_.clear();
     return events;
+}
+
+void StreamingReceiver::setPerformanceTimingEnabled(bool enabled) {
+    performanceTimingEnabled_ = enabled;
+}
+
+bool StreamingReceiver::performanceTimingEnabled() const {
+    return performanceTimingEnabled_;
+}
+
+void StreamingReceiver::resetMetrics() {
+    metrics_ = {};
+}
+
+StreamingReceiverMetrics StreamingReceiver::metrics() const {
+    auto snapshot = metrics_;
+    snapshot.phaseCount = static_cast<std::uint64_t>(phases_.size());
+    snapshot.timingEnabled = performanceTimingEnabled_;
+    return snapshot;
 }
 
 int StreamingReceiver::samplesPerSymbol() const {
@@ -364,6 +402,9 @@ void StreamingReceiver::resetPhaseStates() {
 }
 
 void StreamingReceiver::processPhase(PhaseState& phase) {
+    const auto demodulationStart = performanceTimingEnabled_
+        ? PerformanceClock::now()
+        : PerformanceClock::time_point{};
     const std::size_t symbolSamples = static_cast<std::size_t>(samplesPerSymbol(phase.config));
     const std::size_t sampleEnd = sampleCursor_ + buffer_.size();
 
@@ -383,15 +424,32 @@ void StreamingReceiver::processPhase(PhaseState& phase) {
         }
 
         const auto decisions = demodulateSymbolDecisionsFsk(buffer_, localStart, symbolSamples, phase.config);
+        ++metrics_.phaseSymbolsProcessed;
+        metrics_.bitDecisionsProduced += static_cast<std::uint64_t>(decisions.size());
         for (const auto& decision : decisions) {
             phase.decisions.push_back(decision);
             phase.bits.push_back(decision.bit);
         }
         phase.nextStartSample += symbolSamples;
     }
+    if (performanceTimingEnabled_) {
+        metrics_.demodulationTimeNs += elapsedNanoseconds(demodulationStart);
+    }
 }
 
 bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEndSample) {
+    const auto frameSearchStart = performanceTimingEnabled_
+        ? PerformanceClock::now()
+        : PerformanceClock::time_point{};
+    const auto robustTimeBefore = metrics_.robustDecodeTimeNs;
+    const auto finishFrameSearchTiming = [this, frameSearchStart, robustTimeBefore]() {
+        if (!performanceTimingEnabled_) {
+            return;
+        }
+        const auto totalElapsed = elapsedNanoseconds(frameSearchStart);
+        const auto robustElapsed = metrics_.robustDecodeTimeNs - robustTimeBefore;
+        metrics_.frameSearchTimeNs += totalElapsed > robustElapsed ? totalElapsed - robustElapsed : 0;
+    };
     bool hasCandidate = false;
     DecodeResult bestResult;
     std::size_t bestFrameEndSample = 0;
@@ -415,10 +473,12 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
 
         std::size_t nextSyncSearchBit = lastSyncStart + 1U;
         for (std::size_t syncStart = phase.nextSyncSearchBit; syncStart <= lastSyncStart; ++syncStart) {
+            ++metrics_.syncPositionsExamined;
             const int syncMismatches = bitMismatchCount(phase.bits, syncStart, startSync);
             if (!acceptsStartSyncCandidate(phase.bits, phase.decisions, syncStart, startSync, maxSyncMismatches)) {
                 continue;
             }
+            ++metrics_.syncPatternMatches;
 
             const auto syncSample = static_cast<std::int64_t>(
                 phase.firstBitSample + (syncStart / bitsPerAudioSymbol) * symbolSamples
@@ -428,6 +488,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
                     + static_cast<std::int64_t>(syncStart % bitsPerAudioSymbol)
             );
             if (phase.rejectedSyncBitKeys.find(syncBitKey) != phase.rejectedSyncBitKeys.end()) {
+                ++metrics_.rejectedSyncCacheHits;
                 continue;
             }
 
@@ -444,13 +505,16 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             syncEvent.syncMismatches = syncMismatches;
             emitEvent(syncEvent);
 
+            ++metrics_.physicalLengthAttempts;
             const int payloadLength = decodePhysicalLengthDecisions(phase.decisions, lengthStart);
             if (payloadLength < 0) {
+                ++metrics_.physicalLengthInvalid;
                 StreamingReceiverEvent lengthEvent = syncEvent;
                 lengthEvent.type = StreamingReceiverEventType::PhysicalLengthInvalid;
                 emitEvent(lengthEvent);
                 continue;
             }
+            ++metrics_.physicalLengthValid;
 
             const auto robustBits = robustFrameBitCountForPayloadLength(payloadLength);
             StreamingReceiverEvent lengthEvent = syncEvent;
@@ -462,6 +526,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             const auto robustStart = lengthStart + static_cast<std::size_t>(kPhysicalLengthBits);
             const auto availableRobustBits = robustStart >= phase.bits.size() ? 0 : phase.bits.size() - robustStart;
             if (availableRobustBits < robustBits) {
+                ++metrics_.frameWaitingChecks;
                 nextSyncSearchBit = std::min(nextSyncSearchBit, syncStart);
                 StreamingReceiverEvent waitingEvent = lengthEvent;
                 waitingEvent.type = StreamingReceiverEventType::FrameWaiting;
@@ -473,10 +538,17 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
             }
 
             const auto candidateBits = softBitsFromDecisions(phase.decisions, robustStart, robustBits);
+            ++metrics_.robustDecodeAttempts;
+            const auto robustDecodeStart = performanceTimingEnabled_
+                ? PerformanceClock::now()
+                : PerformanceClock::time_point{};
             auto robustResult = parseRobustFrameSoftBits(
                 candidateBits,
                 logicalFrameBitCountForPayloadLength(payloadLength)
             );
+            if (performanceTimingEnabled_) {
+                metrics_.robustDecodeTimeNs += elapsedNanoseconds(robustDecodeStart);
+            }
             auto candidate = robustResult.frame;
             candidate.syncIndex = static_cast<int>(robustStart);
             candidate.startOffset = phase.offsetSamples;
@@ -499,6 +571,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
                 : static_cast<float>(static_cast<double>(latestSample - candidateEndSample) / config_.sampleRate);
 
             if (candidate.crcOk && candidate.payloadValid && candidate.length == payloadLength) {
+                ++metrics_.validFrameCandidates;
                 frameEvent.type = StreamingReceiverEventType::FrameDecoded;
                 if (!hasCandidate || candidate.confidence > bestResult.confidence) {
                     bestResult = candidate;
@@ -507,6 +580,7 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
                     hasCandidate = true;
                 }
             } else {
+                ++metrics_.rejectedFrameCandidates;
                 frameEvent.type = StreamingReceiverEventType::FrameRejected;
                 phase.rejectedSyncBitKeys.insert(syncBitKey);
                 if (phase.rejectedSyncBitKeys.size() > 512) {
@@ -520,12 +594,15 @@ bool StreamingReceiver::findBestFrame(DecodeResult& result, std::size_t& frameEn
     }
 
     if (!hasCandidate) {
+        finishFrameSearchTiming();
         return false;
     }
 
     result = bestResult;
     frameEndSample = bestFrameEndSample;
     emitEvent(bestEvent);
+    ++metrics_.framesDecoded;
+    finishFrameSearchTiming();
     return true;
 }
 

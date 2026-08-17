@@ -8,6 +8,8 @@ The system must:
 
 - transmit only after an explicit operator action;
 - receive continuously for long sessions without unbounded memory growth;
+- process continuous RX faster than audio arrives on the supported target
+  hardware, without relying on queue growth or sample dropping;
 - display decoded messages clearly;
 - make invalid transmitted characters visible by replacing them with `?`;
 - include the configured callsign automatically at the beginning of the payload when present;
@@ -42,6 +44,7 @@ The system must:
 - Keep all derived tones below Nyquist.
 - Prefer robust detection over speed, especially for real HF/SDR captures.
 - Do not perform long offline decoding passes during normal continuous RX.
+- Preserve weak-signal sensitivity while reducing receiver compute cost.
 
 ## PC Application Requirements
 
@@ -69,5 +72,9 @@ The system must:
 - Keep tests close to every core behavior change.
 - Keep documentation synchronized with protocol and UI changes.
 - Keep RX-during-TX suppression in application audio/control glue, not in the modem protocol or portable DSP core.
+- Measure receiver processing rate, backlog, drops, candidate load, and
+  acceptance latency in repeatable Release benchmarks.
+- Treat real-time RX on second-generation mobile Core i5-class hardware as the
+  current minimum PC performance target.
 - Prefer clear, conservative implementation over clever shortcuts.
 - Do not add cryptography.

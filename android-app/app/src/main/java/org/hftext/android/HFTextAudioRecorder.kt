@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.min
+import kotlin.math.sqrt
 
 private const val RX_EVIDENCE_SECONDS = 240
 
@@ -240,6 +241,7 @@ class HFTextAudioRecorder(
         val timestamp = System.currentTimeMillis()
         val rawFile = File(directory, "hftext-android-rx-$timestamp-raw.wav")
         val modemFile = File(directory, "hftext-android-rx-$timestamp-modem.wav")
+        val summary = summarizeEvidenceAudio(snapshot.raw, snapshot.modem, snapshot.sampleRate)
         writePcm16Wav(rawFile, snapshot.raw, snapshot.sampleRate)
         writePcm16Wav(modemFile, snapshot.modem, snapshot.sampleRate)
 
@@ -247,7 +249,10 @@ class HFTextAudioRecorder(
             rawPath = rawFile.absolutePath,
             modemPath = modemFile.absolutePath,
             sampleRate = snapshot.sampleRate,
-            sampleCount = min(snapshot.raw.size, snapshot.modem.size)
+            sampleCount = min(snapshot.raw.size, snapshot.modem.size),
+            rawStats = summary.rawStats,
+            modemStats = summary.modemStats,
+            effectiveGain = summary.effectiveGain
         )
     }
 
@@ -428,10 +433,84 @@ data class HFTextSavedRxAudio(
     val rawPath: String,
     val modemPath: String,
     val sampleRate: Int,
-    val sampleCount: Int
+    val sampleCount: Int,
+    val rawStats: HFTextAudioStats,
+    val modemStats: HFTextAudioStats,
+    val effectiveGain: Float
 ) {
     val durationSeconds: Double
         get() = if (sampleRate > 0) sampleCount.toDouble() / sampleRate.toDouble() else 0.0
+}
+
+internal data class HFTextEvidenceAudioSummary(
+    val rawStats: HFTextAudioStats,
+    val modemStats: HFTextAudioStats,
+    val effectiveGain: Float
+)
+
+internal fun summarizeEvidenceAudio(
+    rawSamples: FloatArray,
+    modemSamples: FloatArray,
+    sampleRate: Int
+): HFTextEvidenceAudioSummary {
+    val rawStats = evidenceAudioStats(rawSamples, sampleRate)
+    val modemStats = evidenceAudioStats(modemSamples, sampleRate)
+    val pairedSamples = min(rawSamples.size, modemSamples.size)
+    var rawPower = 0.0
+    var modemPower = 0.0
+    for (index in 0 until pairedSamples) {
+        val raw = rawSamples[index].toDouble()
+        val modem = modemSamples[index].toDouble()
+        rawPower += raw * raw
+        modemPower += modem * modem
+    }
+    val effectiveGain = if (rawPower > 0.0 && modemPower >= 0.0) {
+        sqrt(modemPower / rawPower).toFloat()
+    } else {
+        1.0f
+    }
+    return HFTextEvidenceAudioSummary(
+        rawStats = rawStats,
+        modemStats = modemStats,
+        effectiveGain = effectiveGain
+    )
+}
+
+private fun evidenceAudioStats(samples: FloatArray, sampleRate: Int): HFTextAudioStats {
+    if (sampleRate <= 0) {
+        return HFTextAudioStats(
+            ok = false,
+            error = "invalid sample rate",
+            sampleCount = 0L,
+            peak = 0.0f,
+            clippedSamples = 0L,
+            clippingPercent = 0.0,
+            durationSeconds = 0.0
+        )
+    }
+
+    var peak = 0.0f
+    var clippedSamples = 0L
+    for (sample in samples) {
+        val magnitude = abs(sample)
+        peak = maxOf(peak, magnitude)
+        if (magnitude >= 0.98f) {
+            ++clippedSamples
+        }
+    }
+    return HFTextAudioStats(
+        ok = true,
+        error = "",
+        sampleCount = samples.size.toLong(),
+        peak = peak,
+        clippedSamples = clippedSamples,
+        clippingPercent = if (samples.isNotEmpty()) {
+            clippedSamples.toDouble() * 100.0 / samples.size.toDouble()
+        } else {
+            0.0
+        },
+        durationSeconds = samples.size.toDouble() / sampleRate.toDouble()
+    )
 }
 
 private class FloatRingBuffer(
